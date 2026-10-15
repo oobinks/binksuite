@@ -36,7 +36,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
           {snap?.settings.demoMode && (
             <span className="chip whitespace-nowrap bg-honey/25 text-amber-800 dark:text-amber-200" title="Demo mode is on">
-              🧪<span className="hidden sm:inline">Demo</span>
+              🎮<span className="hidden sm:inline">Demo</span>
             </span>
           )}
 
@@ -44,7 +44,7 @@ export function Layout({ children }: { children: ReactNode }) {
             {snap && (
               <>
                 <Link to="/room/finance" className="flex items-center gap-1 whitespace-nowrap rounded-xl bg-amber-100 px-2.5 py-1.5 text-sm font-black text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" title="Coins = your net profit">
-                  <span aria-hidden>🪙</span>
+                  <span aria-hidden>💰</span>
                   <span data-testid="coins">{formatGBP(snap.game.coinsPence)}</span>
                 </Link>
                 <Link to="/journal" className="hidden min-w-[150px] flex-col gap-0.5 rounded-xl px-2 py-1 hover:bg-black/5 sm:flex dark:hover:bg-white/5" title={`${snap.game.xp} XP`}>

@@ -84,7 +84,7 @@ function Demo({ s }: { s: Settings }) {
   const reset = useMutation({ mutationFn: () => api.post("/demo/reset"), onSuccess: () => qc.invalidateQueries() });
   const clear = useMutation({ mutationFn: () => api.post("/demo/clear"), onSuccess: () => qc.invalidateQueries() });
   return (
-    <Section title="Demo mode" icon="🧪">
+    <Section title="Demo mode" icon="🎮">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm">
           Demo mode fills the HQ with a pretend shop and runs fake agents through the real task queue. Real ledger entries you add are always kept and always count.
@@ -97,7 +97,7 @@ function Demo({ s }: { s: Settings }) {
           🔄 Reset demo shop
         </button>
         <button className="btn-bad" onClick={() => confirm("Delete all demo data and switch demo mode off? Your real entries stay.") && clear.mutate()} disabled={clear.isPending}>
-          🧹 Clear demo data
+          🗑️ Clear demo data
         </button>
       </div>
       <ErrorNote error={reset.error ?? clear.error} />

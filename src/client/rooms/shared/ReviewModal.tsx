@@ -41,7 +41,7 @@ function ReviewInner({ task, settings, onClose }: { task: TaskView; settings: Se
   const Body = def.Body;
   return (
     <div className="space-y-4">
-      {task.demo && <p className="chip bg-honey/25 text-amber-800 dark:text-amber-200">🧪 Demo output — real AI arrives in Phase {ROOM_BY_ID[task.room].phase}</p>}
+      {task.demo && <p className="chip bg-honey/25 text-amber-800 dark:text-amber-200">🎮 Demo output — real AI arrives in Phase {ROOM_BY_ID[task.room].phase}</p>}
       <Body task={task} settings={settings} setReady={setReady} />
       <div>
         <label className="label" htmlFor="review-note">

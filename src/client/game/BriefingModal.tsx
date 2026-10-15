@@ -21,7 +21,7 @@ export function BriefingModal({ open, onClose }: { open: boolean; onClose: () =>
           <p className="font-semibold">{b.greeting}</p>
           <div className="grid grid-cols-3 gap-2 text-center">
             <Stat icon="🛍️" label="Sales yesterday" value={String(b.yesterday.sales)} />
-            <Stat icon="🪙" label="Net yesterday" value={formatGBP(b.yesterday.netPence)} />
+            <Stat icon="💰" label="Net yesterday" value={formatGBP(b.yesterday.netPence)} />
             <Stat icon="📥" label="Waiting for you" value={String(b.approvalsWaiting)} />
           </div>
           <div>

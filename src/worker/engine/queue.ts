@@ -440,7 +440,7 @@ export async function recordSale(
   ]);
   await recordEvent(db, "sale", s.demo);
   await awardXp(db, XP.sale, `Sale: ${s.description}`, s.demo, settings.demoMode);
-  await notify(db, "sale", `🪙 Sale! +£${(fees.netPence / 100).toFixed(2)}`, s.description, s.demo);
+  await notify(db, "sale", `💰 Sale! +£${(fees.netPence / 100).toFixed(2)}`, s.description, s.demo);
   await checkAchievements(db, s.demo, settings.demoMode);
   return { saleId, fees };
 }

@@ -81,7 +81,7 @@ export function Mockup({ scene, seed, palette }: { scene: string; seed: number; 
         </div>
       )}
       {scene === "desk" && <div className="absolute inset-x-0 bottom-0 h-[24%] bg-amber-800/70" />}
-      {scene === "desk" && <span className="absolute bottom-[18%] right-[10%] text-2xl">🪴</span>}
+      {scene === "desk" && <span className="absolute bottom-[18%] right-[10%] text-2xl">🌿</span>}
       {scene === "frame" && <span className="absolute bottom-[4%] left-[8%] text-2xl">🛋️</span>}
       <span className="chip absolute left-2 top-2 bg-white/80 capitalize text-ink">{scene}</span>
     </div>

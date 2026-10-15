@@ -50,7 +50,7 @@ export function RoomPage() {
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             {locked && <span className="chip bg-ink px-3 py-1 text-cream">🔒 Unlocks at Lv {room.unlockLevel}</span>}
-            {room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🧪 Demo agents · real AI in Phase {room.phase}</span>}
+            {room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🎮 Demo agents · real AI in Phase {room.phase}</span>}
             {room.phase === 1 && <span className="chip bg-mint/25 px-3 py-1 text-emerald-900 dark:text-emerald-100">✅ Live now</span>}
           </div>
         </div>
@@ -95,7 +95,7 @@ function PipelineRoom({ roomId, locked }: { roomId: RoomId; locked: boolean }) {
         ))}
         {agents.length === 0 && (
           <div className="card flex items-center gap-3 p-3">
-            <span className="text-4xl">🧑‍💼</span>
+            <span className="text-4xl">👤</span>
             <div>
               <div className="font-black">You</div>
               <div className="text-sm text-cocoa dark:text-stone-400">The Launch Pad is yours: copy the pack to Etsy, then press launch.</div>
