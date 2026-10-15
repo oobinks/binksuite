@@ -6,7 +6,7 @@ import { schema } from "../db";
 import { vault } from "../db/schema";
 import { secretsStatus } from "../env";
 import { encryptSecret } from "../lib/crypto";
-import { nowIso, saveSettings, kvGet } from "../lib/store";
+import { nowIso, saveSettings, kvGet, invalidateStats } from "../lib/store";
 import { feeSettingsSchema, settingsSchema, VAULT_PROVIDERS, type Settings } from "../../shared/settings";
 import { claimQuest, getQuests, listAchievements, recordEvent, notify } from "../engine/game";
 import { clearDemoData, seedDemo } from "../../../seed/demo";
@@ -71,12 +71,14 @@ export const settingsRoutes = newApp()
     const db = c.get("db");
     const s = await saveSettings(db, { ...c.get("settings"), demoMode: true });
     await seedDemo(db, s);
+    await invalidateStats(db);
     return c.json({ ok: true });
   })
   .post("/demo/clear", async (c) => {
     const db = c.get("db");
     await clearDemoData(db);
     await saveSettings(db, { ...c.get("settings"), demoMode: false });
+    await invalidateStats(db);
     return c.json({ ok: true });
   })
 

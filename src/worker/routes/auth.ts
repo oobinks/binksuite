@@ -6,7 +6,7 @@ import { newApp, body, HttpError, type Ctx } from "../app";
 import { owner } from "../db/schema";
 import { secretsStatus } from "../env";
 import { b64url, fromB64url, hashPassword, randomBytes, safeEqual, signSession, verifySession, PBKDF2_ITERATIONS } from "../lib/crypto";
-import { getSettings, nowIso } from "../lib/store";
+import { getSettings, invalidateStats, nowIso } from "../lib/store";
 import { recordEvent } from "../engine/game";
 import { seedDemo } from "../../../seed/demo";
 import type { DB } from "../db";
@@ -70,6 +70,7 @@ export const authRoutes = newApp()
       .onConflictDoNothing();
     const settings = await getSettings(db);
     if (settings.demoMode) await seedDemo(db, settings);
+    await invalidateStats(db);
     await issueCookie(c, 1);
     await recordEvent(db, "login", settings.demoMode);
     return c.json({ ok: true });

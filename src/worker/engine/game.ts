@@ -2,7 +2,7 @@
 import { and, eq, gte, desc, inArray } from "drizzle-orm";
 import type { DB } from "../db";
 import { events, xpLog, achievements, notifications, questClaims, ledger } from "../db/schema";
-import { nowIso, visible, sum, count } from "../lib/store";
+import { nowIso, visible, sum, count, invalidateStats } from "../lib/store";
 import {
   ACHIEVEMENTS,
   QUESTS,
@@ -18,6 +18,7 @@ import {
 
 export async function recordEvent(db: DB, type: GameEventType, demo: boolean, amount = 1) {
   await db.insert(events).values({ type, amount, demo, createdAt: nowIso() });
+  await invalidateStats(db);
 }
 
 export async function totalXp(db: DB, demoMode: boolean): Promise<number> {
@@ -33,6 +34,7 @@ export async function notify(db: DB, kind: string, title: string, body: string |
 export async function awardXp(db: DB, amount: number, reason: string, demo: boolean, demoMode: boolean) {
   const before = levelForXp(await totalXp(db, demoMode));
   await db.insert(xpLog).values({ amount, reason, demo, createdAt: nowIso() });
+  await invalidateStats(db);
   const after = levelForXp(await totalXp(db, demoMode));
   for (let lv = before + 1; lv <= after; lv++) {
     const unlocks = unlocksAtLevel(lv);

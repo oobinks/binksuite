@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f44e4eb0-cc3f-4464-a951-094aa6430082",
+  "id": "00391736-7f6b-43a4-960d-d7656f034548",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "achievements": {
@@ -415,6 +415,14 @@
         "ledger_date_idx": {
           "name": "ledger_date_idx",
           "columns": [
+            "date"
+          ],
+          "isUnique": false
+        },
+        "ledger_kind_date_idx": {
+          "name": "ledger_kind_date_idx",
+          "columns": [
+            "kind",
             "date"
           ],
           "isUnique": false
@@ -838,7 +846,8 @@
         "tasks_state_idx": {
           "name": "tasks_state_idx",
           "columns": [
-            "state"
+            "state",
+            "finished_at"
           ],
           "isUnique": false
         },
@@ -847,6 +856,13 @@
           "columns": [
             "room",
             "state"
+          ],
+          "isUnique": false
+        },
+        "tasks_agent_idx": {
+          "name": "tasks_agent_idx",
+          "columns": [
+            "agent"
           ],
           "isUnique": false
         }

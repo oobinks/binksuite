@@ -4,7 +4,7 @@ import { z } from "zod";
 import { newApp, body, HttpError } from "../app";
 import { ledger } from "../db/schema";
 import { newId } from "../lib/crypto";
-import { nowIso, visible } from "../lib/store";
+import { invalidateStats, nowIso, visible } from "../lib/store";
 import { apiSpend, recordSale } from "../engine/queue";
 import { recordEvent, checkAchievements, awardXp } from "../engine/game";
 import { TRADING_ALLOWANCE_PENCE, ukTaxYear, XP } from "../../shared/game";
@@ -120,5 +120,6 @@ export const financeRoutes = newApp()
     // Deleting a sale also removes its fee line.
     await db.delete(ledger).where(eq(ledger.saleId, id));
     await db.delete(ledger).where(eq(ledger.id, id));
+    await invalidateStats(db);
     return c.json({ ok: true });
   });

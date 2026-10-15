@@ -29,13 +29,13 @@ export async function seedDemo(db: DB, settings: Settings, now = new Date()) {
   const rng = mulberry32(20261015);
   const iso = (msAgo: number) => nowIso(new Date(now.getTime() - msAgo));
 
-  // Five live products with ~60 days of sales. Rows are collected and inserted in
+  // Five live products with ~60 days of sales. History goes in the ledger only —
+  // quests and achievements count what *you* do from here on. Rows are collected and inserted in
   // chunks (D1 allows 100 bound parameters per statement).
   const liveNiches = DEMO_NICHES.slice(0, 5);
   const prices = [449, 399, 549, 349, 299];
   const productRows: (typeof products.$inferInsert)[] = [];
   const ledgerRows: (typeof ledger.$inferInsert)[] = [];
-  const eventRows: (typeof events.$inferInsert)[] = [];
   for (let i = 0; i < liveNiches.length; i++) {
     const n = liveNiches[i];
     const id = newId("p_");
@@ -62,9 +62,7 @@ export async function seedDemo(db: DB, settings: Settings, now = new Date()) {
         { id: saleId, date, kind: "sale", category: "Etsy sale", description: n.product, amountPence: fees.grossPence, nonGbp, productId: id, demo: true, createdAt: date },
         { id: newId("l_"), date, kind: "fee", category: "Etsy fees (inc. VAT)", description: `Fees on: ${n.product}`, amountPence: -fees.totalFeesPence, productId: id, saleId, demo: true, createdAt: date },
       );
-      eventRows.push({ type: "sale", amount: 1, demo: true, createdAt: date });
     }
-    eventRows.push({ type: "product_launched", amount: 1, demo: true, createdAt: created });
     ledgerRows.push({
       id: newId("l_"),
       date: created,
@@ -91,13 +89,11 @@ export async function seedDemo(db: DB, settings: Settings, now = new Date()) {
   const inserts = [
     ...chunks(productRows, 8).map((r) => db.insert(products).values(r)),
     ...chunks(ledgerRows, 8).map((r) => db.insert(ledger).values(r)),
-    ...chunks(eventRows, 20).map((r) => db.insert(events).values(r)),
   ];
   await db.batch(inserts as [ (typeof inserts)[number], ...(typeof inserts)[number][] ]);
 
   // XP: sits at Lv3 (250) with 100 to go to Lv4 (500), where the Launch Pad unlocks.
   await db.insert(xpLog).values({ amount: 400, reason: "Demo shop history", demo: true, createdAt: iso(1 * DAY) });
-  await db.insert(events).values({ type: "task_approved", amount: 12, demo: true, createdAt: iso(10 * DAY) });
 
   // Three products mid-pipeline so every early room has something going on.
   const inFlight: { niche: (typeof DEMO_NICHES)[number]; kind: string; state: "needs_approval" | "working" | "queued" }[] = [

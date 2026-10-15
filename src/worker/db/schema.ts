@@ -62,7 +62,7 @@ export const tasks = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (t) => [index("tasks_state_idx").on(t.state), index("tasks_room_idx").on(t.room, t.state)],
+  (t) => [index("tasks_state_idx").on(t.state, t.finishedAt), index("tasks_room_idx").on(t.room, t.state), index("tasks_agent_idx").on(t.agent)],
 );
 
 /** Guardrail record: anything that publishes, sends, overspends or deletes needs one. */
@@ -118,7 +118,7 @@ export const ledger = sqliteTable(
     demo: integer("demo", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [index("ledger_date_idx").on(t.date)],
+  (t) => [index("ledger_date_idx").on(t.date), index("ledger_kind_date_idx").on(t.kind, t.date)],
 );
 
 export const events = sqliteTable(

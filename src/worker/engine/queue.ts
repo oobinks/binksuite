@@ -12,11 +12,12 @@ import { calculateFees } from "../../shared/fees";
 import { hashString, intBetween, mulberry32, pick } from "../../shared/rng";
 import type { Settings } from "../../shared/settings";
 import { newId } from "../lib/crypto";
-import { kvGet, kvSet, nowIso, sum, visible } from "../lib/store";
+import { invalidateStats, kvGet, kvSet, nowIso, sum, visible } from "../lib/store";
 import { STEP_BY_KIND, FIRST_STEP } from "./agents";
 import type { ProductRow, TaskRow } from "./agents/types";
 import { DEMO_NICHES } from "./agents/demoContent";
 import { awardXp, checkAchievements, notify, recordEvent, totalXp } from "./game";
+import { getStats } from "./stats";
 
 export class EngineError extends Error {
   constructor(
@@ -129,7 +130,7 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
   const now = opts.now ?? new Date();
   const demoMode = settings.demoMode;
   const result: TickResult = { finished: 0, claimed: 0, spawned: 0, sales: 0 };
-  const level = levelForXp(await totalXp(db, demoMode));
+  const level = levelForXp((await getStats(db, demoMode, now)).xp);
 
   const active = await db
     .select()
@@ -138,15 +139,12 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
     .orderBy(asc(tasks.createdAt))
     .all();
 
-  // 1. Finish work whose time is up; update progress on the rest.
+  // 1. Finish work whose time is up. (Progress is worked out from the start time
+  //    when it's read, so ticking doesn't cost a database write per task.)
   for (const t of active.filter((t) => t.state === "working")) {
-    const elapsed = now.getTime() - new Date(t.startedAt ?? now).getTime();
-    if (elapsed >= t.durationMs) {
+    if (now.getTime() - new Date(t.startedAt ?? now).getTime() >= t.durationMs) {
       await finishTask(db, t, settings, now);
       result.finished++;
-    } else {
-      const progress = Math.min(0.99, elapsed / Math.max(1, t.durationMs));
-      await db.update(tasks).set({ progress }).where(and(eq(tasks.id, t.id), eq(tasks.state, "working"))).run();
     }
   }
 
@@ -184,21 +182,24 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
   // 3. Demo simulator: keep a few products flowing and the odd sale trickling in.
   if (demoMode && opts.interactive) {
     const clock = (await kvGet<{ lastSpawn: number; lastSale: number }>(db, "demoClock")) ?? { lastSpawn: 0, lastSale: now.getTime() };
-    const inPipeline = await db
-      .select({ n: sql<number>`count(*)`.mapWith(Number) })
-      .from(products)
-      .where(and(eq(products.demo, true), sql`${products.stage} != 'live'`))
-      .get();
-    if ((inPipeline?.n ?? 0) < 3 && now.getTime() - clock.lastSpawn > 90_000) {
-      await spawnDemoProduct(db);
+    const before = JSON.stringify(clock);
+    if (now.getTime() - clock.lastSpawn > 90_000) {
+      const inPipeline = await db
+        .select({ n: sql<number>`count(*)`.mapWith(Number) })
+        .from(products)
+        .where(and(eq(products.demo, true), sql`${products.stage} != 'live'`))
+        .get();
+      if ((inPipeline?.n ?? 0) < 3) {
+        await spawnDemoProduct(db);
+        result.spawned++;
+      }
       clock.lastSpawn = now.getTime();
-      result.spawned++;
     }
     if (now.getTime() - clock.lastSale > 150_000 && Math.random() < 0.5) {
       if (await demoSale(db, settings, now)) result.sales++;
       clock.lastSale = now.getTime();
     }
-    await kvSet(db, "demoClock", clock);
+    if (JSON.stringify(clock) !== before) await kvSet(db, "demoClock", clock);
   }
   return result;
 }
@@ -237,6 +238,7 @@ async function finishTask(db: DB, t: TaskRow, settings: Settings, now: Date) {
         demo: t.demo,
         createdAt: nowIso(now),
       });
+      await invalidateStats(db);
     }
     const event: TaskEvent = step.needsApproval ? "finish" : "finish_auto";
     await transition(db, t, event, { output: res.output, progress: 1, finishedAt: nowIso(now), error: null });

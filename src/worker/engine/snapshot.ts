@@ -9,7 +9,8 @@ import type { AgentStatus } from "../../shared/tasks";
 import type { AgentSnapshot, Briefing, RoomSnapshot, Snapshot } from "../../shared/api";
 import type { Settings } from "../../shared/settings";
 import { kvGet, nowIso, sum, visible } from "../lib/store";
-import { getQuests, netProfitPence, recentNotifications, totalXp } from "./game";
+import { getQuests, netProfitPence, recentNotifications } from "./game";
+import { getStats } from "./stats";
 
 const JUST_FINISHED_MS = 45_000;
 
@@ -20,13 +21,10 @@ export async function buildSnapshot(
 ): Promise<Snapshot> {
   const demoMode = settings.demoMode;
   const now = new Date();
-  const monthStart = now.toISOString().slice(0, 7);
   const recentCutoff = new Date(now.getTime() - JUST_FINISHED_MS).toISOString();
 
-  const [xp, coins, monthProfit, live, recent, hand, notes, quests, lastBriefing] = await Promise.all([
-    totalXp(db, demoMode),
-    netProfitPence(db, demoMode),
-    netProfitPence(db, demoMode, monthStart),
+  const [stats, live, recent, hand, notes, lastBriefing] = await Promise.all([
+    getStats(db, demoMode, now),
     db
       .select()
       .from(tasks)
@@ -46,11 +44,14 @@ export async function buildSnapshot(
       .limit(10)
       .all(),
     recentNotifications(db, demoMode, opts.afterNotification),
-    getQuests(db, demoMode, now),
     kvGet<string>(db, "lastBriefing"),
   ]);
 
-  const progress = levelProgress(xp);
+  const progress = levelProgress(stats.xp);
+  // Progress isn't stored on every tick — work it out from when the task started.
+  for (const t of live) {
+    if (t.state === "working" && t.startedAt) t.progress = Math.min(0.99, (now.getTime() - new Date(t.startedAt).getTime()) / Math.max(1, t.durationMs));
+  }
 
   const rooms: RoomSnapshot[] = ROOMS.map((r) => {
     const mine = live.filter((t) => t.room === r.id);
@@ -107,9 +108,9 @@ export async function buildSnapshot(
     settings,
     game: {
       ...progress,
-      coinsPence: coins,
-      monthProfitPence: monthProfit,
-      questsReady: quests.filter((q) => q.visible && q.complete && !q.claimed).length,
+      coinsPence: stats.coinsPence,
+      monthProfitPence: stats.monthProfitPence,
+      questsReady: stats.questsReady,
     },
     rooms,
     agents,

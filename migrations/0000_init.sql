@@ -67,6 +67,7 @@ CREATE TABLE `ledger` (
 );
 --> statement-breakpoint
 CREATE INDEX `ledger_date_idx` ON `ledger` (`date`);--> statement-breakpoint
+CREATE INDEX `ledger_kind_date_idx` ON `ledger` (`kind`,`date`);--> statement-breakpoint
 CREATE TABLE `notifications` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`kind` text NOT NULL,
@@ -132,8 +133,9 @@ CREATE TABLE `tasks` (
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `tasks_state_idx` ON `tasks` (`state`);--> statement-breakpoint
+CREATE INDEX `tasks_state_idx` ON `tasks` (`state`,`finished_at`);--> statement-breakpoint
 CREATE INDEX `tasks_room_idx` ON `tasks` (`room`,`state`);--> statement-breakpoint
+CREATE INDEX `tasks_agent_idx` ON `tasks` (`agent`);--> statement-breakpoint
 CREATE TABLE `vault` (
 	`provider` text PRIMARY KEY NOT NULL,
 	`ciphertext` text NOT NULL,

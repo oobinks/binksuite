@@ -15,6 +15,13 @@ export async function kvSet(db: DB, key: string, value: unknown): Promise<void> 
   await db.insert(kv).values({ key, value: v }).onConflictDoUpdate({ target: kv.key, set: { value: v } });
 }
 
+export const GAME_CACHE_KEY = "gameCache";
+
+/** Call after writing anything that changes XP, coins or quest progress. */
+export async function invalidateStats(db: DB): Promise<void> {
+  await db.delete(kv).where(eq(kv.key, GAME_CACHE_KEY));
+}
+
 export async function getSettings(db: DB): Promise<Settings> {
   return withDefaults(await kvGet<Partial<Settings>>(db, "settings"));
 }

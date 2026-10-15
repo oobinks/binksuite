@@ -30,6 +30,7 @@ async function taskViews(db: DB, where: Parameters<typeof and>[number], demoMode
     .orderBy(desc(tasks.updatedAt))
     .limit(60)
     .all();
+  const now = Date.now();
   return rows.map(({ t, productTitle }) => ({
     id: t.id,
     productId: t.productId,
@@ -39,7 +40,7 @@ async function taskViews(db: DB, where: Parameters<typeof and>[number], demoMode
     kind: t.kind,
     title: t.title,
     state: t.state as TaskView["state"],
-    progress: t.progress,
+    progress: t.state === "working" && t.startedAt ? Math.min(0.99, (now - new Date(t.startedAt).getTime()) / Math.max(1, t.durationMs)) : t.progress,
     output: t.output ?? null,
     note: t.note,
     error: t.error,

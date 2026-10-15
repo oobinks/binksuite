@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Nunito", ui-rounded, system-ui, sans-serif;
+  --color-cream: #fbf6ee;
+  --color-ink: #3b2f2a;
+  --color-cocoa: #7a5c4d;
+  --color-honey: #f2b35b;
+  --color-berry: #e0607e;
+  --color-mint: #5bbf9a;
+  --color-night: #1e1b24;
+  --color-night-2: #2a2632;
+  --color-night-3: #37323f;
+}
+
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
+html,
+body {
+  @apply bg-cream text-ink dark:bg-night dark:text-stone-100;
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Cosy floor texture for the HQ */
+.floor-boards {
+  background-image: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.035) 0 2px, transparent 2px 46px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.02) 0 1px, transparent 1px 14px);
+}
+.dark .floor-boards {
+  background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 46px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 14px);
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes busy {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-2px) rotate(-3deg); }
+  75% { transform: translateY(-2px) rotate(3deg); }
+}
+@keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-25deg); }
+}
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 170, 40, 0.75); transform: scale(1); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 170, 40, 0); transform: scale(1.08); }
+}
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+.anim-bob { animation: bob 2.6s ease-in-out infinite; }
+.anim-busy { animation: busy 0.6s ease-in-out infinite; }
+.anim-wave { animation: wave 0.9s ease-in-out infinite; transform-origin: 50% 90%; }
+.anim-glow { animation: glow 1.6s ease-in-out infinite; }
+.anim-spin { animation: spin-slow 2s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-bob, .anim-busy, .anim-wave, .anim-glow, .anim-spin { animation: none; }
+}
+
+@utility card {
+  @apply rounded-2xl bg-white/90 shadow-[0_2px_0_rgba(59,47,42,0.08),0_8px_24px_-12px_rgba(59,47,42,0.25)] ring-1 ring-black/5 dark:bg-night-2 dark:ring-white/10;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-ink text-cream hover:bg-cocoa dark:bg-honey dark:text-night dark:hover:bg-amber-300;
+}
+@utility btn-good {
+  @apply btn bg-mint text-white hover:brightness-105;
+}
+@utility btn-soft {
+  @apply btn bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15;
+}
+@utility btn-bad {
+  @apply btn bg-berry/15 text-berry hover:bg-berry/25;
+}
+@utility input {
+  @apply w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-honey focus:ring-2 focus:ring-honey/40 dark:border-white/15 dark:bg-night-3;
+}
+@utility label {
+  @apply mb-1 block text-xs font-bold tracking-wide text-cocoa uppercase dark:text-stone-400;
+}
+@utility chip {
+  @apply inline-flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 text-xs font-semibold dark:bg-white/10;
+}
