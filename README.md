@@ -1,4 +1,6 @@
-# 🏡 BinkSuite
+<img src="public/logo.svg" width="72" alt="BinkSuite logo">
+
+# BinkSuite
 
 A cosy management game for running an Etsy printables shop. Your HQ is a floor plan of rooms. Each room is staffed by AI agents who do real work, you approve their output, and your score is real net profit in £.
 

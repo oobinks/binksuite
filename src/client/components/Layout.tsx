@@ -5,6 +5,7 @@ import { useSnapshot, applyTheme } from "../lib/hooks";
 import { useUi } from "../lib/store";
 import { formatGBP } from "../lib/format";
 import { ProgressBar, Modal } from "./ui";
+import { Logo } from "./Logo";
 import { BriefingModal } from "../game/BriefingModal";
 import { ApprovalsDrawer } from "../game/ApprovalsDrawer";
 import { unlocksAtLevel } from "../../shared/game";
@@ -29,9 +30,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-black/5 bg-cream/85 backdrop-blur-md dark:border-white/10 dark:bg-night/85">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2 sm:gap-4 sm:px-5">
           <Link to="/" className="flex items-center gap-1.5 text-lg font-black tracking-tight" aria-label="BinkSuite HQ">
-            <span className="text-2xl" aria-hidden>
-              🏡
-            </span>
+            <Logo size={30} className="shrink-0 drop-shadow-sm" />
             <span className="hidden sm:inline">BinkSuite</span>
           </Link>
           {snap?.settings.demoMode && (
