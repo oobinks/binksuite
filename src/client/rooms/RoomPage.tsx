@@ -12,6 +12,7 @@ import { Section } from "../components/ui";
 import { TaskBoard } from "./shared/TaskBoard";
 import { ReviewModal } from "./shared/ReviewModal";
 import { ComingSoon } from "./shared/ComingSoon";
+import { SuggestionBox } from "./research/SuggestionBox";
 import { darkFloor } from "../hq/HQMap";
 
 // Charts are heavy — only load them when you open the vault.
@@ -87,6 +88,7 @@ function PipelineRoom({ roomId, locked }: { roomId: RoomId; locked: boolean }) {
           🔒 This room opens at <b>Lv {ROOM_BY_ID[roomId].unlockLevel}</b>. Parcels waiting here will start moving as soon as you level up — approve tasks and claim quests to earn XP.
         </div>
       )}
+      {roomId === "research" && !locked && <SuggestionBox tasks={data?.tasks ?? []} onOpen={setOpen} />}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {agents.map((a) => (
           <AgentCard key={a.id} id={a.id} state={snap?.agents.find((s) => s.id === a.id)} />

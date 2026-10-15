@@ -113,6 +113,7 @@ Lv5 📦 Orders · 💬 Customer Care   Lv6 📣 Marketing   Lv7 📊 Strategy H
 
 ## Phase 2 — Research Lab + Product Studio (real AI)
 - **Claude client:** model from config (default latest Sonnet), structured JSON output, per-call token cost logged to the ledger.
+- **Research Lab — Suggestion box (added after Phase 1; demo version shipped early):** you suggest an idea, Scout researches it (Claude + web search in Phase 2) and returns a ✅ go / 🤔 maybe / ⛔ skip report with scores, reasons, risks, angles, price range, seasonality and keywords. Your ideas jump the queue; you can make it, research again, or drop it.
 - **Research Lab:** **Scout** scores niche ideas (demand, competition, AI fit, price potential, keywords). **Analyst** summarises pasted competitor notes into a ranked Niche Board. Approved niche → product brief. No scraping.
 - **Product Studio:** **Designer** (prompts, prompt library, style presets, `ImageProvider`: demo + OpenAI/Replicate/Ideogram). **Inspector** (Claude vision checks; swipeable approve/reject/regenerate). **Printer** (in-browser PDF/PNG/JPG at A4/A5/A3, US Letter, 8×10, 300 DPI; upscaling; zipped to R2).
 - **Costs and guardrails:** per-product API cost; spend caps enforced; agent shows ⛔ when hit.

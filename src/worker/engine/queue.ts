@@ -2,7 +2,7 @@
 // src/shared/tasks.ts. `tick()` is called by the browser while the app is open
 // and by the cron trigger every 5 minutes. Each tick is cheap: a handful of
 // queries and no heavy CPU, so it fits the free plan's 10 ms budget.
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { DB } from "../db";
 import { activity, approvals, handoffs, ledger, products, tasks } from "../db/schema";
 import { nextState, type TaskEvent, type TaskState } from "../../shared/tasks";
@@ -94,6 +94,52 @@ export async function spawnDemoProduct(db: DB, rng: () => number = Math.random):
   return product;
 }
 
+/** You suggest an idea; Scout researches it next (suggestions jump the queue). */
+export async function suggestIdea(db: DB, settings: Settings, idea: string, notes?: string): Promise<ProductRow> {
+  const now = nowIso();
+  const clean = idea.trim().replace(/\s+/g, " ");
+  const product: ProductRow = {
+    id: newId("p_"),
+    title: clean,
+    niche: clean,
+    stage: "research",
+    seed: Math.floor(Math.random() * 1e6),
+    pricePence: null,
+    data: { suggestion: { idea: clean, notes: notes?.trim() || undefined } },
+    // Research is simulated until Phase 2, so in demo mode the idea is demo data too.
+    demo: settings.demoMode,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.insert(products).values(product);
+  await createTask(db, product, FIRST_STEP, { demo: product.demo, input: { suggestion: true } });
+  await logActivity(db, "scout", "research", "new", `💡 You suggested “${clean}”. Scout is on it!`, product.demo);
+  return product;
+}
+
+/** Your suggestions, newest first, with Scout's verdict once it's in. */
+export async function listSuggestions(db: DB, demoMode: boolean) {
+  const rows = await db
+    .select()
+    .from(products)
+    .where(and(sql`json_extract(${products.data}, '$.suggestion') IS NOT NULL`, visible(products.demo, demoMode)))
+    .orderBy(desc(products.createdAt))
+    .limit(20)
+    .all();
+  return rows.map((p) => {
+    const d = p.data as { suggestion: { idea: string; notes?: string }; report?: { verdict: string; overall: number }; dropped?: boolean };
+    return {
+      productId: p.id,
+      idea: d.suggestion.idea,
+      notes: d.suggestion.notes ?? null,
+      stage: d.dropped ? "dropped" : p.stage,
+      verdict: d.report?.verdict ?? null,
+      overall: d.report?.overall ?? null,
+      createdAt: p.createdAt,
+    };
+  });
+}
+
 /** Today's and this month's API spend (pence, positive numbers). */
 export async function apiSpend(db: DB, demoMode: boolean, now = new Date()) {
   const day = now.toISOString().slice(0, 10);
@@ -151,7 +197,11 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
   // 2. Each enabled agent picks up its oldest queued task, if it's free.
   const busy = new Set(active.filter((t) => t.state === "working" && t.agent).map((t) => t.agent));
   let spend = await apiSpend(db, demoMode, now);
-  for (const t of active.filter((t) => t.state === "queued" || t.state === "blocked")) {
+  // Your own suggestions jump the queue.
+  const waiting = active
+    .filter((t) => t.state === "queued" || t.state === "blocked")
+    .sort((a, b) => Number(!!(b.input as { suggestion?: boolean }).suggestion) - Number(!!(a.input as { suggestion?: boolean }).suggestion));
+  for (const t of waiting) {
     const step = STEP_BY_KIND[t.kind];
     if (!step || !isRoomUnlocked(t.room as RoomId, level)) continue;
     if (t.agent && (busy.has(t.agent) || settings.agentsEnabled[t.agent] === false)) continue;
@@ -187,7 +237,7 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
       const inPipeline = await db
         .select({ n: sql<number>`count(*)`.mapWith(Number) })
         .from(products)
-        .where(and(eq(products.demo, true), sql`${products.stage} != 'live'`))
+        .where(and(eq(products.demo, true), sql`${products.stage} NOT IN ('live', 'dropped')`))
         .get();
       if ((inPipeline?.n ?? 0) < 3) {
         await spawnDemoProduct(db);
@@ -333,6 +383,20 @@ export async function rejectTask(db: DB, id: string, note: string) {
     await transition(db, t, "reject", { note, progress: 0, attempts: 0, output: null });
     await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "rejected", `Redo requested: ${note || "no note"}`, t.demo);
   }
+  return getTask(db, id);
+}
+
+/** Drop an idea (or any waiting task): the task fails and the product leaves the pipeline. */
+export async function dropTask(db: DB, id: string, note?: string) {
+  const t = await getTask(db, id);
+  if (t.state !== "needs_approval" && t.state !== "queued" && t.state !== "blocked") throw new EngineError("Only waiting tasks can be dropped.");
+  await transition(db, t, "discard", { note: note ?? "Dropped" });
+  await db.update(approvals).set({ status: "discarded", note: note ?? null, decidedAt: nowIso() }).where(and(eq(approvals.taskId, t.id), eq(approvals.status, "pending")));
+  if (t.productId) {
+    const p = await getProduct(db, t.productId);
+    await db.update(products).set({ stage: "dropped", data: { ...p.data, dropped: true }, updatedAt: nowIso() }).where(eq(products.id, p.id));
+  }
+  await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "rejected", `🗑️ Dropped: ${t.title}${note ? ` (${note})` : ""}`, t.demo);
   return getTask(db, id);
 }
 

@@ -6,11 +6,19 @@ import { checkListing, compliancePasses, type ComplianceCheck } from "../../../s
 import { intBetween, pick } from "../../../shared/rng";
 import { DEMO_NICHES, INSPECTOR_ISSUES, MOCKUP_SCENES, PRINT_SIZES, TRICKY_PHRASE } from "./demoContent";
 import type { ProductRow, StepDef } from "./types";
+import { nicheFromSuggestion, researchIdea, type MarketReport } from "./marketResearch";
 
 export type { StepDef } from "./types";
 
+interface SuggestionData {
+  suggestion?: { idea: string; notes?: string };
+  report?: MarketReport;
+}
+
 function niche(p: ProductRow) {
-  const name = (p.data as { niche?: string }).niche ?? p.niche;
+  const d = p.data as SuggestionData & { niche?: string };
+  if (d.suggestion) return nicheFromSuggestion(d.suggestion.idea, d.report, p.seed);
+  const name = d.niche ?? p.niche;
   return DEMO_NICHES.find((n) => n.niche === name) ?? DEMO_NICHES[p.seed % DEMO_NICHES.length];
 }
 
@@ -25,8 +33,19 @@ export const STEPS: StepDef[] = [
     approvalKind: "review",
     durationMs: [12_000, 20_000],
     estimatedCostPence: 1,
-    title: (p) => `Score niche: ${p.niche}`,
-    run: ({ product, rng }) => {
+    title: (p) => ((p.data as SuggestionData).suggestion ? `Research your idea: ${p.niche}` : `Score niche: ${p.niche}`),
+    run: ({ product, rng, settings }) => {
+      const sug = (product.data as SuggestionData).suggestion;
+      if (sug) {
+        // Your suggestion: a full market-research report with a go / maybe / skip verdict.
+        const report = researchIdea(sug.idea, sug.notes, settings.blocklist);
+        return {
+          output: { ...report, niche: report.idea, suggested: true },
+          productData: { report },
+          costPence: 2,
+          log: `Researched your idea “${report.idea}”: ${report.verdict.toUpperCase()} (${report.overall}/10)`,
+        };
+      }
       const n = niche(product);
       const scores = { demand: score(rng, 5), competition: score(rng, 3, 9), aiFit: score(rng, 6), pricePotential: score(rng, 4) };
       const overall = Math.round(((scores.demand + (11 - scores.competition) + scores.aiFit + scores.pricePotential) / 4) * 10) / 10;
