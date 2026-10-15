@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { Layout } from "./components/Layout";
+import { Logo } from "./components/Logo";
 import { HQPage } from "./hq/HQPage";
 import { RoomPage } from "./rooms/RoomPage";
 import { AgentPage } from "./agents/AgentPage";
@@ -18,7 +19,12 @@ function Gate() {
     return () => window.removeEventListener("bs:unauthorised", onUnauth);
   }, [nav]);
 
-  if (isLoading) return <p className="py-24 text-center text-lg font-bold">🏡</p>;
+  if (isLoading)
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <Logo size={64} className="anim-bob" />
+      </div>
+    );
   if (error || !data) return <p className="py-24 text-center">Can't reach the server. Refresh in a moment.</p>;
   if (loc.pathname === "/setup") return <SetupPage />;
   if (!data.passwordSet) return <Navigate to="/setup" replace />;

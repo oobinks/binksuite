@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { ErrorNote } from "../components/ui";
 import { CopyButton } from "../rooms/shared/CopyButton";
+import { Logo } from "../components/Logo";
 
 export interface AuthStatus {
   passwordSet: boolean;
@@ -20,7 +21,7 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="floor-boards flex min-h-dvh items-center justify-center bg-[#efe3cf] p-4 dark:bg-night">
       <div className="card w-full max-w-md p-6">
         <div className="mb-4 text-center">
-          <div className="text-5xl">🏡</div>
+          <Logo size={72} className="mx-auto drop-shadow" />
           <h1 className="text-2xl font-black">BinkSuite HQ</h1>
         </div>
         {children}

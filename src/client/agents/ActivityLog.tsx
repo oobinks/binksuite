@@ -11,7 +11,7 @@ export function ActivityLog({ items, empty = "Nothing yet." }: { items: Activity
     <ol className="space-y-2">
       {items.map((a) => (
         <li key={a.id} className="flex items-start gap-2 text-sm">
-          {a.agent ? <Avatar agent={AGENT_BY_ID[a.agent]} size={24} showProp={false} status="idle" /> : <span className="w-6 text-center">🧑‍💼</span>}
+          {a.agent ? <Avatar agent={AGENT_BY_ID[a.agent]} size={24} showProp={false} status="idle" /> : <span className="w-6 text-center">👤</span>}
           <span className="min-w-0 flex-1">
             <span aria-hidden>{KIND_ICON[a.kind] ?? "•"}</span> {a.message}
           </span>

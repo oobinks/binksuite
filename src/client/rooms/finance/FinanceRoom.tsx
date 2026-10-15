@@ -36,8 +36,8 @@ export function FinanceRoom() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Tile label="Sales" value={formatGBP(s.totals.salesPence)} icon="🛍️" />
           <Tile label="Etsy fees" value={formatGBP(s.totals.feesPence)} icon="🏷️" />
-          <Tile label="Costs (inc. AI)" value={formatGBP(s.totals.costsPence)} icon="🧾" />
-          <Tile label="Net profit = coins" value={formatGBP(s.totals.netPence)} icon="🪙" strong />
+          <Tile label="Costs (inc. AI)" value={formatGBP(s.totals.costsPence)} icon="📝" />
+          <Tile label="Net profit = coins" value={formatGBP(s.totals.netPence)} icon="💰" strong />
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-5">
@@ -97,7 +97,7 @@ function FeeCalculator() {
       }),
     onSuccess: () => {
       celebrate("small");
-      toast({ icon: "🪙", title: "Sale recorded", body: "Added to your ledger with its fees" });
+      toast({ icon: "💰", title: "Sale recorded", body: "Added to your ledger with its fees" });
       qc.invalidateQueries();
     },
   });
@@ -105,7 +105,7 @@ function FeeCalculator() {
   const floor = minimumPriceFor(settings.minProfitPence, toPence(cost), settings.fees);
   const meets = result.netPence >= settings.minProfitPence * (Number(qty) || 1);
   return (
-    <Section title="Fee calculator" icon="🧮" right={<span className="chip">Etsy UK · live</span>}>
+    <Section title="Fee calculator" icon="🔢" right={<span className="chip">Etsy UK · live</span>}>
       <div className="grid gap-3 sm:grid-cols-3" onChange={touch}>
         <label>
           <span className="label">Price (£)</span>
@@ -167,7 +167,7 @@ function FeeCalculator() {
       </div>
       <ErrorNote error={record.error} />
       <button className="btn-soft mt-3 w-full" onClick={() => record.mutate()} disabled={record.isPending || toPence(price) <= 0}>
-        🧾 Record this as a real sale
+        📝 Record this as a real sale
       </button>
     </Section>
   );
@@ -202,7 +202,7 @@ function TradingAllowance({ s }: { s: FinanceSummary }) {
   const t = s.taxYear;
   const pct = t.grossPence / t.allowancePence;
   return (
-    <Section title={`Trading allowance ${t.label}`} icon="🇬🇧">
+    <Section title={`Trading allowance ${t.label}`} icon="💷">
       <div className="flex justify-between text-sm font-bold">
         <span>Gross trading income</span>
         <span className="tabular-nums">

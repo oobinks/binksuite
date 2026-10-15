@@ -12,6 +12,7 @@ import { Section } from "../components/ui";
 import { TaskBoard } from "./shared/TaskBoard";
 import { ReviewModal } from "./shared/ReviewModal";
 import { ComingSoon } from "./shared/ComingSoon";
+import { SuggestionBox } from "./research/SuggestionBox";
 import { darkFloor } from "../hq/HQMap";
 
 // Charts are heavy — only load them when you open the vault.
@@ -49,7 +50,7 @@ export function RoomPage() {
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             {locked && <span className="chip bg-ink px-3 py-1 text-cream">🔒 Unlocks at Lv {room.unlockLevel}</span>}
-            {room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🧪 Demo agents · real AI in Phase {room.phase}</span>}
+            {room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🎮 Demo agents · real AI in Phase {room.phase}</span>}
             {room.phase === 1 && <span className="chip bg-mint/25 px-3 py-1 text-emerald-900 dark:text-emerald-100">✅ Live now</span>}
           </div>
         </div>
@@ -87,13 +88,14 @@ function PipelineRoom({ roomId, locked }: { roomId: RoomId; locked: boolean }) {
           🔒 This room opens at <b>Lv {ROOM_BY_ID[roomId].unlockLevel}</b>. Parcels waiting here will start moving as soon as you level up — approve tasks and claim quests to earn XP.
         </div>
       )}
+      {roomId === "research" && !locked && <SuggestionBox tasks={data?.tasks ?? []} onOpen={setOpen} />}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {agents.map((a) => (
           <AgentCard key={a.id} id={a.id} state={snap?.agents.find((s) => s.id === a.id)} />
         ))}
         {agents.length === 0 && (
           <div className="card flex items-center gap-3 p-3">
-            <span className="text-4xl">🧑‍💼</span>
+            <span className="text-4xl">👤</span>
             <div>
               <div className="font-black">You</div>
               <div className="text-sm text-cocoa dark:text-stone-400">The Launch Pad is yours: copy the pack to Etsy, then press launch.</div>

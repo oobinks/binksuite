@@ -65,7 +65,7 @@ export const useUi = create<UiState>((set, get) => ({
 }));
 
 function iconFor(kind: string) {
-  return kind === "sale" ? "🪙" : kind === "achievement" ? "🏅" : kind === "launch" ? "🚀" : kind === "quest" ? "📜" : "✨";
+  return kind === "sale" ? "💰" : kind === "achievement" ? "🏅" : kind === "launch" ? "🚀" : kind === "quest" ? "📜" : "✨";
 }
 
 export async function celebrate(size: "small" | "big" = "small") {

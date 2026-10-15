@@ -93,7 +93,7 @@ export function JournalPage() {
         </ul>
       </Section>
 
-      <Section title="Level ladder" icon="🪜">
+      <Section title="Level ladder" icon="🔝">
         <ol className="space-y-2">
           {Array.from({ length: MAX_LADDER_LEVEL }, (_, i) => i + 1).map((lv) => {
             const reached = (snap?.game.level ?? 1) >= lv;

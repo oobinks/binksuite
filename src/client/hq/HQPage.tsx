@@ -9,7 +9,7 @@ import { MobileGrid } from "./MobileGrid";
 export function HQPage() {
   const { data: snap, error } = useSnapshot();
   if (error) return <p className="card p-6 text-center">Couldn't reach the HQ. Check your connection and refresh.</p>;
-  if (!snap) return <p className="py-20 text-center text-lg font-bold">Opening the doors… 🏡</p>;
+  if (!snap) return <p className="py-20 text-center text-lg font-bold">Opening the doors…</p>;
 
   const nextRoom = ROOMS.filter((r) => r.unlockLevel > snap.game.level).sort((a, b) => a.unlockLevel - b.unlockLevel)[0];
   const goal = snap.settings.monthlyTargetPence;

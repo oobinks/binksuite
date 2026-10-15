@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Nunito", ui-rounded, system-ui, sans-serif;
+  --font-sans: "Nunito", "Noto Color Emoji", ui-rounded, system-ui, sans-serif;
   --color-cream: #fbf6ee;
   --color-ink: #3b2f2a;
   --color-cocoa: #7a5c4d;

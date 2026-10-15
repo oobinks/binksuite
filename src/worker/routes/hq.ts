@@ -5,7 +5,7 @@ import { newApp, body, HttpError } from "../app";
 import { activity, products, tasks } from "../db/schema";
 import { secretsStatus } from "../env";
 import { kvSet, visible } from "../lib/store";
-import { tick, approveTask, rejectTask, retryTask, EngineError } from "../engine/queue";
+import { tick, approveTask, rejectTask, retryTask, dropTask, suggestIdea, listSuggestions, EngineError } from "../engine/queue";
 import { buildBriefing, buildSnapshot } from "../engine/snapshot";
 import { recordEvent, checkAchievements } from "../engine/game";
 import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared/registry";
@@ -110,6 +110,23 @@ export const hqRoutes = newApp()
     const b = await body(c, z.object({ note: z.string().max(500).default("") }));
     const t = await engineErrors(rejectTask(c.get("db"), c.req.param("id"), b.note));
     return c.json({ ok: true, state: t.state });
+  })
+  .post("/tasks/:id/drop", async (c) => {
+    const b = await body(c, z.object({ note: z.string().max(500).optional() }));
+    const t = await engineErrors(dropTask(c.get("db"), c.req.param("id"), b.note));
+    return c.json({ ok: true, state: t.state });
+  })
+  .get("/research/suggestions", async (c) => c.json({ suggestions: await listSuggestions(c.get("db"), c.get("settings").demoMode) }))
+  .post("/research/suggestions", async (c) => {
+    const b = await body(
+      c,
+      z.object({
+        idea: z.string().trim().min(3, "Tell Scout a bit more (3+ characters)").max(120),
+        notes: z.string().max(1000).optional(),
+      }),
+    );
+    const p = await suggestIdea(c.get("db"), c.get("settings"), b.idea, b.notes);
+    return c.json({ ok: true, productId: p.id });
   })
   .post("/tasks/:id/retry", async (c) => {
     const t = await engineErrors(retryTask(c.get("db"), c.req.param("id")));

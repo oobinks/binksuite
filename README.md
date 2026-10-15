@@ -1,4 +1,6 @@
-# 🏡 BinkSuite
+<img src="public/logo.svg" width="72" alt="BinkSuite logo">
+
+# BinkSuite
 
 A cosy management game for running an Etsy printables shop. Your HQ is a floor plan of rooms. Each room is staffed by AI agents who do real work, you approve their output, and your score is real net profit in £.
 
@@ -73,6 +75,7 @@ The rules live in `src/shared/tasks.ts`, and the engine refuses any other move. 
 
 | Real now | Demo (real AI in later phases) |
 |---|---|
+| 💡 Suggestion box in the Research Lab (your ideas jump the queue) | Scout's market-research report on your idea |
 | Login, Key Vault, settings, export | Agent output in Research, Studio, Mockups, Listing, Compliance |
 | Fee calculator, ledger, charts, CSV, trading-allowance tracker | Demo sales trickling in for demo products |
 | Task queue, hand-offs, XP, levels, quests, achievements | Demo art (drawn in your browser from a seed, no image API) |

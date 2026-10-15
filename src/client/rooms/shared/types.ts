@@ -13,6 +13,8 @@ export interface ReviewDef {
   Body: FC<ReviewBodyProps>;
   approveLabel: string | ((task: TaskView) => string);
   rejectLabel: string | ((task: TaskView) => string);
+  /** Optional third button that drops the product entirely (e.g. a bad idea). */
+  dropLabel?: string | ((task: TaskView) => string | null);
   /** Approve needs a note (e.g. a compliance override). */
   approveNeedsNote?: (task: TaskView) => boolean;
   startsReady?: boolean;

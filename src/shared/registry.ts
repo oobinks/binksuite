@@ -78,7 +78,7 @@ export const ROOMS: RoomDef[] = [
     phase: 2,
     demoInteractive: true,
     blurb: "Scout and Analyst hunt for niches worth making.",
-    furniture: ["🧪", "📚", "🔭"],
+    furniture: ["⚗️", "📚", "🔭"],
     map: { x: 1, y: 2, w: 23.5, h: 33 },
   },
   {
@@ -91,7 +91,7 @@ export const ROOMS: RoomDef[] = [
     phase: 2,
     demoInteractive: true,
     blurb: "Designer, Inspector and Printer turn briefs into print files.",
-    furniture: ["🖌️", "🖨️", "🪴"],
+    furniture: ["🖌️", "🖨️", "🌿"],
     map: { x: 25.5, y: 2, w: 23.5, h: 33 },
   },
   {
@@ -169,7 +169,7 @@ export const ROOMS: RoomDef[] = [
     phase: 1,
     demoInteractive: false,
     blurb: "Real money: fees, profit, caps and your trading allowance.",
-    furniture: ["🪙", "🧮", "🔐"],
+    furniture: ["💰", "🔢", "🔐"],
     map: { x: 1, y: 43, w: 23.5, h: 26 },
   },
   {
@@ -182,7 +182,7 @@ export const ROOMS: RoomDef[] = [
     phase: 5,
     demoInteractive: false,
     blurb: "Concierge drafts kind replies. You always press send.",
-    furniture: ["💌", "🫖", "🎧"],
+    furniture: ["💌", "☕", "🎧"],
     map: { x: 1, y: 73, w: 32, h: 25 },
   },
   {
@@ -208,7 +208,7 @@ export const ROOMS: RoomDef[] = [
     phase: 5,
     demoInteractive: false,
     blurb: "Manager writes the weekly report and suggests quests.",
-    furniture: ["📊", "🧭", "🏆"],
+    furniture: ["📊", "🗺️", "🏆"],
     map: { x: 67, y: 73, w: 32, h: 25 },
   },
 ];
@@ -282,7 +282,7 @@ export const AGENTS: AgentDef[] = [
     name: "Pricer",
     role: "Profit protector",
     room: "listing",
-    look: { skin: "#8d5524", hair: "#d4d4d4", hairStyle: "bob", shirt: "#d9962f", accessory: "badge", prop: "🧮" },
+    look: { skin: "#8d5524", hair: "#d4d4d4", hairStyle: "bob", shirt: "#d9962f", accessory: "badge", prop: "🔢" },
     idleLines: ["Every penny counts.", "Fees checked."],
     workLines: ["Running the fee maths…", "Finding the sweet spot…"],
   },

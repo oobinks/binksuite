@@ -47,7 +47,7 @@ function TaskCard({ task, onOpen, onRetry, locked }: { task: TaskView; onOpen: (
   const content = (
     <>
       <div className="flex items-start gap-2">
-        {agent ? <Avatar agent={agent} size={28} showProp={false} status={task.state === "working" ? "working" : "idle"} /> : <span className="text-xl">🧑‍💼</span>}
+        {agent ? <Avatar agent={agent} size={28} showProp={false} status={task.state === "working" ? "working" : "idle"} /> : <span className="text-xl">👤</span>}
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold leading-tight">{task.title}</div>
           <div className="text-[11px] text-cocoa dark:text-stone-400">

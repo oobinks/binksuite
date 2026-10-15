@@ -5,6 +5,7 @@ import { useSnapshot, applyTheme } from "../lib/hooks";
 import { useUi } from "../lib/store";
 import { formatGBP } from "../lib/format";
 import { ProgressBar, Modal } from "./ui";
+import { Logo } from "./Logo";
 import { BriefingModal } from "../game/BriefingModal";
 import { ApprovalsDrawer } from "../game/ApprovalsDrawer";
 import { unlocksAtLevel } from "../../shared/game";
@@ -29,14 +30,12 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-black/5 bg-cream/85 backdrop-blur-md dark:border-white/10 dark:bg-night/85">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-2 sm:gap-4 sm:px-5">
           <Link to="/" className="flex items-center gap-1.5 text-lg font-black tracking-tight" aria-label="BinkSuite HQ">
-            <span className="text-2xl" aria-hidden>
-              🏡
-            </span>
+            <Logo size={30} className="shrink-0 drop-shadow-sm" />
             <span className="hidden sm:inline">BinkSuite</span>
           </Link>
           {snap?.settings.demoMode && (
             <span className="chip whitespace-nowrap bg-honey/25 text-amber-800 dark:text-amber-200" title="Demo mode is on">
-              🧪<span className="hidden sm:inline">Demo</span>
+              🎮<span className="hidden sm:inline">Demo</span>
             </span>
           )}
 
@@ -44,7 +43,7 @@ export function Layout({ children }: { children: ReactNode }) {
             {snap && (
               <>
                 <Link to="/room/finance" className="flex items-center gap-1 whitespace-nowrap rounded-xl bg-amber-100 px-2.5 py-1.5 text-sm font-black text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" title="Coins = your net profit">
-                  <span aria-hidden>🪙</span>
+                  <span aria-hidden>💰</span>
                   <span data-testid="coins">{formatGBP(snap.game.coinsPence)}</span>
                 </Link>
                 <Link to="/journal" className="hidden min-w-[150px] flex-col gap-0.5 rounded-xl px-2 py-1 hover:bg-black/5 sm:flex dark:hover:bg-white/5" title={`${snap.game.xp} XP`}>
