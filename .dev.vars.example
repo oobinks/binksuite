@@ -1,0 +1,3 @@
+# Copy to .dev.vars for local dev only. In production set these as Cloudflare secrets.
+SESSION_SECRET=dev-session-secret-change-me-0123456789abcdef
+VAULT_MASTER_KEY=dev-vault-master-key-change-me-0123456789abcdef
