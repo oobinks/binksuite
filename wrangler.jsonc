@@ -1,0 +1,34 @@
+// BinkSuite — Cloudflare Worker config (free plan friendly).
+// The D1 database and R2 bucket are matched BY NAME on deploy:
+// if they already exist in your account they're connected, otherwise
+// Wrangler creates them for you. No IDs need pasting here.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "binksuite",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "binksuite-db",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "binksuite-files"
+    }
+  ],
+  // Runs queued agent jobs and sweeps stale work every 5 minutes.
+  "triggers": { "crons": ["*/5 * * * *"] }
+  // Secrets (set in the dashboard, never committed):
+  //   SESSION_SECRET    — signs your login cookie
+  //   VAULT_MASTER_KEY  — encrypts API keys stored in the Key Vault
+}

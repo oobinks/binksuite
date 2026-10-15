@@ -1,0 +1,9 @@
+// Test-only config: same bindings as wrangler.jsonc, minus static assets.
+{
+  "name": "binksuite-test",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{ "binding": "DB", "database_name": "binksuite-db", "database_id": "local-test" }],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "binksuite-files" }]
+}
