@@ -9,6 +9,7 @@ import type { Settings } from "../../shared/settings";
 import type { FeeSettings } from "../../shared/fees";
 import { ErrorNote, ProgressBar, Section, Toggle } from "../components/ui";
 import { Avatar } from "../agents/Avatar";
+import { BUILD_INFO } from "../lib/buildInfo";
 
 export function SettingsPage() {
   const { data: snap } = useSnapshot();
@@ -25,6 +26,7 @@ export function SettingsPage() {
         <KeyVault />
         <Storage />
         <Account />
+        <About />
       </div>
     </div>
   );
@@ -349,6 +351,36 @@ function Account() {
         </button>
       </div>
       <p className="mt-2 text-xs text-cocoa dark:text-stone-400">The export never includes your API keys.</p>
+    </Section>
+  );
+}
+
+function About() {
+  const when = (iso: string) =>
+    new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return (
+    <Section title="About this app" icon="ℹ️">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt className="font-bold">Version</dt>
+        <dd>
+          <span className="chip bg-honey/25 font-mono">v{BUILD_INFO.version}</span>
+        </dd>
+        <dt className="font-bold">Last updated</dt>
+        <dd>
+          {when(BUILD_INFO.updatedAt)} <span className="text-cocoa dark:text-stone-400">({timeAgo(BUILD_INFO.updatedAt)})</span>
+        </dd>
+        {BUILD_INFO.change && (
+          <>
+            <dt className="font-bold">Latest change</dt>
+            <dd>{BUILD_INFO.change}</dd>
+          </>
+        )}
+        <dt className="font-bold">Update code</dt>
+        <dd className="font-mono">{BUILD_INFO.commit ?? "—"}</dd>
+        <dt className="font-bold">Deployed</dt>
+        <dd>{when(BUILD_INFO.builtAt)}</dd>
+      </dl>
+      <p className="mt-3 text-xs text-cocoa dark:text-stone-400">“Last updated” is when Claude last changed the code. “Deployed” is when Cloudflare built this copy. Quote the update code if you ever need to report a problem.</p>
     </Section>
   );
 }
