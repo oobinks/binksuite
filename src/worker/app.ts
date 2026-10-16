@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Env } from "./env";
 import { getDb, type DB } from "./db";
 import type { Settings } from "../shared/settings";
+import { workersAi } from "./providers/ai";
 
 export type AppEnv = { Bindings: Env; Variables: { db: DB; settings: Settings } };
 export type Ctx = Context<AppEnv>;
@@ -35,4 +36,10 @@ export async function body<T extends z.ZodType>(c: Ctx, schema: T): Promise<z.in
 
 export function dbFor(env: Env) {
   return getDb(env.DB);
+}
+
+/** Real AI for this request, or null when it's off or unavailable. */
+export function aiFor(c: Ctx) {
+  const settings = c.get("settings");
+  return c.env.AI && settings.ai.enabled ? workersAi(c.env.AI, c.get("db"), settings) : null;
 }

@@ -8,6 +8,7 @@ import { ensureMigrated } from "./db/migrate";
 import { activity, notifications, handoffs } from "./db/schema";
 import { getSettings } from "./lib/store";
 import { tick } from "./engine/queue";
+import { workersAi } from "./providers/ai";
 
 const KEEP_LOGS_DAYS = 45;
 
@@ -15,7 +16,8 @@ export async function runCron(env: Env) {
   await ensureMigrated(env.DB);
   const db = getDb(env.DB);
   const settings = await getSettings(db);
-  await tick(db, settings, { interactive: false });
+  const ai = env.AI && settings.ai.enabled ? workersAi(env.AI, db, settings) : null;
+  await tick(db, settings, { interactive: false, ai, files: env.FILES });
   const cutoff = new Date(Date.now() - KEEP_LOGS_DAYS * 86_400_000).toISOString();
   await db.delete(activity).where(lt(activity.createdAt, cutoff));
   await db.delete(notifications).where(lt(notifications.createdAt, cutoff));

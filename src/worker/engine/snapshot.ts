@@ -17,7 +17,7 @@ const JUST_FINISHED_MS = 45_000;
 export async function buildSnapshot(
   db: DB,
   settings: Settings,
-  opts: { afterNotification: number; afterHandoff: number; secrets: Snapshot["secrets"] },
+  opts: { afterNotification: number; afterHandoff: number; secrets: Snapshot["secrets"]; aiReady: boolean },
 ): Promise<Snapshot> {
   const demoMode = settings.demoMode;
   const now = new Date();
@@ -119,6 +119,7 @@ export async function buildSnapshot(
     approvalsWaiting: live.filter((t) => t.state === "needs_approval" && isRoomUnlocked(t.room as RoomId, progress.level)).length,
     briefingDue: lastBriefing !== now.toISOString().slice(0, 10),
     secrets: opts.secrets,
+    aiReady: opts.aiReady,
   };
 }
 

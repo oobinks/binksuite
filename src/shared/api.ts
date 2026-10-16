@@ -53,6 +53,18 @@ export interface Snapshot {
   approvalsWaiting: number;
   briefingDue: boolean;
   secrets: { sessionSecret: boolean; vaultMasterKey: boolean };
+  /** Real AI (Cloudflare Workers AI) is switched on and available. */
+  aiReady: boolean;
+}
+
+export interface AiStatus {
+  available: boolean;
+  enabled: boolean;
+  usedToday: number;
+  cap: number;
+  productsLeftToday: number;
+  textModel: string;
+  imageModel: string;
 }
 
 export interface TaskView {

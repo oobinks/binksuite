@@ -26,6 +26,8 @@
       "bucket_name": "binksuite-files"
     }
   ],
+  // Cloudflare's own AI (free daily allowance). No API key needed.
+  "ai": { "binding": "AI" },
   // Runs queued agent jobs and sweeps stale work every 5 minutes.
   "triggers": { "crons": ["*/5 * * * *"] }
   // Secrets (set in the dashboard, never committed):
