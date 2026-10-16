@@ -37,7 +37,6 @@ export interface RoomDef {
   /** Tailwind-free hex so the map, SVGs and charts can all use it. */
   color: string;
   floor: string;
-  unlockLevel: number;
   /** Build phase in which the room does real work. */
   phase: number;
   /** In Phase 1, pipeline rooms run demo tasks so the engine is exercised. */
@@ -74,7 +73,6 @@ export const ROOMS: RoomDef[] = [
     icon: "🔬",
     color: "#7c9cf5",
     floor: "#e6ecff",
-    unlockLevel: 1,
     phase: 2,
     demoInteractive: true,
     blurb: "Scout and Analyst hunt for niches worth making.",
@@ -87,7 +85,6 @@ export const ROOMS: RoomDef[] = [
     icon: "🎨",
     color: "#f28fb5",
     floor: "#ffe8f1",
-    unlockLevel: 1,
     phase: 2,
     demoInteractive: true,
     blurb: "Designer, Inspector and Printer turn briefs into print files.",
@@ -100,7 +97,6 @@ export const ROOMS: RoomDef[] = [
     icon: "🖼️",
     color: "#b48cf2",
     floor: "#f1e8ff",
-    unlockLevel: 3,
     phase: 3,
     demoInteractive: true,
     blurb: "Stylist stages your prints in frames, desks and tablets.",
@@ -113,7 +109,6 @@ export const ROOMS: RoomDef[] = [
     icon: "✍️",
     color: "#f2b35b",
     floor: "#fff1dc",
-    unlockLevel: 1,
     phase: 3,
     demoInteractive: true,
     blurb: "Copywriter and Pricer write titles, tags and prices.",
@@ -126,7 +121,6 @@ export const ROOMS: RoomDef[] = [
     icon: "🛡️",
     color: "#5bbf9a",
     floor: "#e0f6ec",
-    unlockLevel: 2,
     phase: 3,
     demoInteractive: true,
     blurb: "Warden checks every listing against the rules before launch.",
@@ -139,7 +133,6 @@ export const ROOMS: RoomDef[] = [
     icon: "🚀",
     color: "#f27a6b",
     floor: "#ffe5e1",
-    unlockLevel: 4,
     phase: 3,
     demoInteractive: true,
     blurb: "Your copy-paste pack for Etsy. You press the big button.",
@@ -152,7 +145,6 @@ export const ROOMS: RoomDef[] = [
     icon: "📦",
     color: "#c9a26b",
     floor: "#f6ecdc",
-    unlockLevel: 5,
     phase: 4,
     demoInteractive: false,
     blurb: "Crafter handles personalised orders from Etsy.",
@@ -165,7 +157,6 @@ export const ROOMS: RoomDef[] = [
     icon: "💷",
     color: "#e0b83a",
     floor: "#fff7d6",
-    unlockLevel: 1,
     phase: 1,
     demoInteractive: false,
     blurb: "Real money: fees, profit, caps and your trading allowance.",
@@ -178,7 +169,6 @@ export const ROOMS: RoomDef[] = [
     icon: "💬",
     color: "#6bc4d9",
     floor: "#e0f5fa",
-    unlockLevel: 5,
     phase: 5,
     demoInteractive: false,
     blurb: "Concierge drafts kind replies. You always press send.",
@@ -191,7 +181,6 @@ export const ROOMS: RoomDef[] = [
     icon: "📣",
     color: "#e88ad6",
     floor: "#fbe6f7",
-    unlockLevel: 6,
     phase: 5,
     demoInteractive: false,
     blurb: "Promoter plans pins, posts and a content calendar.",
@@ -204,7 +193,6 @@ export const ROOMS: RoomDef[] = [
     icon: "📊",
     color: "#8a8fd9",
     floor: "#e9eafc",
-    unlockLevel: 7,
     phase: 5,
     demoInteractive: false,
     blurb: "Manager writes the weekly report and suggests quests.",
@@ -342,6 +330,3 @@ export function agentsInRoom(room: RoomId): AgentDef[] {
 
 /** The product pipeline, in order. Parcels travel along it. */
 export const PIPELINE: RoomId[] = ["research", "studio", "mockups", "listing", "compliance", "launch"];
-
-/** Settings isn't a map room but sits on the unlock ladder at Lv1. */
-export const SETTINGS_UNLOCK_LEVEL = 1;

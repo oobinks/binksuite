@@ -104,7 +104,9 @@ You run an Etsy shop selling AI-made digital printables (UK, not VAT registered)
 - **Phone-first:** on mobile the map becomes a scrollable 2-column grid of room cards.
 - **Login and seed data:** password login, seeded demo shop.
 
-**Level and unlock ladder (tweakable):**
+> **Changed after Phase 2 (owner's decision):** nothing is locked by level. Every room is always open; levels and XP remain as a fun score with shop titles (Market Stall → Printables Tycoon).
+
+**Original level and unlock ladder (retired):**
 ```
 Lv1 🔬 Research · 🎨 Studio · ✍️ Listing · 💷 Finance · ⚙️ Settings
 Lv2 🛡️ Compliance   Lv3 🖼️ Mockups   Lv4 🚀 Launch Pad

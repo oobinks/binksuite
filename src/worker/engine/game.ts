@@ -11,7 +11,7 @@ import {
   periodKey,
   periodStart,
   questStatuses,
-  unlocksAtLevel,
+  levelTitle,
   type GameEventType,
   type QuestStatus,
 } from "../../shared/game";
@@ -37,8 +37,7 @@ export async function awardXp(db: DB, amount: number, reason: string, demo: bool
   await invalidateStats(db);
   const after = levelForXp(await totalXp(db, demoMode));
   for (let lv = before + 1; lv <= after; lv++) {
-    const unlocks = unlocksAtLevel(lv);
-    await notify(db, "level", `Level ${lv}!`, unlocks.length ? `Unlocked: ${unlocks.join(", ")}` : "Keep going!", demo);
+    await notify(db, "level", `Level ${lv}!`, `You're now a ${levelTitle(lv)}`, demo);
   }
 }
 

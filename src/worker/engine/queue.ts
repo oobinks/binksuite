@@ -7,7 +7,7 @@ import type { DB } from "../db";
 import { activity, approvals, handoffs, ledger, products, tasks } from "../db/schema";
 import { nextState, type TaskEvent, type TaskState } from "../../shared/tasks";
 import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared/registry";
-import { isRoomUnlocked, XP, levelForXp } from "../../shared/game";
+import { XP } from "../../shared/game";
 import { calculateFees } from "../../shared/fees";
 import { hashString, intBetween, mulberry32, pick } from "../../shared/rng";
 import type { Settings } from "../../shared/settings";
@@ -17,8 +17,7 @@ import { STEP_BY_KIND, FIRST_STEP, stepNeedsApproval } from "./agents";
 import type { PartialResult, ProductRow, StepDef, StepResult, TaskRow } from "./agents/types";
 import { AiLimitError, aiUsageToday, isAiLimit, MAX_CALL_NEURONS, type AiServices } from "../providers/ai";
 import { DEMO_NICHES } from "./agents/demoContent";
-import { awardXp, checkAchievements, notify, recordEvent, totalXp } from "./game";
-import { getStats } from "./stats";
+import { awardXp, checkAchievements, notify, recordEvent } from "./game";
 
 export class EngineError extends Error {
   constructor(
@@ -201,7 +200,6 @@ export async function tick(db: DB, settings: Settings, opts: TickOptions): Promi
   const now = opts.now ?? new Date();
   const demoMode = settings.demoMode;
   const result: TickResult = { finished: 0, claimed: 0, spawned: 0, sales: 0 };
-  const level = levelForXp((await getStats(db, demoMode, now)).xp);
 
   const active = await db
     .select()
@@ -238,7 +236,7 @@ export async function tick(db: DB, settings: Settings, opts: TickOptions): Promi
     .sort((a, b) => Number(!!(b.input as { suggestion?: boolean }).suggestion) - Number(!!(a.input as { suggestion?: boolean }).suggestion));
   for (const t of waiting) {
     const step = STEP_BY_KIND[t.kind];
-    if (!step || !isRoomUnlocked(t.room as RoomId, level)) continue;
+    if (!step) continue;
     if (t.agent && (busy.has(t.agent) || settings.agentsEnabled[t.agent] === false)) continue;
     const capMsg = isReal(t, step) ? await aiBlockReason(db, settings, opts) : capHit(spend, settings, step.estimatedCostPence);
     if (capMsg) {
@@ -433,8 +431,6 @@ export async function approveTask(db: DB, id: string, settings: Settings, note?:
   const t = await getTask(db, id);
   const step = STEP_BY_KIND[t.kind];
   if (t.state !== "needs_approval") throw new EngineError("That task isn't waiting for approval.");
-  const level = levelForXp(await totalXp(db, settings.demoMode));
-  if (!isRoomUnlocked(t.room as RoomId, level)) throw new EngineError(`${ROOM_BY_ID[t.room as RoomId].name} is still locked.`);
   const refusal = step.canApprove?.(t, note);
   if (refusal) throw new EngineError(refusal);
   const product = await getProduct(db, t.productId);

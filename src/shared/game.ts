@@ -1,5 +1,5 @@
 // XP, levels, unlocks, quests and achievements. Pure functions, unit-tested.
-import { ROOMS, SETTINGS_UNLOCK_LEVEL, type RoomId } from "./registry";
+
 
 /** Total XP needed to *reach* each level. Index 0 = Lv1. Tweakable. */
 export const LEVEL_THRESHOLDS = [0, 100, 250, 500, 900, 1400, 2000];
@@ -39,18 +39,23 @@ export function levelProgress(xp: number): LevelProgress {
   return { level, xp, currentLevelXp: cur, nextLevelXp: next, progress: (xp - cur) / (next - cur) };
 }
 
-export function isRoomUnlocked(room: RoomId, level: number): boolean {
-  const def = ROOMS.find((r) => r.id === room);
-  return !!def && level >= def.unlockLevel;
+// Every room is always open. Levels are just for fun: each one earns a new shop title.
+export const LEVEL_TITLES = [
+  "🧺 Market Stall",
+  "🏪 Corner Shop",
+  "🪟 Cosy Boutique",
+  "🏬 High Street Favourite",
+  "⭐ Shining Star Shop",
+  "🏰 Printable Empire",
+  "👑 Printables Tycoon",
+];
+
+export function levelTitle(level: number): string {
+  if (level <= LEVEL_TITLES.length) return LEVEL_TITLES[Math.max(1, level) - 1];
+  return `${LEVEL_TITLES[LEVEL_TITLES.length - 1]} ${"★".repeat(Math.min(5, level - LEVEL_TITLES.length))}`;
 }
 
-export function unlocksAtLevel(level: number): string[] {
-  const rooms = ROOMS.filter((r) => r.unlockLevel === level).map((r) => `${r.icon} ${r.name}`);
-  if (level === SETTINGS_UNLOCK_LEVEL) rooms.push("⚙️ Settings");
-  return rooms;
-}
-
-export const MAX_LADDER_LEVEL = 7;
+export const MAX_LADDER_LEVEL = LEVEL_TITLES.length;
 
 /** XP rewards for engine/game events. */
 export const XP = {
@@ -181,7 +186,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "first-sale", icon: "💰", title: "First coin", description: "Make your first sale.", test: (s) => s.sales >= 1 },
   { id: "profit-100", icon: "💰", title: "Ton of profit", description: "Reach £100 net profit.", test: (s) => s.profitPence >= 10000 },
   { id: "level-4", icon: "🌟", title: "Rising star", description: "Reach level 4.", test: (s) => s.level >= 4 },
-  { id: "level-7", icon: "👑", title: "Tycoon", description: "Reach level 7 and open Strategy HQ.", test: (s) => s.level >= 7 },
+  { id: "level-7", icon: "👑", title: "Tycoon", description: "Reach level 7.", test: (s) => s.level >= 7 },
   { id: "quests-5", icon: "📜", title: "Questing", description: "Claim 5 quest rewards.", test: (s) => s.questsClaimed >= 5 },
 ];
 

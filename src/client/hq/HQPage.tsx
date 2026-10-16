@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useSnapshot } from "../lib/hooks";
 import { formatGBP } from "../lib/format";
 import { ProgressBar } from "../components/ui";
-import { ROOMS } from "../../shared/registry";
+import { levelTitle } from "../../shared/game";
 import { HQMap } from "./HQMap";
 import { MobileGrid } from "./MobileGrid";
 
@@ -11,7 +11,6 @@ export function HQPage() {
   if (error) return <p className="card p-6 text-center">Couldn't reach the HQ. Check your connection and refresh.</p>;
   if (!snap) return <p className="py-20 text-center text-lg font-bold">Opening the doors…</p>;
 
-  const nextRoom = ROOMS.filter((r) => r.unlockLevel > snap.game.level).sort((a, b) => a.unlockLevel - b.unlockLevel)[0];
   const goal = snap.settings.monthlyTargetPence;
 
   return (
@@ -33,19 +32,11 @@ export function HQPage() {
           <div className="text-xs font-semibold text-cocoa dark:text-stone-400">Look for the glowing ❗ on the map</div>
         </div>
         <Link to="/journal" className="card block p-3 hover:brightness-[1.02]">
-          <div className="label">Next unlock</div>
-          {nextRoom ? (
-            <>
-              <div className="text-xl font-black">
-                {nextRoom.icon} {nextRoom.name}
-              </div>
-              <div className="text-xs font-semibold text-cocoa dark:text-stone-400">
-                at Lv {nextRoom.unlockLevel} · {snap.game.nextLevelXp - snap.game.xp} XP to Lv {snap.game.level + 1}
-              </div>
-            </>
-          ) : (
-            <div className="text-xl font-black">Every room is open! 👑</div>
-          )}
+          <div className="label">Your shop title</div>
+          <div className="text-xl font-black">{levelTitle(snap.game.level)}</div>
+          <div className="text-xs font-semibold text-cocoa dark:text-stone-400">
+            {snap.game.nextLevelXp - snap.game.xp} XP to {levelTitle(snap.game.level + 1)}
+          </div>
         </Link>
       </div>
 

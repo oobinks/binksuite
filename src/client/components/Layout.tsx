@@ -8,7 +8,7 @@ import { ProgressBar, Modal } from "./ui";
 import { Logo } from "./Logo";
 import { BriefingModal } from "../game/BriefingModal";
 import { ApprovalsDrawer } from "../game/ApprovalsDrawer";
-import { unlocksAtLevel } from "../../shared/game";
+import { levelTitle } from "../../shared/game";
 
 export function Layout({ children }: { children: ReactNode }) {
   const { data: snap } = useSnapshot();
@@ -149,15 +149,7 @@ function LevelUp() {
         </motion.div>
         <h2 className="text-3xl font-black">{level?.title}</h2>
         <p className="mt-2 text-cocoa dark:text-stone-300">{level?.body}</p>
-        {lv > 0 && unlocksAtLevel(lv).length > 0 && (
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {unlocksAtLevel(lv).map((u) => (
-              <span key={u} className="chip bg-mint/20 px-3 py-1 text-sm text-emerald-800 dark:text-emerald-200">
-                🔓 {u}
-              </span>
-            ))}
-          </div>
-        )}
+        {lv > 0 && <p className="mt-4 inline-block rounded-full bg-mint/20 px-4 py-1.5 text-lg font-black text-emerald-800 dark:text-emerald-200">{levelTitle(lv)}</p>}
         <button className="btn-primary mt-6" onClick={close}>
           Hooray!
         </button>

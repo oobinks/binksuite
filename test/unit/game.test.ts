@@ -3,8 +3,7 @@ import {
   levelForXp,
   xpForLevel,
   levelProgress,
-  isRoomUnlocked,
-  unlocksAtLevel,
+  levelTitle,
   questStatuses,
   periodStart,
   periodKey,
@@ -35,19 +34,11 @@ describe("levels", () => {
   });
 });
 
-describe("unlocks", () => {
-  it("matches the plan's ladder", () => {
-    expect(ROOMS.filter((r) => r.unlockLevel === 1).map((r) => r.id).sort()).toEqual(["finance", "listing", "research", "studio"]);
-    expect(isRoomUnlocked("compliance", 1)).toBe(false);
-    expect(isRoomUnlocked("compliance", 2)).toBe(true);
-    expect(isRoomUnlocked("mockups", 3)).toBe(true);
-    expect(isRoomUnlocked("launch", 3)).toBe(false);
-    expect(isRoomUnlocked("launch", 4)).toBe(true);
-    expect(isRoomUnlocked("orders", 5)).toBe(true);
-    expect(isRoomUnlocked("care", 5)).toBe(true);
-    expect(isRoomUnlocked("marketing", 6)).toBe(true);
-    expect(isRoomUnlocked("strategy", 6)).toBe(false);
-    expect(unlocksAtLevel(1)).toContain("⚙️ Settings");
+describe("rooms and levels", () => {
+  it("gives every level a shop title", () => {
+    expect(levelTitle(1)).toMatch(/Market Stall/);
+    expect(levelTitle(7)).toMatch(/Tycoon/);
+    expect(levelTitle(9)).toMatch(/Tycoon ★★/);
   });
   it("has 11 map rooms and 13 agents, each in a real room", () => {
     expect(ROOMS).toHaveLength(11);

@@ -6,7 +6,6 @@ import type { LevelProgress, QuestStatus } from "./game";
 
 export interface RoomSnapshot {
   id: RoomId;
-  unlocked: boolean;
   queued: number;
   working: number;
   needsYou: number;

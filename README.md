@@ -90,7 +90,7 @@ Demo data is flagged in the database. Switching **Demo mode** off in Settings hi
 src/client/        React app (Vite + Tailwind + Motion + TanStack Query + Zustand)
   hq/              floor-plan map, phone grid, parcels
   agents/          SVG avatars, agent cards, activity logs
-  game/            journal (quests, achievements, ladder), briefing, approvals inbox
+  game/            journal (quests, achievements, shop titles), briefing, approvals inbox
   rooms/<room>/    one folder per room's review screen; rooms/finance is the Finance Vault
   settings/  auth/
 src/worker/        Hono API on Cloudflare Workers
@@ -109,11 +109,11 @@ test/unit, test/api  Vitest (API tests run inside the Workers runtime with a loc
 
 ```mermaid
 flowchart LR
-    A["1. src/shared/registry.ts<br/>add to ROOMS / AGENTS<br/>(id, colour, icon, unlock level, map position)"] --> B["2. src/worker/engine/agents/index.ts<br/>add a StepDef<br/>(agent, room, run(), next)"]
+    A["1. src/shared/registry.ts<br/>add to ROOMS / AGENTS<br/>(id, colour, icon, map position)"] --> B["2. src/worker/engine/agents/index.ts<br/>add a StepDef<br/>(agent, room, run(), next)"]
     B --> C["3. src/client/rooms/&lt;room&gt;/Review.tsx<br/>how its output looks + approve label<br/>register in rooms/shared/reviews.ts"]
 ```
 
-The map, phone grid, unlock ladder, agent toggles and status bubbles all read the registry, so they update themselves.
+The map, phone grid, agent toggles and status bubbles all read the registry, so they update themselves.
 
 ## Free-plan friendliness
 

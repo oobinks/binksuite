@@ -6,7 +6,7 @@ import { celebrate, useUi } from "../lib/store";
 import { formatGBP } from "../lib/format";
 import { ProgressBar, Section } from "../components/ui";
 import { useSnapshot } from "../lib/hooks";
-import { MAX_LADDER_LEVEL, unlocksAtLevel, xpForLevel, type QuestStatus } from "../../shared/game";
+import { MAX_LADDER_LEVEL, levelTitle, xpForLevel, type QuestStatus } from "../../shared/game";
 import type { AchievementView } from "../../shared/api";
 
 export function JournalPage() {
@@ -93,14 +93,14 @@ export function JournalPage() {
         </ul>
       </Section>
 
-      <Section title="Level ladder" icon="🔝">
+      <Section title="Shop titles" icon="🔝" right={<span className="chip">every room is always open</span>}>
         <ol className="space-y-2">
           {Array.from({ length: MAX_LADDER_LEVEL }, (_, i) => i + 1).map((lv) => {
             const reached = (snap?.game.level ?? 1) >= lv;
             return (
               <li key={lv} className={`flex items-center gap-3 rounded-xl p-2 ${reached ? "bg-mint/10" : ""}`}>
                 <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-black ${reached ? "bg-mint text-white" : "bg-black/10 dark:bg-white/10"}`}>{lv}</span>
-                <span className="flex-1 text-sm font-semibold">{unlocksAtLevel(lv).join(" · ")}</span>
+                <span className="flex-1 text-sm font-semibold">{levelTitle(lv)}</span>
                 <span className="text-xs text-cocoa dark:text-stone-400">{xpForLevel(lv)} XP</span>
               </li>
             );
