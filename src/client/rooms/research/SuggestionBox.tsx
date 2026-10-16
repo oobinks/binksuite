@@ -23,7 +23,7 @@ const VERDICT_CHIP = {
   skip: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200",
 };
 
-export function SuggestionBox({ tasks, onOpen }: { tasks: TaskView[]; onOpen: (t: TaskView) => void }) {
+export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; onOpen: (t: TaskView) => void; aiReady: boolean }) {
   const qc = useQueryClient();
   const toast = useUi((s) => s.toast);
   const [idea, setIdea] = useState("");
@@ -33,6 +33,10 @@ export function SuggestionBox({ tasks, onOpen }: { tasks: TaskView[]; onOpen: (t
     queryKey: ["suggestions"],
     queryFn: () => api.get<{ suggestions: Suggestion[] }>("/research/suggestions"),
     refetchInterval: 4000,
+  });
+  const [theme, setTheme] = useState("");
+  const brainstorm = useMutation({
+    mutationFn: () => api.post<{ real: boolean; ideas: { idea: string; why: string }[] }>("/research/ideas", { theme: theme || undefined }),
   });
   const send = useMutation({
     mutationFn: () => api.post("/research/suggestions", { idea, notes: notes || undefined }),
@@ -94,9 +98,40 @@ export function SuggestionBox({ tasks, onOpen }: { tasks: TaskView[]; onOpen: (t
         )}
         <ErrorNote error={send.error} />
       </form>
+      <div className="mt-3 rounded-xl bg-black/[0.03] p-2.5 dark:bg-white/[0.04]">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-bold">Stuck for ideas?</span>
+          <input
+            className="input !w-auto min-w-0 flex-1 !py-1"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            placeholder="Optional theme, e.g. nursery, Christmas"
+            aria-label="Idea theme"
+          />
+          <button type="button" className="btn-soft !py-1" onClick={() => brainstorm.mutate()} disabled={brainstorm.isPending}>
+            {brainstorm.isPending ? "Thinking…" : "✨ Suggest ideas for me"}
+          </button>
+        </div>
+        <ErrorNote error={brainstorm.error} />
+        {brainstorm.data && (
+          <ul className="mt-2 space-y-1">
+            {brainstorm.data.ideas.map((i) => (
+              <li key={i.idea}>
+                <button type="button" className="w-full rounded-lg p-1.5 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5" onClick={() => setIdea(i.idea)}>
+                  <b>💡 {i.idea}</b> <span className="text-cocoa dark:text-stone-400">· {i.why}</span>
+                </button>
+              </li>
+            ))}
+            <li className="text-xs text-cocoa dark:text-stone-400">Tap one to put it in the box, then press Research it.{brainstorm.data.real ? "" : " (demo ideas)"}</li>
+          </ul>
+        )}
+      </div>
       <p className="mt-2 text-xs text-cocoa dark:text-stone-400">
         Scout checks demand, competition, how well AI can make it, price range, seasonality and trademark risks, then gives a ✅ go, 🤔 maybe or ⛔ skip. Your ideas jump the
-        queue. Research is simulated in demo mode; it becomes real web research in Phase 2.
+        queue.{" "}
+        {aiReady
+          ? "🤖 Scout uses free Cloudflare AI. It can't browse the web, so treat scores as an informed estimate."
+          : "Research is simulated until real AI is switched on in Settings."}
       </p>
       {!!data?.suggestions.length && (
         <ul className="mt-3 space-y-1.5">

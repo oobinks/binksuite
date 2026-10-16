@@ -6,6 +6,12 @@ import { mockupsReview } from "../mockups/Review";
 import { listingReview } from "../listing/Review";
 import { complianceReview } from "../compliance/Review";
 import { launchReview } from "../launch/Review";
+import { printReview } from "../studio/PrintReview";
+
+/** Steps that need their own screen, regardless of room. */
+export const KIND_REVIEWS: Record<string, ReviewDef> = {
+  print_files: printReview,
+};
 
 export const REVIEWS: Partial<Record<RoomId, ReviewDef>> = {
   research: researchReview,

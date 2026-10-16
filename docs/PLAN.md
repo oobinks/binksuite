@@ -104,7 +104,9 @@ You run an Etsy shop selling AI-made digital printables (UK, not VAT registered)
 - **Phone-first:** on mobile the map becomes a scrollable 2-column grid of room cards.
 - **Login and seed data:** password login, seeded demo shop.
 
-**Level and unlock ladder (tweakable):**
+> **Changed after Phase 2 (owner's decision):** nothing is locked by level. Every room is always open; levels and XP remain as a fun score with shop titles (Market Stall → Printables Tycoon).
+
+**Original level and unlock ladder (retired):**
 ```
 Lv1 🔬 Research · 🎨 Studio · ✍️ Listing · 💷 Finance · ⚙️ Settings
 Lv2 🛡️ Compliance   Lv3 🖼️ Mockups   Lv4 🚀 Launch Pad
@@ -112,6 +114,9 @@ Lv5 📦 Orders · 💬 Customer Care   Lv6 📣 Marketing   Lv7 📊 Strategy H
 ```
 
 ## Phase 2 — Research Lab + Product Studio (real AI)
+
+> **Built on Cloudflare Workers AI (free), October 2026.** The owner chose a £0 setup: text by Llama 3.3 70B and art by FLUX.1 schnell, both via the Worker's `AI` binding (no keys), metered under the free 10,000-neuron daily allowance. Trade-offs agreed: 1024 px art enlarged for print, no live web research, no AI vision check (the owner reviews every image). Paid providers (Claude, OpenAI/Ideogram/Replicate) remain an optional upgrade.
+
 - **Claude client:** model from config (default latest Sonnet), structured JSON output, per-call token cost logged to the ledger.
 - **Research Lab — Suggestion box (added after Phase 1; demo version shipped early):** you suggest an idea, Scout researches it (Claude + web search in Phase 2) and returns a ✅ go / 🤔 maybe / ⛔ skip report with scores, reasons, risks, angles, price range, seasonality and keywords. Your ideas jump the queue; you can make it, research again, or drop it.
 - **Research Lab:** **Scout** scores niche ideas (demand, competition, AI fit, price potential, keywords). **Analyst** summarises pasted competitor notes into a ranked Niche Board. Approved niche → product brief. No scraping.

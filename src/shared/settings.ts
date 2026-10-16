@@ -33,6 +33,14 @@ export const settingsSchema = z.object({
   agentsEnabled: z.record(z.string(), z.boolean()),
   blocklist: z.array(z.string().max(60)).max(500),
   providerLicenceOk: z.boolean(),
+  /** Real AI via Cloudflare Workers AI (free daily allowance). */
+  ai: z.object({
+    enabled: z.boolean(),
+    textModel: z.string().min(3).max(100),
+    imageModel: z.string().min(3).max(100),
+    /** Stop for the day at this many estimated "neurons" (free allowance is 10,000/day). */
+    dailyNeuronCap: z.number().int().min(0).max(1_000_000),
+  }),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -50,6 +58,12 @@ export const DEFAULT_SETTINGS: Settings = {
   agentsEnabled: Object.fromEntries(AGENTS.map((a) => [a.id, true])) as Record<AgentId, boolean>,
   blocklist: DEFAULT_BLOCKLIST,
   providerLicenceOk: false,
+  ai: {
+    enabled: true,
+    textModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    imageModel: "@cf/black-forest-labs/flux-1-schnell",
+    dailyNeuronCap: 9000,
+  },
 };
 
 /** Merge stored (possibly older) settings with defaults so new fields always exist. */
@@ -60,6 +74,7 @@ export function withDefaults(stored: Partial<Settings> | null | undefined): Sett
     ...s,
     fees: { ...DEFAULT_SETTINGS.fees, ...(s.fees ?? {}) },
     agentsEnabled: { ...DEFAULT_SETTINGS.agentsEnabled, ...(s.agentsEnabled ?? {}) },
+    ai: { ...DEFAULT_SETTINGS.ai, ...(s.ai ?? {}) },
   };
 }
 

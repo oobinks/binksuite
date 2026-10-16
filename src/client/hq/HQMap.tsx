@@ -33,17 +33,18 @@ export function HQMap({ snap }: { snap: Snapshot }) {
 }
 
 function RoomTile({ room, state, agents, agentState }: { room: RoomDef; state: RoomSnapshot; agents: AgentDef[]; agentState: Map<string, AgentSnapshot> }) {
-  const locked = !state.unlocked;
+  // Rooms whose real work arrives in a later phase get a small "soon" tag.
+  const soon = !room.demoInteractive && room.phase > 1;
   const { x, y, w, h } = room.map;
   return (
     <Link
       to={`/room/${room.id}`}
-      aria-label={`${room.name}${locked ? `, locked until level ${room.unlockLevel}` : ""}${state.needsYou ? `, ${state.needsYou} waiting for you` : ""}`}
+      aria-label={`${room.name}${soon ? `, coming in Phase ${room.phase}` : ""}${state.needsYou ? `, ${state.needsYou} waiting for you` : ""}`}
       className="group absolute block focus:outline-none"
       style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` }}
     >
       <div
-        className={`floor-boards absolute inset-0 rounded-[14px] border-[5px] bg-(--floor) transition group-hover:brightness-[1.03] group-focus-visible:ring-4 group-focus-visible:ring-honey dark:bg-(--floor-dark) dark:shadow-none ${locked ? "grayscale" : ""}`}
+        className={`floor-boards absolute inset-0 rounded-[14px] border-[5px] bg-(--floor) transition group-hover:brightness-[1.03] group-focus-visible:ring-4 group-focus-visible:ring-honey dark:bg-(--floor-dark) dark:shadow-none`}
         style={{ ["--floor" as string]: room.floor, ["--floor-dark" as string]: darkFloor(room.color), borderColor: room.color, boxShadow: `inset 0 0 0 2px rgba(255,255,255,.5), 0 6px 0 ${room.color}55` }}
       />
       {/* door gap */}
@@ -56,39 +57,31 @@ function RoomTile({ room, state, agents, agentState }: { room: RoomDef; state: R
       </div>
 
       {/* furniture */}
-      {!locked &&
-        room.furniture.map((f, i) => (
-          <span key={i} className="absolute select-none text-[clamp(14px,1.8vw,26px)] opacity-90" style={{ left: `${[12, 70, 40][i]}%`, top: `${[58, 52, 74][i]}%` }} aria-hidden>
+      {room.furniture.map((f, i) => (
+        <span key={i} className="absolute select-none text-[clamp(14px,1.8vw,26px)] opacity-90" style={{ left: `${[12, 70, 40][i]}%`, top: `${[58, 52, 74][i]}%` }} aria-hidden>
             {f}
           </span>
         ))}
 
       {/* badges */}
       <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
-        {state.queued + state.working > 0 && !locked && (
+        {soon && <span className="chip bg-white/85 text-[10px] text-cocoa dark:bg-night-2/90 dark:text-stone-300">🚧 Phase {room.phase}</span>}
+        {state.queued + state.working > 0 && (
           <span className="chip bg-white/85 text-[10px] text-ink dark:bg-night-2/90 dark:text-stone-100" title="Tasks in the queue">
             🗂️ {state.queued + state.working}
           </span>
         )}
         {state.blocked > 0 && <span className="chip bg-rose-100 text-[10px] text-rose-700">⛔ {state.blocked}</span>}
         {state.needsYou > 0 && (
-          <span className={`grid h-6 min-w-6 place-items-center rounded-full bg-amber-400 px-1 text-xs font-black text-ink ${locked ? "" : "anim-glow"}`} title="Waiting for your approval">
+          <span className={`grid h-6 min-w-6 place-items-center rounded-full bg-amber-400 px-1 text-xs font-black text-ink anim-glow`} title="Waiting for your approval">
             ❗{state.needsYou > 1 ? state.needsYou : ""}
           </span>
         )}
       </div>
 
-      {locked ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center rounded-[14px] bg-white/40 text-center dark:bg-black/40">
-          <span className="text-[clamp(18px,2.6vw,34px)]" aria-hidden>
-            🔒
-          </span>
-          <span className="rounded-full bg-ink/80 px-2 py-0.5 text-[clamp(9px,1vw,12px)] font-black text-cream">Unlocks at Lv {room.unlockLevel}</span>
-          {room.phase > 1 && !room.demoInteractive && <span className="mt-1 text-[10px] font-bold text-cocoa dark:text-stone-300">Coming in Phase {room.phase}</span>}
-        </div>
-      ) : (
-        agents.map((a, i) => <WanderingAgent key={a.id} agent={a} index={i} count={agents.length} state={agentState.get(a.id)} />)
-      )}
+      {agents.map((a, i) => (
+        <WanderingAgent key={a.id} agent={a} index={i} count={agents.length} state={agentState.get(a.id)} />
+      ))}
     </Link>
   );
 }

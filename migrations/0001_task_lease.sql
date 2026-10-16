@@ -1,0 +1,1 @@
+ALTER TABLE `tasks` ADD `lease_until` text;

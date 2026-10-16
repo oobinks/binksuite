@@ -25,9 +25,7 @@ export function ComingSoon({ roomId }: { roomId: RoomId }) {
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-sm text-cocoa dark:text-stone-400">
-          Unlocks at <b>Lv {room.unlockLevel}</b>. Until then, the team is getting cosy.
-        </p>
+        <p className="mt-3 text-sm text-cocoa dark:text-stone-400">Until then, the team is getting cosy.</p>
       </Section>
       <Section title="Meet the team" icon="👋">
         <div className="space-y-3">

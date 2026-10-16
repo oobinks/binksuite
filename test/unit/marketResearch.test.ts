@@ -26,3 +26,25 @@ describe("market research for suggested ideas", () => {
     expect(["go", "maybe", "skip"]).toContain(r.verdict);
   });
 });
+
+import { tidyListing, cleanKeywords, verdictFrom } from "../../src/worker/engine/agents/real";
+
+describe("real listing tidy-up", () => {
+  it("enforces Etsy limits, strips blocked brands and adds the AI disclosure", () => {
+    const l = tidyListing({ title: "x".repeat(200) + " Disney", tags: Array(20).fill("tag").map((t, i) => `${t} ${i}`), description: "Nice print." }, ["disney"]);
+    expect(l.title.length).toBeLessThanOrEqual(140);
+    expect(l.title).not.toMatch(/disney/i);
+    expect(l.tags.length).toBeLessThanOrEqual(13);
+    expect(l.description).toMatch(/^This design was created with AI assistance/);
+    expect(l.description).toMatch(/digital download/);
+  });
+  it("keeps an existing disclosure", () => {
+    const l = tidyListing({ title: "T", tags: ["a"], description: "Made with AI. Digital download." }, []);
+    expect(l.description.startsWith("Made with AI")).toBe(true);
+  });
+  it("cleans keywords and decides verdicts", () => {
+    expect(cleanKeywords(["Mushroom Wall Art!", "mushroom wall art", "a very very very long keyword"])).toEqual(["mushroom wall art", "a very very very lon"]);
+    expect(verdictFrom(8, false)).toBe("go");
+    expect(verdictFrom(9, true)).toBe("skip");
+  });
+});

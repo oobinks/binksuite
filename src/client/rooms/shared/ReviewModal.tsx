@@ -6,7 +6,7 @@ import { ErrorNote, Modal } from "../../components/ui";
 import { ROOM_BY_ID } from "../../../shared/registry";
 import type { TaskView } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
-import { REVIEWS } from "./reviews";
+import { KIND_REVIEWS, REVIEWS } from "./reviews";
 
 export function ReviewModal({ task, settings, onClose }: { task: TaskView | null; settings: Settings; onClose: () => void }) {
   return (
@@ -17,13 +17,14 @@ export function ReviewModal({ task, settings, onClose }: { task: TaskView | null
 }
 
 function ReviewInner({ task, settings, onClose }: { task: TaskView; settings: Settings; onClose: () => void }) {
-  const def = REVIEWS[task.room];
+  const def = KIND_REVIEWS[task.kind] ?? REVIEWS[task.room];
   const [ready, setReady] = useState(!!def?.startsReady);
+  const [data, setData] = useState<Record<string, unknown> | undefined>();
   const [note, setNote] = useState("");
   const qc = useQueryClient();
   const toast = useUi((s) => s.toast);
   const decide = useMutation({
-    mutationFn: (action: "approve" | "reject" | "drop") => api.post<{ state: string }>(`/tasks/${task.id}/${action}`, { note: note.trim() || undefined }),
+    mutationFn: (action: "approve" | "reject" | "drop") => api.post<{ state: string }>(`/tasks/${task.id}/${action}`, { note: note.trim() || undefined, ...(action === "approve" && data ? { data } : {}) }),
     onSuccess: (_r, action) => {
       if (action === "approve") {
         celebrate("small");
@@ -42,7 +43,7 @@ function ReviewInner({ task, settings, onClose }: { task: TaskView; settings: Se
   return (
     <div className="space-y-4">
       {task.demo && <p className="chip bg-honey/25 text-amber-800 dark:text-amber-200">🎮 Demo output — real AI arrives in Phase {ROOM_BY_ID[task.room].phase}</p>}
-      <Body task={task} settings={settings} setReady={setReady} />
+      <Body task={task} settings={settings} setReady={setReady} setData={setData} />
       <div>
         <label className="label" htmlFor="review-note">
           Note {needsNote ? "(required to override)" : "(optional — tells the agent what to change)"}

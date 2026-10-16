@@ -8,6 +8,7 @@ import { authRoutes, isAuthed } from "./routes/auth";
 import { hqRoutes } from "./routes/hq";
 import { financeRoutes } from "./routes/finance";
 import { settingsRoutes } from "./routes/settings";
+import { fileRoutes } from "./routes/files";
 import { runCron } from "./cron";
 
 const app = newApp();
@@ -25,7 +26,10 @@ app.use("/api/*", async (c, next) => {
     const origin = c.req.header("origin");
     if (origin && new URL(origin).host !== new URL(c.req.url).host) throw new HttpError(403, "Cross-site request blocked");
     const ct = c.req.header("content-type") ?? "";
-    if (!ct.includes("application/json")) throw new HttpError(415, "Send JSON");
+    const zipUpload = c.req.method === "PUT" && c.req.path.startsWith("/api/files/") && ct === "application/zip";
+    // A zip upload has no Origin check bypass: it still needs a same-origin Origin header.
+    if (zipUpload && !origin) throw new HttpError(403, "Cross-site request blocked");
+    if (!zipUpload && !ct.includes("application/json")) throw new HttpError(415, "Send JSON");
   }
   await ensureMigrated(c.env.DB);
   const db = dbFor(c.env);
@@ -46,6 +50,7 @@ app.use("/api/*", async (c, next) => {
 app.route("/api", hqRoutes);
 app.route("/api/finance", financeRoutes);
 app.route("/api", settingsRoutes);
+app.route("/api", fileRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

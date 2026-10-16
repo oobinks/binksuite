@@ -15,6 +15,9 @@ import { ComingSoon } from "./shared/ComingSoon";
 import { SuggestionBox } from "./research/SuggestionBox";
 import { darkFloor } from "../hq/HQMap";
 
+/** Rooms whose agents do real work for real products in Phase 2. */
+const REAL_AI_ROOMS: RoomId[] = ["research", "studio", "mockups", "listing", "compliance", "launch"];
+
 // Charts are heavy — only load them when you open the vault.
 const FinanceRoom = lazy(() => import("./finance/FinanceRoom").then((m) => ({ default: m.FinanceRoom })));
 
@@ -28,8 +31,6 @@ export function RoomPage() {
   }, [room]);
 
   if (!room) return <p>That room doesn't exist. <Link to="/">Back to HQ</Link></p>;
-  const state = snap?.rooms.find((r) => r.id === room.id);
-  const locked = state ? !state.unlocked : false;
 
   return (
     <div className="space-y-4">
@@ -49,8 +50,11 @@ export function RoomPage() {
             <p className="font-semibold text-cocoa dark:text-stone-300">{room.blurb}</p>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            {locked && <span className="chip bg-ink px-3 py-1 text-cream">🔒 Unlocks at Lv {room.unlockLevel}</span>}
-            {room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🎮 Demo agents · real AI in Phase {room.phase}</span>}
+            {room.demoInteractive && snap?.aiReady && REAL_AI_ROOMS.includes(room.id) ? (
+              <span className="chip bg-sky-100 px-3 py-1 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100">🤖 Real AI (free) for your ideas · demo products stay pretend</span>
+            ) : (
+              room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🎮 Demo agents · real AI in Phase {room.phase}</span>
+            )}
             {room.phase === 1 && <span className="chip bg-mint/25 px-3 py-1 text-emerald-900 dark:text-emerald-100">✅ Live now</span>}
           </div>
         </div>
@@ -60,12 +64,12 @@ export function RoomPage() {
         <Suspense fallback={<p className="py-10 text-center font-bold">Unlocking the vault… 🔐</p>}>
           <FinanceRoom />
         </Suspense>
-      ) : room.demoInteractive ? <PipelineRoom roomId={room.id} locked={locked} /> : <ComingSoon roomId={room.id} />}
+      ) : room.demoInteractive ? <PipelineRoom roomId={room.id} /> : <ComingSoon roomId={room.id} />}
     </div>
   );
 }
 
-function PipelineRoom({ roomId, locked }: { roomId: RoomId; locked: boolean }) {
+function PipelineRoom({ roomId }: { roomId: RoomId }) {
   const { data: snap } = useSnapshot();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -77,18 +81,13 @@ function PipelineRoom({ roomId, locked }: { roomId: RoomId; locked: boolean }) {
   const wanted = params.get("task");
   const wantedTask = useMemo(() => data?.tasks.find((t) => t.id === wanted && t.state === "needs_approval"), [data, wanted]);
   useEffect(() => {
-    if (wantedTask && !locked) setOpen(wantedTask);
-  }, [wantedTask, locked]);
+    if (wantedTask) setOpen(wantedTask);
+  }, [wantedTask]);
 
   const agents = agentsInRoom(roomId);
   return (
     <>
-      {locked && (
-        <div className="card border-2 border-dashed border-cocoa/30 p-4 text-center font-semibold">
-          🔒 This room opens at <b>Lv {ROOM_BY_ID[roomId].unlockLevel}</b>. Parcels waiting here will start moving as soon as you level up — approve tasks and claim quests to earn XP.
-        </div>
-      )}
-      {roomId === "research" && !locked && <SuggestionBox tasks={data?.tasks ?? []} onOpen={setOpen} />}
+      {roomId === "research" && <SuggestionBox tasks={data?.tasks ?? []} onOpen={setOpen} aiReady={!!snap?.aiReady} />}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {agents.map((a) => (
           <AgentCard key={a.id} id={a.id} state={snap?.agents.find((s) => s.id === a.id)} />
@@ -104,7 +103,7 @@ function PipelineRoom({ roomId, locked }: { roomId: RoomId; locked: boolean }) {
         )}
       </div>
       <Section title="Task board" icon="🗂️">
-        {data ? <TaskBoard tasks={data.tasks} onOpen={setOpen} onRetry={(t) => retry.mutate(t)} locked={locked} /> : <p>Loading…</p>}
+        {data ? <TaskBoard tasks={data.tasks} onOpen={setOpen} onRetry={(t) => retry.mutate(t)} /> : <p>Loading…</p>}
       </Section>
       <Section title="Room log" icon="📒">
         <ActivityLog items={data?.activity ?? []} />

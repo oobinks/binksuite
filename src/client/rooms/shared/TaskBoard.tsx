@@ -12,7 +12,7 @@ const COLUMNS: { key: string; title: string; icon: string; states: TaskView["sta
   { key: "done", title: "Done", icon: "✅", states: ["done", "failed"] },
 ];
 
-export function TaskBoard({ tasks, onOpen, onRetry, locked }: { tasks: TaskView[]; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void; locked: boolean }) {
+export function TaskBoard({ tasks, onOpen, onRetry }: { tasks: TaskView[]; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {COLUMNS.map((col) => {
@@ -27,7 +27,7 @@ export function TaskBoard({ tasks, onOpen, onRetry, locked }: { tasks: TaskView[
               <AnimatePresence initial={false}>
                 {list.map((t) => (
                   <motion.li key={t.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                    <TaskCard task={t} onOpen={onOpen} onRetry={onRetry} locked={locked} />
+                    <TaskCard task={t} onOpen={onOpen} onRetry={onRetry} />
                   </motion.li>
                 ))}
               </AnimatePresence>
@@ -40,7 +40,7 @@ export function TaskBoard({ tasks, onOpen, onRetry, locked }: { tasks: TaskView[
   );
 }
 
-function TaskCard({ task, onOpen, onRetry, locked }: { task: TaskView; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void; locked: boolean }) {
+function TaskCard({ task, onOpen, onRetry }: { task: TaskView; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void }) {
   const agent = task.agent ? AGENT_BY_ID[task.agent] : null;
   const room = ROOM_BY_ID[task.room];
   const needs = task.state === "needs_approval";
@@ -58,7 +58,6 @@ function TaskCard({ task, onOpen, onRetry, locked }: { task: TaskView; onOpen: (
       </div>
       {task.state === "working" && <ProgressBar value={task.progress} color={room.color} className="mt-2" label="Progress" />}
       {task.state === "blocked" && <p className="mt-1 text-xs font-bold text-rose-600">⛔ {task.error}</p>}
-      {task.state === "queued" && locked && <p className="mt-1 text-xs font-bold text-cocoa">🔒 Waiting for this room to unlock</p>}
       {task.state === "failed" && (
         <p className="mt-1 text-xs font-bold text-rose-600">
           {task.error ?? "Failed"}{" "}
@@ -70,7 +69,7 @@ function TaskCard({ task, onOpen, onRetry, locked }: { task: TaskView; onOpen: (
       {task.note && task.state !== "failed" && <p className="mt-1 text-xs italic text-cocoa dark:text-stone-400">📝 {task.note}</p>}
     </>
   );
-  return needs && !locked ? (
+  return needs ? (
     <button onClick={() => onOpen(task)} className="block w-full rounded-xl bg-white p-2.5 text-left ring-2 ring-amber-300 transition hover:-translate-y-0.5 dark:bg-night-2">
       {content}
       <span className="mt-2 block text-center text-xs font-black text-amber-700 dark:text-amber-300">Tap to review →</span>

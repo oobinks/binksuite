@@ -7,6 +7,7 @@ import { intBetween, pick } from "../../../shared/rng";
 import { DEMO_NICHES, INSPECTOR_ISSUES, MOCKUP_SCENES, PRINT_SIZES, TRICKY_PHRASE } from "./demoContent";
 import type { ProductRow, StepDef } from "./types";
 import { nicheFromSuggestion, researchIdea, type MarketReport } from "./marketResearch";
+import { REAL_STEPS } from "./real";
 
 export type { StepDef } from "./types";
 
@@ -243,7 +244,7 @@ export const STEPS: StepDef[] = [
     run: ({ product }) => {
       const d = product.data as Record<string, unknown>;
       return {
-        output: { listing: d.listing, pricePence: product.pricePence, files: d.files, zip: d.zip, mockups: d.mockups },
+        output: { listing: d.listing, pricePence: product.pricePence, files: d.files, zip: d.zip, zipKey: d.zipKey, mockups: d.mockups, images: d.keptImages },
         log: "Copy-paste pack ready for Etsy",
       };
     },
@@ -251,7 +252,14 @@ export const STEPS: StepDef[] = [
   },
 ];
 
+// Phase 2: upgrade steps with their real (Workers AI) versions for real products.
+for (const step of STEPS) Object.assign(step, REAL_STEPS[step.kind] ?? {});
+
 export const STEP_BY_KIND: Record<string, StepDef> = Object.fromEntries(STEPS.map((s) => [s.kind, s]));
+
+export function stepNeedsApproval(step: StepDef, product: ProductRow): boolean {
+  return typeof step.needsApproval === "function" ? step.needsApproval(product) : step.needsApproval;
+}
 export const FIRST_STEP = STEPS[0].kind;
 
 function cap(s: string) {

@@ -71,11 +71,12 @@ stateDiagram-v2
 
 The rules live in `src/shared/tasks.ts`, and the engine refuses any other move. Anything that publishes, sends, overspends or deletes creates an `approvals` record and only happens after you tap Approve.
 
-## Phase 1: what's real and what's demo
+## What's real and what's demo
 
 | Real now | Demo (real AI in later phases) |
 |---|---|
-| 💡 Suggestion box in the Research Lab (your ideas jump the queue) | Scout's market-research report on your idea |
+| 🤖 **Real AI for your ideas** (free Cloudflare Workers AI): Scout's report, ✨ idea brainstorm, Analyst brief, Designer art, Copywriter listing | Demo products the simulator invents (they stay pretend) |
+| 🖨️ Printer builds real 300 DPI PDFs + ZIP on your device; download from the Launch Pad | |
 | Login, Key Vault, settings, export | Agent output in Research, Studio, Mockups, Listing, Compliance |
 | Fee calculator, ledger, charts, CSV, trading-allowance tracker | Demo sales trickling in for demo products |
 | Task queue, hand-offs, XP, levels, quests, achievements | Demo art (drawn in your browser from a seed, no image API) |
@@ -89,7 +90,7 @@ Demo data is flagged in the database. Switching **Demo mode** off in Settings hi
 src/client/        React app (Vite + Tailwind + Motion + TanStack Query + Zustand)
   hq/              floor-plan map, phone grid, parcels
   agents/          SVG avatars, agent cards, activity logs
-  game/            journal (quests, achievements, ladder), briefing, approvals inbox
+  game/            journal (quests, achievements, shop titles), briefing, approvals inbox
   rooms/<room>/    one folder per room's review screen; rooms/finance is the Finance Vault
   settings/  auth/
 src/worker/        Hono API on Cloudflare Workers
@@ -108,11 +109,11 @@ test/unit, test/api  Vitest (API tests run inside the Workers runtime with a loc
 
 ```mermaid
 flowchart LR
-    A["1. src/shared/registry.ts<br/>add to ROOMS / AGENTS<br/>(id, colour, icon, unlock level, map position)"] --> B["2. src/worker/engine/agents/index.ts<br/>add a StepDef<br/>(agent, room, run(), next)"]
+    A["1. src/shared/registry.ts<br/>add to ROOMS / AGENTS<br/>(id, colour, icon, map position)"] --> B["2. src/worker/engine/agents/index.ts<br/>add a StepDef<br/>(agent, room, run(), next)"]
     B --> C["3. src/client/rooms/&lt;room&gt;/Review.tsx<br/>how its output looks + approve label<br/>register in rooms/shared/reviews.ts"]
 ```
 
-The map, phone grid, unlock ladder, agent toggles and status bubbles all read the registry, so they update themselves.
+The map, phone grid, agent toggles and status bubbles all read the registry, so they update themselves.
 
 ## Free-plan friendliness
 

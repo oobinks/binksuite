@@ -10,6 +10,7 @@ import type { FeeSettings } from "../../shared/fees";
 import { ErrorNote, ProgressBar, Section, Toggle } from "../components/ui";
 import { Avatar } from "../agents/Avatar";
 import { BUILD_INFO } from "../lib/buildInfo";
+import type { AiStatus } from "../../shared/api";
 
 export function SettingsPage() {
   const { data: snap } = useSnapshot();
@@ -19,6 +20,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-black">⚙️ Settings</h1>
       <div className="grid gap-4 lg:grid-cols-2">
         <General s={snap.settings} />
+        <AiEngine s={snap.settings} />
         <Demo s={snap.settings} />
         <Fees s={snap.settings} />
         <Money s={snap.settings} />
@@ -381,6 +383,60 @@ function About() {
         <dd>{when(BUILD_INFO.builtAt)}</dd>
       </dl>
       <p className="mt-3 text-xs text-cocoa dark:text-stone-400">“Last updated” is when Claude last changed the code. “Deployed” is when Cloudflare built this copy. Quote the update code if you ever need to report a problem.</p>
+    </Section>
+  );
+}
+
+function AiEngine({ s }: { s: Settings }) {
+  const save = useSaved();
+  const { data } = useQuery({ queryKey: ["ai-status"], queryFn: () => api.get<AiStatus>("/ai/status"), refetchInterval: 15_000 });
+  return (
+    <Section title="AI engine" icon="🤖" right={<span className="chip bg-mint/25">Free</span>}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm">
+          Your agents use <b>Cloudflare Workers AI</b>, which comes free with your Cloudflare account. No keys and no card. Real work happens for ideas you suggest; demo
+          products stay pretend.
+        </p>
+        <Toggle checked={s.ai.enabled} onChange={(v) => save.saveNow({ ai: { enabled: v } })} label="Real AI on" />
+      </div>
+      {data && !data.available && <p className="mt-2 rounded-xl bg-berry/10 p-2 text-sm font-bold text-berry">AI isn't connected on this server yet. It will be after the next deploy.</p>}
+      {data && (
+        <div className="mt-3">
+          <div className="flex justify-between text-sm font-bold">
+            <span>Free allowance used today</span>
+            <span className="tabular-nums">
+              {Math.round(data.usedToday).toLocaleString()} / {data.cap.toLocaleString()}
+            </span>
+          </div>
+          <ProgressBar value={data.cap ? data.usedToday / data.cap : 0} color={data.usedToday / data.cap > 0.85 ? "#e0607e" : "#7c9cf5"} label="Free AI used today" />
+          <p className="mt-1 text-xs text-cocoa dark:text-stone-400">
+            Enough for about <b>{data.productsLeftToday}</b> more product{data.productsLeftToday === 1 ? "" : "s"} today. Resets at 1am UK time (midnight UTC). Stopping
+            just under Cloudflare's 10,000 daily limit means you're never charged.
+          </p>
+        </div>
+      )}
+      <details className="mt-3 text-sm">
+        <summary className="cursor-pointer font-bold">Advanced</summary>
+        <div className="mt-2 space-y-2">
+          <label className="block">
+            <span className="label !text-[10px]">Writing model</span>
+            <input className="input font-mono text-xs" defaultValue={s.ai.textModel} onBlur={(e) => e.target.value !== s.ai.textModel && save.saveNow({ ai: { textModel: e.target.value.trim() } })} />
+          </label>
+          <label className="block">
+            <span className="label !text-[10px]">Image model</span>
+            <input className="input font-mono text-xs" defaultValue={s.ai.imageModel} onBlur={(e) => e.target.value !== s.ai.imageModel && save.saveNow({ ai: { imageModel: e.target.value.trim() } })} />
+          </label>
+          <label className="block">
+            <span className="label !text-[10px]">Daily cap (neurons)</span>
+            <input
+              className="input"
+              inputMode="numeric"
+              defaultValue={s.ai.dailyNeuronCap}
+              onBlur={(e) => Number(e.target.value) !== s.ai.dailyNeuronCap && save.saveNow({ ai: { dailyNeuronCap: Math.max(0, Math.round(Number(e.target.value) || 0)) } })}
+            />
+          </label>
+        </div>
+      </details>
     </Section>
   );
 }

@@ -1,7 +1,10 @@
 // The HQ: state snapshot (polled), rooms, agents, tasks, events, briefing.
 import { and, desc, eq, inArray, or, gte } from "drizzle-orm";
 import { z } from "zod";
-import { newApp, body, HttpError } from "../app";
+import { newApp, body, HttpError, aiFor } from "../app";
+import { brainstormIdeas } from "../engine/agents/real";
+import { DEMO_NICHES } from "../engine/agents/demoContent";
+import { isAiLimit } from "../providers/ai";
 import { activity, products, tasks } from "../db/schema";
 import { secretsStatus } from "../env";
 import { kvSet, visible } from "../lib/store";
@@ -73,11 +76,18 @@ export const hqRoutes = newApp()
     const db = c.get("db");
     const settings = c.get("settings");
     // The open app drives the engine; the cron covers the rest.
-    await tick(db, settings, { interactive: true });
+    await tick(db, settings, {
+      interactive: true,
+      ai: aiFor(c),
+      files: c.env.FILES,
+      // Slow AI jobs finish after this response is sent, so the map never waits on them.
+      defer: (job) => c.executionCtx.waitUntil(job),
+    });
     const snap = await buildSnapshot(db, settings, {
       afterNotification: Number(c.req.query("n") ?? 0) || 0,
       afterHandoff: Number(c.req.query("h") ?? 0) || 0,
       secrets: secretsStatus(c.env),
+      aiReady: !!aiFor(c),
     });
     return c.json(snap);
   })
@@ -102,8 +112,8 @@ export const hqRoutes = newApp()
     return c.json({ tasks: await taskViews(db, eq(tasks.state, "needs_approval"), c.get("settings").demoMode) });
   })
   .post("/tasks/:id/approve", async (c) => {
-    const b = await body(c, z.object({ note: z.string().max(500).optional() }));
-    const t = await engineErrors(approveTask(c.get("db"), c.req.param("id"), c.get("settings"), b.note));
+    const b = await body(c, z.object({ note: z.string().max(500).optional(), data: z.record(z.string(), z.unknown()).optional() }));
+    const t = await engineErrors(approveTask(c.get("db"), c.req.param("id"), c.get("settings"), b.note, b.data));
     return c.json({ ok: true, state: t.state });
   })
   .post("/tasks/:id/reject", async (c) => {
@@ -125,8 +135,23 @@ export const hqRoutes = newApp()
         notes: z.string().max(1000).optional(),
       }),
     );
-    const p = await suggestIdea(c.get("db"), c.get("settings"), b.idea, b.notes);
-    return c.json({ ok: true, productId: p.id });
+    const p = await suggestIdea(c.get("db"), c.get("settings"), b.idea, b.notes, !!aiFor(c));
+    return c.json({ ok: true, productId: p.id, real: !p.demo });
+  })
+  .post("/research/ideas", async (c) => {
+    // ✨ "Suggest ideas for me": Scout brainstorms 5 niches you can send for research.
+    const b = await body(c, z.object({ theme: z.string().max(120).optional() }));
+    const ai = aiFor(c);
+    const recent = (await listSuggestions(c.get("db"), true)).map((s) => s.idea);
+    if (!ai) {
+      const picks = DEMO_NICHES.filter((n) => !recent.includes(n.niche)).slice(0, 5);
+      return c.json({ real: false, ideas: picks.map((n) => ({ idea: n.niche, why: n.audience })) });
+    }
+    try {
+      return c.json({ real: true, ideas: await brainstormIdeas(ai, b.theme?.trim() || undefined, recent) });
+    } catch (e) {
+      throw new HttpError(isAiLimit(e) ? 429 : 502, e instanceof Error ? e.message : "Scout couldn't think of anything just now.");
+    }
   })
   .post("/tasks/:id/retry", async (c) => {
     const t = await engineErrors(retryTask(c.get("db"), c.req.param("id")));

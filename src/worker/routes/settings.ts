@@ -10,13 +10,15 @@ import { nowIso, saveSettings, kvGet, invalidateStats } from "../lib/store";
 import { feeSettingsSchema, settingsSchema, VAULT_PROVIDERS, type Settings } from "../../shared/settings";
 import { claimQuest, getQuests, listAchievements, recordEvent, notify } from "../engine/game";
 import { clearDemoData, seedDemo } from "../../../seed/demo";
+import { aiUsageToday, NEURONS_PER_PRODUCT } from "../providers/ai";
+import type { AiStatus } from "../../shared/api";
 
 const R2_FREE_BYTES = 10 * 1024 ** 3;
 
 export const settingsRoutes = newApp()
   .get("/settings", (c) => c.json(c.get("settings")))
   .put("/settings", async (c) => {
-    const patch = await body(c, settingsSchema.partial().extend({ fees: feeSettingsSchema.partial().optional() }));
+    const patch = await body(c, settingsSchema.partial().extend({ fees: feeSettingsSchema.partial().optional(), ai: settingsSchema.shape.ai.partial().optional() }));
     const db = c.get("db");
     const before = c.get("settings");
     const merged: Settings = {
@@ -24,6 +26,7 @@ export const settingsRoutes = newApp()
       ...patch,
       fees: { ...before.fees, ...(patch.fees ?? {}) },
       agentsEnabled: { ...before.agentsEnabled, ...(patch.agentsEnabled ?? {}) },
+      ai: { ...before.ai, ...(patch.ai ?? {}) },
     };
     const saved = await saveSettings(db, merged);
     await recordEvent(db, "settings_saved", saved.demoMode);
@@ -49,6 +52,22 @@ export const settingsRoutes = newApp()
   .delete("/vault/:provider", async (c) => {
     await c.get("db").delete(vault).where(eq(vault.provider, c.req.param("provider")));
     return c.json({ ok: true });
+  })
+
+  // ─── AI engine ───
+  .get("/ai/status", async (c) => {
+    const settings = c.get("settings");
+    const used = await aiUsageToday(c.get("db"));
+    const status: AiStatus = {
+      available: !!c.env.AI,
+      enabled: settings.ai.enabled,
+      usedToday: used.neurons,
+      cap: settings.ai.dailyNeuronCap,
+      productsLeftToday: Math.max(0, Math.floor((settings.ai.dailyNeuronCap - used.neurons) / NEURONS_PER_PRODUCT)),
+      textModel: settings.ai.textModel,
+      imageModel: settings.ai.imageModel,
+    };
+    return c.json(status);
   })
 
   // ─── Quests & achievements ───

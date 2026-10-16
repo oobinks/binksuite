@@ -1,6 +1,7 @@
 import type { AgentId, RoomId } from "../../../shared/registry";
 import type { Settings } from "../../../shared/settings";
 import type { schema } from "../../db";
+import type { AiServices } from "../../providers/ai";
 
 export type TaskRow = typeof schema.tasks.$inferSelect;
 export type ProductRow = typeof schema.products.$inferSelect;
@@ -11,6 +12,19 @@ export interface StepContext {
   settings: Settings;
   /** Seeded from the product + task, so demo output is stable. */
   rng: () => number;
+}
+
+/** Real work needs the AI and the file bucket. */
+export interface RealContext extends StepContext {
+  ai: AiServices;
+  files: R2Bucket;
+}
+
+/** A long job (e.g. 4 images) can report progress and finish over several ticks. */
+export interface PartialResult {
+  partial: Record<string, unknown>;
+  progress: number;
+  log?: string;
 }
 
 export interface StepResult {
@@ -33,7 +47,7 @@ export interface StepDef {
   agent: AgentId | null;
   room: RoomId;
   /** If true the result waits for the owner (❗). Otherwise it hands off automatically. */
-  needsApproval: boolean;
+  needsApproval: boolean | ((product: ProductRow) => boolean);
   /** What approving means — shown on the approval record. */
   approvalKind: "review" | "publish" | "spend" | "send" | "delete";
   /** Demo work takes a while so you can watch the progress bar. */
@@ -42,6 +56,12 @@ export interface StepDef {
   estimatedCostPence: number;
   title(product: ProductRow): string;
   run(ctx: StepContext): StepResult | Promise<StepResult>;
+  /** Real version for real (non-demo) products. Steps without one use `run` (already real logic). */
+  real?(ctx: RealContext): Promise<StepResult | PartialResult>;
+  /** Roughly how long the real job takes, for the progress bar. */
+  realSeconds?: number;
+  /** Validate the owner's choices on approval (e.g. which images to keep) and turn them into product data. */
+  onApprove?(task: TaskRow, product: ProductRow, data: Record<string, unknown> | undefined): { productData?: Record<string, unknown>; error?: string };
   /** Next step kind after approval / auto-finish; null = product goes live. */
   next: string | null;
   /** Rejecting sends the product back to this step instead of redoing this one. */

@@ -58,6 +58,8 @@ export const tasks = sqliteTable(
     durationMs: integer("duration_ms").notNull().default(0),
     startedAt: text("started_at"),
     finishedAt: text("finished_at"),
+    /** While a real-AI job runs, other ticks leave the task alone until this time. */
+    leaseUntil: text("lease_until"),
     demo: integer("demo", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

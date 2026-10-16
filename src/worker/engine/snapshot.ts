@@ -3,7 +3,7 @@ import { and, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import type { DB } from "../db";
 import { handoffs, products, tasks, ledger, events, activity } from "../db/schema";
 import { AGENTS, ROOMS, type AgentId, type RoomId } from "../../shared/registry";
-import { isRoomUnlocked, levelProgress } from "../../shared/game";
+import { levelProgress } from "../../shared/game";
 import { hashString } from "../../shared/rng";
 import type { AgentStatus } from "../../shared/tasks";
 import type { AgentSnapshot, Briefing, RoomSnapshot, Snapshot } from "../../shared/api";
@@ -17,7 +17,7 @@ const JUST_FINISHED_MS = 45_000;
 export async function buildSnapshot(
   db: DB,
   settings: Settings,
-  opts: { afterNotification: number; afterHandoff: number; secrets: Snapshot["secrets"] },
+  opts: { afterNotification: number; afterHandoff: number; secrets: Snapshot["secrets"]; aiReady: boolean },
 ): Promise<Snapshot> {
   const demoMode = settings.demoMode;
   const now = new Date();
@@ -57,7 +57,6 @@ export async function buildSnapshot(
     const mine = live.filter((t) => t.room === r.id);
     return {
       id: r.id,
-      unlocked: isRoomUnlocked(r.id, progress.level),
       queued: mine.filter((t) => t.state === "queued").length,
       working: mine.filter((t) => t.state === "working").length,
       needsYou: mine.filter((t) => t.state === "needs_approval").length,
@@ -72,7 +71,6 @@ export async function buildSnapshot(
     const working = mine.find((t) => t.state === "working");
     const blocked = mine.find((t) => t.state === "blocked");
     const enabled = settings.agentsEnabled[a.id] !== false;
-    const unlocked = isRoomUnlocked(a.room, progress.level);
     let status: AgentStatus = "idle";
     let bubble = a.idleLines[Math.floor(now.getTime() / 20_000 + hashString(a.id)) % a.idleLines.length];
     let taskTitle: string | null = null;
@@ -97,8 +95,6 @@ export async function buildSnapshot(
     } else if (justDone.has(a.id)) {
       status = "done";
       bubble = "Done! ✨";
-    } else if (!unlocked) {
-      bubble = "Zzz… (room locked)";
     }
     return { id: a.id as AgentId, status, progress: prog, bubble, taskTitle, enabled };
   });
@@ -116,9 +112,10 @@ export async function buildSnapshot(
     agents,
     handoffs: hand.reverse().map((h) => ({ ...h, from: h.from as RoomId, to: h.to as RoomId, productTitle: h.productTitle ?? "Parcel" })),
     notifications: notes.map((n) => ({ id: n.id, kind: n.kind, title: n.title, body: n.body, createdAt: n.createdAt })),
-    approvalsWaiting: live.filter((t) => t.state === "needs_approval" && isRoomUnlocked(t.room as RoomId, progress.level)).length,
+    approvalsWaiting: live.filter((t) => t.state === "needs_approval").length,
     briefingDue: lastBriefing !== now.toISOString().slice(0, 10),
     secrets: opts.secrets,
+    aiReady: opts.aiReady,
   };
 }
 

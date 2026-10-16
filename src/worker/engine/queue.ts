@@ -7,17 +7,17 @@ import type { DB } from "../db";
 import { activity, approvals, handoffs, ledger, products, tasks } from "../db/schema";
 import { nextState, type TaskEvent, type TaskState } from "../../shared/tasks";
 import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared/registry";
-import { isRoomUnlocked, XP, levelForXp } from "../../shared/game";
+import { XP } from "../../shared/game";
 import { calculateFees } from "../../shared/fees";
 import { hashString, intBetween, mulberry32, pick } from "../../shared/rng";
 import type { Settings } from "../../shared/settings";
 import { newId } from "../lib/crypto";
 import { invalidateStats, kvGet, kvSet, nowIso, sum, visible } from "../lib/store";
-import { STEP_BY_KIND, FIRST_STEP } from "./agents";
-import type { ProductRow, TaskRow } from "./agents/types";
+import { STEP_BY_KIND, FIRST_STEP, stepNeedsApproval } from "./agents";
+import type { PartialResult, ProductRow, StepDef, StepResult, TaskRow } from "./agents/types";
+import { AiLimitError, aiUsageToday, isAiLimit, MAX_CALL_NEURONS, type AiServices } from "../providers/ai";
 import { DEMO_NICHES } from "./agents/demoContent";
-import { awardXp, checkAchievements, notify, recordEvent, totalXp } from "./game";
-import { getStats } from "./stats";
+import { awardXp, checkAchievements, notify, recordEvent } from "./game";
 
 export class EngineError extends Error {
   constructor(
@@ -61,7 +61,7 @@ export async function createTask(db: DB, product: ProductRow, kind: string, opts
     progress: 0,
     attempts: 0,
     maxAttempts: 3,
-    needsApproval: step.needsApproval,
+    needsApproval: stepNeedsApproval(step, product),
     input: opts.input ?? {},
     durationMs: 0,
     demo: opts.demo,
@@ -95,7 +95,7 @@ export async function spawnDemoProduct(db: DB, rng: () => number = Math.random):
 }
 
 /** You suggest an idea; Scout researches it next (suggestions jump the queue). */
-export async function suggestIdea(db: DB, settings: Settings, idea: string, notes?: string): Promise<ProductRow> {
+export async function suggestIdea(db: DB, settings: Settings, idea: string, notes?: string, realAi = false): Promise<ProductRow> {
   const now = nowIso();
   const clean = idea.trim().replace(/\s+/g, " ");
   const product: ProductRow = {
@@ -106,8 +106,8 @@ export async function suggestIdea(db: DB, settings: Settings, idea: string, note
     seed: Math.floor(Math.random() * 1e6),
     pricePence: null,
     data: { suggestion: { idea: clean, notes: notes?.trim() || undefined } },
-    // Research is simulated until Phase 2, so in demo mode the idea is demo data too.
-    demo: settings.demoMode,
+    // With real AI your idea is a real product. Without it, in demo mode, it's simulated.
+    demo: !realAi && settings.demoMode,
     createdAt: now,
     updatedAt: now,
   };
@@ -172,11 +172,34 @@ export interface TickResult {
  * the demo simulator invent new products and sales (so the cron doesn't fill
  * the shop with fake data overnight).
  */
-export async function tick(db: DB, settings: Settings, opts: { interactive: boolean; now?: Date }): Promise<TickResult> {
+export interface TickOptions {
+  /** The owner has the app open (the demo simulator only runs then). */
+  interactive: boolean;
+  now?: Date;
+  /** Real AI + file storage. Without them, real products wait (⛔). */
+  ai?: AiServices | null;
+  files?: R2Bucket | null;
+  /** Run slow AI jobs after the response is sent (ctx.waitUntil). Omit to wait for them. */
+  defer?: (job: Promise<unknown>) => void;
+}
+
+/** Real (non-demo) products use the real version of a step when there is one. */
+const isReal = (t: TaskRow, step: StepDef) => !t.demo && !!step.real;
+const LEASE_MS = 90_000;
+
+async function aiBlockReason(db: DB, settings: Settings, opts: TickOptions): Promise<string | null> {
+  if (!settings.ai.enabled) return "Real AI is switched off. Turn it on in Settings → AI engine.";
+  if (!opts.ai || !opts.files) return "Real AI isn't available on this server.";
+  const used = await aiUsageToday(db);
+  // Keep headroom for a whole call so a job never starts only to be refused mid-way.
+  if (used.neurons + MAX_CALL_NEURONS > settings.ai.dailyNeuronCap) return new AiLimitError().message;
+  return null;
+}
+
+export async function tick(db: DB, settings: Settings, opts: TickOptions): Promise<TickResult> {
   const now = opts.now ?? new Date();
   const demoMode = settings.demoMode;
   const result: TickResult = { finished: 0, claimed: 0, spawned: 0, sales: 0 };
-  const level = levelForXp((await getStats(db, demoMode, now)).xp);
 
   const active = await db
     .select()
@@ -188,6 +211,16 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
   // 1. Finish work whose time is up. (Progress is worked out from the start time
   //    when it's read, so ticking doesn't cost a database write per task.)
   for (const t of active.filter((t) => t.state === "working")) {
+    const step = STEP_BY_KIND[t.kind];
+    if (step && isReal(t, step)) {
+      // Real AI job: take a short lease so two open tabs never run it twice.
+      if (!opts.ai || !opts.files || !settings.ai.enabled) continue;
+      if (!(await takeLease(db, t, now))) continue;
+      const job = runReal(db, t, settings, { ai: opts.ai, files: opts.files }, now);
+      if (opts.defer) opts.defer(job);
+      else await job;
+      continue;
+    }
     if (now.getTime() - new Date(t.startedAt ?? now).getTime() >= t.durationMs) {
       await finishTask(db, t, settings, now);
       result.finished++;
@@ -203,9 +236,9 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
     .sort((a, b) => Number(!!(b.input as { suggestion?: boolean }).suggestion) - Number(!!(a.input as { suggestion?: boolean }).suggestion));
   for (const t of waiting) {
     const step = STEP_BY_KIND[t.kind];
-    if (!step || !isRoomUnlocked(t.room as RoomId, level)) continue;
+    if (!step) continue;
     if (t.agent && (busy.has(t.agent) || settings.agentsEnabled[t.agent] === false)) continue;
-    const capMsg = capHit(spend, settings, step.estimatedCostPence);
+    const capMsg = isReal(t, step) ? await aiBlockReason(db, settings, opts) : capHit(spend, settings, step.estimatedCostPence);
     if (capMsg) {
       if (t.state === "queued") {
         await transition(db, t, "block", { error: capMsg });
@@ -215,14 +248,14 @@ export async function tick(db: DB, settings: Settings, opts: { interactive: bool
     }
     if (t.state === "blocked") await transition(db, t, "unblock", { error: null });
     const rng = mulberry32(hashString(t.id));
-    const durationMs = intBetween(rng, step.durationMs[0], step.durationMs[1]);
+    const durationMs = isReal(t, step) ? (step.realSeconds ?? 10) * 1000 : intBetween(rng, step.durationMs[0], step.durationMs[1]);
     await transition(db, t, "claim", { startedAt: nowIso(now), durationMs, progress: 0, attempts: t.attempts + 1 });
     if (t.agent) {
       busy.add(t.agent);
       await logActivity(db, t.agent as AgentId, t.room as RoomId, "start", `Started: ${t.title}`, t.demo);
     }
     result.claimed++;
-    if (durationMs === 0) {
+    if (durationMs === 0 && !isReal(t, step)) {
       await finishTask(db, t, settings, now);
       result.finished++;
     }
@@ -265,52 +298,102 @@ async function finishTask(db: DB, t: TaskRow, settings: Settings, now: Date) {
   const product = await getProduct(db, t.productId);
   try {
     const res = await step.run({ task: t, product, settings, rng: mulberry32(hashString(t.id) ^ product.seed) });
-    if (res.productData || res.productTitle || res.pricePence) {
-      await db
-        .update(products)
-        .set({
-          data: { ...product.data, ...(res.productData ?? {}) },
-          title: res.productTitle ?? product.title,
-          pricePence: res.pricePence ?? product.pricePence,
-          updatedAt: nowIso(now),
-        })
-        .where(eq(products.id, product.id));
-    }
-    if (res.costPence) {
-      await db.insert(ledger).values({
-        id: newId("l_"),
-        date: nowIso(now),
-        kind: "api",
-        category: t.agent ? `${AGENT_BY_ID[t.agent as AgentId].name} (demo AI)` : "API",
-        description: t.title,
-        amountPence: -res.costPence,
-        productId: product.id,
-        demo: t.demo,
-        createdAt: nowIso(now),
-      });
-      await invalidateStats(db);
-    }
-    const event: TaskEvent = step.needsApproval ? "finish" : "finish_auto";
-    await transition(db, t, event, { output: res.output, progress: 1, finishedAt: nowIso(now), error: null });
-    await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "finish", res.log, t.demo);
-    if (step.needsApproval) {
-      await db.insert(approvals).values({
-        id: newId("a_"),
-        taskId: t.id,
-        kind: step.approvalKind,
-        summary: t.title,
-        status: "pending",
-        demo: t.demo,
-        createdAt: nowIso(now),
-      });
-    } else {
-      await handOff(db, t, product, now);
-    }
+    await applyResult(db, t, product, res, now);
   } catch (e) {
-    if (e instanceof EngineError && e.status === 409) return;
-    const msg = e instanceof Error ? e.message : String(e);
-    const to = await transition(db, t, "error", { error: msg, progress: 0 });
+    await failTask(db, t, e);
+  }
+}
+
+async function takeLease(db: DB, t: TaskRow, now: Date): Promise<boolean> {
+  const res = await db
+    .update(tasks)
+    .set({ leaseUntil: new Date(now.getTime() + LEASE_MS).toISOString() })
+    .where(and(eq(tasks.id, t.id), eq(tasks.state, "working"), sql`(${tasks.leaseUntil} IS NULL OR ${tasks.leaseUntil} < ${nowIso(now)})`))
+    .run();
+  return res.meta.changes > 0;
+}
+
+/** Run one slice of a real AI job. Long jobs (like 4 images) report progress and continue next tick. */
+export async function runReal(db: DB, t: TaskRow, settings: Settings, svc: { ai: AiServices; files: R2Bucket }, now = new Date()) {
+  const step = STEP_BY_KIND[t.kind];
+  try {
+    const product = await getProduct(db, t.productId);
+    const res = await step.real!({ task: t, product, settings, rng: mulberry32(hashString(t.id) ^ product.seed), ...svc });
+    if ("partial" in res) {
+      const p = res as PartialResult;
+      await db
+        .update(tasks)
+        .set({ output: p.partial, progress: p.progress, leaseUntil: null, updatedAt: nowIso() })
+        .where(and(eq(tasks.id, t.id), eq(tasks.state, "working")));
+      if (p.log) await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "progress", p.log, t.demo);
+      return;
+    }
+    t.leaseUntil = null;
+    await applyResult(db, t, product, res as StepResult, now, { leaseUntil: null });
+  } catch (e) {
+    if (isAiLimit(e)) {
+      const msg = new AiLimitError().message;
+      await transition(db, t, "block", { error: msg, leaseUntil: null }).catch(() => {});
+      await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "blocked", `⛔ ${msg}`, t.demo);
+      return;
+    }
+    await failTask(db, t, e, { leaseUntil: null });
+  }
+}
+
+async function failTask(db: DB, t: TaskRow, e: unknown, patch: Partial<TaskRow> = {}) {
+  if (e instanceof EngineError && e.status === 409) return;
+  const msg = e instanceof Error ? e.message : String(e);
+  try {
+    const to = await transition(db, t, "error", { ...patch, error: msg, progress: 0 });
     await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "error", `${to === "failed" ? "Gave up" : "Will retry"}: ${msg}`, t.demo);
+  } catch {
+    /* task moved on meanwhile */
+  }
+}
+
+async function applyResult(db: DB, t: TaskRow, product: ProductRow, res: StepResult, now: Date, patch: Partial<TaskRow> = {}) {
+  const step = STEP_BY_KIND[t.kind];
+  if (res.productData || res.productTitle || res.pricePence) {
+    await db
+      .update(products)
+      .set({
+        data: { ...product.data, ...(res.productData ?? {}) },
+        title: res.productTitle ?? product.title,
+        pricePence: res.pricePence ?? product.pricePence,
+        updatedAt: nowIso(now),
+      })
+      .where(eq(products.id, product.id));
+  }
+  if (res.costPence) {
+    await db.insert(ledger).values({
+      id: newId("l_"),
+      date: nowIso(now),
+      kind: "api",
+      category: t.agent ? `${AGENT_BY_ID[t.agent as AgentId].name} (${t.demo ? "demo AI" : "AI"})` : "API",
+      description: t.title,
+      amountPence: -res.costPence,
+      productId: product.id,
+      demo: t.demo,
+      createdAt: nowIso(now),
+    });
+    await invalidateStats(db);
+  }
+  const event: TaskEvent = t.needsApproval ? "finish" : "finish_auto";
+  await transition(db, t, event, { ...patch, output: res.output, progress: 1, finishedAt: nowIso(now), error: null });
+  await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "finish", res.log, t.demo);
+  if (t.needsApproval) {
+    await db.insert(approvals).values({
+      id: newId("a_"),
+      taskId: t.id,
+      kind: step.approvalKind,
+      summary: t.title,
+      status: "pending",
+      demo: t.demo,
+      createdAt: nowIso(now),
+    });
+  } else {
+    await handOff(db, t, product, now);
   }
 }
 
@@ -344,17 +427,23 @@ async function decideApproval(db: DB, taskId: string, status: "approved" | "reje
     .where(and(eq(approvals.taskId, taskId), eq(approvals.status, "pending")));
 }
 
-export async function approveTask(db: DB, id: string, settings: Settings, note?: string) {
+export async function approveTask(db: DB, id: string, settings: Settings, note?: string, data?: Record<string, unknown>) {
   const t = await getTask(db, id);
   const step = STEP_BY_KIND[t.kind];
   if (t.state !== "needs_approval") throw new EngineError("That task isn't waiting for approval.");
-  const level = levelForXp(await totalXp(db, settings.demoMode));
-  if (!isRoomUnlocked(t.room as RoomId, level)) throw new EngineError(`${ROOM_BY_ID[t.room as RoomId].name} is still locked.`);
   const refusal = step.canApprove?.(t, note);
   if (refusal) throw new EngineError(refusal);
   const product = await getProduct(db, t.productId);
+  const decision = step.onApprove?.(t, product, data);
+  if (decision?.error) throw new EngineError(decision.error);
   const now = new Date();
   await transition(db, t, "approve", { note: note ?? null });
+  if (decision?.productData && Object.keys(decision.productData).length) {
+    await db
+      .update(products)
+      .set({ data: { ...product.data, ...decision.productData }, updatedAt: nowIso(now) })
+      .where(eq(products.id, product.id));
+  }
   await decideApproval(db, t.id, "approved", note);
   await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "approved", `You approved: ${t.title}${note ? ` (note: ${note})` : ""}`, t.demo);
   await recordEvent(db, "task_approved", t.demo);

@@ -7,6 +7,8 @@ export interface ReviewBodyProps {
   settings: Settings;
   /** Some reviews (e.g. the Inspector's card stack) must be finished before Approve unlocks. */
   setReady: (ready: boolean) => void;
+  /** Choices sent along with Approve (e.g. which images to keep). */
+  setData: (data: Record<string, unknown>) => void;
 }
 
 export interface ReviewDef {

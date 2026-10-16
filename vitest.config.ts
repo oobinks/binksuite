@@ -16,6 +16,8 @@ export default defineConfig({
               bindings: {
                 SESSION_SECRET: "test-session-secret-0123456789abcdefghijkl",
                 VAULT_MASTER_KEY: "test-vault-master-key-0123456789abcdefghij",
+                // Tests choose their AI explicitly; never pick up a local FAKE_AI switch.
+                FAKE_AI: "",
               },
             },
           }),

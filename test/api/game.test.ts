@@ -10,7 +10,8 @@ describe("HQ, engine and game", () => {
     expect(s.game.coinsPence).toBeGreaterThan(0);
     expect(s.rooms).toHaveLength(11);
     expect(s.agents).toHaveLength(13);
-    expect(s.rooms.find((r: any) => r.id === "launch").unlocked).toBe(false);
+    // Every room is always open — nothing is locked behind levels.
+    expect(s.rooms.every((r: any) => !("unlocked" in r))).toBe(true);
     expect(s.rooms.find((r: any) => r.id === "research").needsYou).toBe(1);
     expect(s.agents.find((a: any) => a.id === "scout").status).toBe("needs_you");
     expect(s.approvalsWaiting).toBeGreaterThanOrEqual(1);
@@ -103,6 +104,22 @@ describe("HQ, engine and game", () => {
     ).bind(now, now).run();
     const s = (await c.get("/api/state")).data;
     expect(s.agents.find((a: any) => a.id === "analyst").status).toBe("blocked");
+  });
+
+  it("lets you launch at level 1 (no rooms are locked)", async () => {
+    const c = await setUpOwner();
+    await c.post("/api/demo/clear", {});
+    expect((await c.get("/api/state")).data.game.level).toBe(1);
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO products (id,title,niche,stage,seed,data,demo,created_at,updated_at) VALUES ('pl','Real','Real','launch',5,'{}',0,?,?)`,
+    ).bind(now, now).run();
+    await env.DB.prepare(
+      `INSERT INTO tasks (id,product_id,room,agent,kind,title,state,needs_approval,input,output,demo,created_at,updated_at)
+       VALUES ('tl','pl','launch',NULL,'launch_pack','Launch: Real','needs_approval',1,'{}','{}',0,?,?)`,
+    ).bind(now, now).run();
+    const r = await c.post("/api/tasks/tl/approve", {});
+    expect(r.status).toBe(200);
   });
 
   it("records the briefing and room visits", async () => {
