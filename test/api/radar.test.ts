@@ -122,6 +122,7 @@ describe("Price Watch", () => {
     ).bind(t, t).run();
     expect(await priceWatchTick(db, settings, null, now)).toBe(1);
     expect(await priceWatchTick(db, settings, null, new Date(now.getTime() + 86_400_000))).toBe(0); // still open → no duplicate
+    expect(await priceWatchTick(db, settings, null, now, 6, true)).toBe(0); // forced re-check doesn't duplicate either
     const alert = await env.DB.prepare("SELECT * FROM tasks WHERE kind='price_watch'").first<any>();
     const out = JSON.parse(alert.output);
     expect(out.medianPricePence).toBe(420);
@@ -130,6 +131,17 @@ describe("Price Watch", () => {
     const p = await env.DB.prepare("SELECT price_pence, stage FROM products WHERE id='pw'").first<any>();
     expect(p.price_pence).toBe(out.suggestedPricePence);
     expect(p.stage).toBe("live"); // closing an alert never touches the pipeline
+  });
+
+  it("a forced check picks up products launched after today's automatic run", async () => {
+    const { db, settings } = await setup();
+    expect(await priceWatchTick(db, settings, null, now)).toBe(0); // morning run: nothing live yet
+    const t = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO products (id,title,niche,stage,seed,price_pence,data,demo,created_at,updated_at) VALUES ('pw2','Owl Print','owl','live',1,699,'{"competitors":[{"pricePence":299}]}',0,?,?)`,
+    ).bind(t, t).run();
+    expect(await priceWatchTick(db, settings, null, now)).toBe(0); // same day, automatic: already done
+    expect(await priceWatchTick(db, settings, null, now, 6, true)).toBe(1); // "Run Price Watch now"
   });
 
   it("checks your Etsy shop's listings and can be ignored", async () => {

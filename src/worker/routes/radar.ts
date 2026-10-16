@@ -104,6 +104,7 @@ export const radarRoutes = newApp()
     }
   })
   .post("/radar/price-watch", async (c) => {
-    const raised = await priceWatchTick(c.get("db"), c.get("settings"), await etsyFor(c), new Date(), 10);
+    // "Run now" always does a fresh check, even if today's automatic one already ran.
+    const raised = await priceWatchTick(c.get("db"), c.get("settings"), await etsyFor(c), new Date(), 10, true);
     return c.json({ ok: true, raised });
   });

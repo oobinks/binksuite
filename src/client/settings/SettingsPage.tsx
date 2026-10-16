@@ -20,6 +20,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-black">⚙️ Settings</h1>
       <div className="grid gap-4 lg:grid-cols-2">
         <General s={snap.settings} />
+        <EtsyRadar s={snap.settings} />
         <AiEngine s={snap.settings} />
         <Demo s={snap.settings} />
         <Fees s={snap.settings} />
@@ -437,6 +438,94 @@ function AiEngine({ s }: { s: Settings }) {
           </label>
         </div>
       </details>
+    </Section>
+  );
+}
+
+function EtsyRadar({ s }: { s: Settings }) {
+  const qc = useQueryClient();
+  const save = useSaved();
+  const toast = useUi((x) => x.toast);
+  const [keystring, setKeystring] = useState("");
+  const [secret, setSecret] = useState("");
+  const vault = useQuery({ queryKey: ["vault"], queryFn: () => api.get<VaultResp>("/vault") });
+  const etsyKey = vault.data?.keys.find((k) => k.provider === "etsy");
+  const saveKey = useMutation({
+    mutationFn: () => api.put("/vault/etsy", { key: `${keystring.trim()}:${secret.trim()}` }),
+    onSuccess: () => {
+      setKeystring("");
+      setSecret("");
+      qc.invalidateQueries();
+      test.mutate();
+    },
+  });
+  const test = useMutation({
+    mutationFn: () => api.get<{ ok: boolean; message: string }>("/radar/test"),
+    onSuccess: (r) => toast({ icon: r.ok ? "🟢" : "⚠️", title: r.ok ? "Etsy connected" : "Etsy problem", body: r.message }),
+  });
+  const watchNow = useMutation({
+    mutationFn: () => api.post<{ raised: number }>("/radar/price-watch"),
+    onSuccess: (r) => (toast({ icon: "👀", title: r.raised ? `${r.raised} price alert${r.raised === 1 ? "" : "s"}` : "Prices look fine" }), qc.invalidateQueries()),
+  });
+  const num = (k: "dailyIdeas" | "undercutPercent" | "priceTolerancePercent", label: string, suffix: string) => (
+    <label className="block">
+      <span className="label !text-[10px]">{label}</span>
+      <div className="flex items-center gap-1">
+        <input
+          className="input"
+          inputMode="numeric"
+          defaultValue={s.radar[k]}
+          onBlur={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isFinite(v) && v !== s.radar[k]) save.saveNow({ radar: { [k]: v } });
+          }}
+        />
+        <span className="text-sm">{suffix}</span>
+      </div>
+    </label>
+  );
+  return (
+    <Section title="Etsy & Trend Radar" icon="📡" right={<span className="chip">{etsyKey ? "🟢 key saved" : "🟡 no key yet"}</span>}>
+      <p className="mb-3 text-sm">
+        Your Etsy app's <b>keystring</b> and <b>shared secret</b> (Etsy → Your account → Developers → Your apps) let BinkSuite read live listings: trends, competitor
+        prices and your own shop. Read-only; it can't change anything on Etsy. Stored encrypted.
+      </p>
+      {etsyKey && <p className="mb-2 font-mono text-xs">••••{etsyKey.last4} · saved {timeAgo(etsyKey.updatedAt)}</p>}
+      <form
+        className="grid gap-2 sm:grid-cols-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          saveKey.mutate();
+        }}
+      >
+        <input className="input font-mono" autoComplete="off" placeholder="Keystring" value={keystring} onChange={(e) => setKeystring(e.target.value)} aria-label="Etsy keystring" />
+        <input className="input font-mono" type="password" autoComplete="off" placeholder="Shared secret" value={secret} onChange={(e) => setSecret(e.target.value)} aria-label="Etsy shared secret" />
+        <div className="flex gap-2 sm:col-span-2">
+          <button className="btn-primary" disabled={keystring.trim().length < 8 || secret.trim().length < 4 || saveKey.isPending}>
+            {etsyKey ? "Replace key" : "Save key"}
+          </button>
+          <button type="button" className="btn-soft" onClick={() => test.mutate()} disabled={test.isPending}>
+            {test.isPending ? "Testing…" : "Test connection"}
+          </button>
+        </div>
+      </form>
+      <ErrorNote error={saveKey.error} />
+      <label className="mt-3 block">
+        <span className="label">Your Etsy shop name (for Price Watch)</span>
+        <input className="input" defaultValue={s.radar.etsyShopName} placeholder="e.g. CosyPrintsShop" onBlur={(e) => e.target.value.trim() !== s.radar.etsyShopName && save.saveNow({ radar: { etsyShopName: e.target.value.trim() } })} />
+      </label>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {num("dailyIdeas", "Ideas each morning", "")}
+        {num("undercutPercent", "Undercut market by", "%")}
+        {num("priceTolerancePercent", "Alert when above market by", "%")}
+      </div>
+      <label className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
+        Send today's ideas to Scout automatically each morning
+        <Toggle checked={s.radar.autoDaily} onChange={(v) => save.saveNow({ radar: { autoDaily: v } })} label="Automatic daily ideas" />
+      </label>
+      <button className="btn-soft mt-3" onClick={() => watchNow.mutate()} disabled={watchNow.isPending}>
+        👀 Run Price Watch now
+      </button>
     </Section>
   );
 }

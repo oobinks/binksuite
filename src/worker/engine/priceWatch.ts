@@ -78,9 +78,9 @@ interface WatchState {
 }
 
 /** One Price Watch pass; spreads the day's checks over several runs to stay within limits. */
-export async function priceWatchTick(db: DB, settings: Settings, etsy: EtsyClient | null, now = new Date(), budget = 6): Promise<number> {
+export async function priceWatchTick(db: DB, settings: Settings, etsy: EtsyClient | null, now = new Date(), budget = 6, force = false): Promise<number> {
   const day = now.toISOString().slice(0, 10);
-  const state = (await kvGet<WatchState>(db, "priceWatch")) ?? null;
+  const state = force ? null : ((await kvGet<WatchState>(db, "priceWatch")) ?? null);
   const st: WatchState = state && state.day === day ? state : { day, productsDone: false, shopCursor: 0, shopDone: false, alerts: 0 };
   if (st.productsDone && (st.shopDone || !etsy || !settings.radar.etsyShopName)) return 0;
   let raised = 0;
