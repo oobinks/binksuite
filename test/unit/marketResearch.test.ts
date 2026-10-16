@@ -48,3 +48,19 @@ describe("real listing tidy-up", () => {
     expect(verdictFrom(9, true)).toBe("skip");
   });
 });
+
+import { tidyBoosters, boostedPrompt } from "../../src/worker/engine/agents/real";
+
+describe("idea boosters", () => {
+  it("always offers a slogan, tidies quotes and drops broken entries", () => {
+    const b = tidyBoosters([{ kind: "weird", title: "Twist", why: "w", artHint: "pastel" }, { kind: "slogan", title: "S", why: "w", slogans: [] }], "Frog teacher posters");
+    expect(b[0].kind).toBe("slogan");
+    expect(b[0].slogans![0]).toBe("Frog teacher posters");
+    expect(b.find((x) => x.title === "Twist")!.kind).toBe("art");
+    expect(b.some((x) => x.title === "S")).toBe(false);
+  });
+  it("weaves art boosters into prompts but never slogans", () => {
+    expect(boostedPrompt("a frog", [{ id: "1", kind: "art", title: "t", artHint: "pastel" }, { id: "2", kind: "slogan", title: "s", slogan: "Hop to it", artHint: "x" }])).toBe("a frog. Also: pastel");
+    expect(boostedPrompt("a frog", [])).toBe("a frog");
+  });
+});

@@ -60,7 +60,7 @@ export function DemoArt({ seed, palette, className = "", label }: { seed: number
   );
 }
 
-export function Mockup({ scene, seed, palette, imageKey }: { scene: string; seed: number; palette?: string[]; imageKey?: string | null }) {
+export function Mockup({ scene, seed, palette, imageKey, slogan }: { scene: string; seed: number; palette?: string[]; imageKey?: string | null; slogan?: string | null }) {
   const Art = ({ s, className }: { s: number; className: string }) =>
     imageKey ? <ArtImage imageKey={imageKey} className={className} /> : <DemoArt seed={s} palette={palette} className={className} />;
   const wall = scene === "desk" ? "#efe6da" : scene === "tablet" ? "#d9e2ec" : scene === "gallery" ? "#f4efe9" : "#e9e1d6";
@@ -80,7 +80,8 @@ export function Mockup({ scene, seed, palette, imageKey }: { scene: string; seed
         </div>
       ) : (
         <div className={`absolute ${scene === "desk" ? "inset-[8%_32%_30%]" : "inset-[10%_30%_18%]"} border-[6px] border-amber-900/80 bg-white p-[4%] shadow-xl`}>
-          <Art s={seed} className="h-full w-full" />
+          <Art s={seed} className={slogan ? "h-[82%] w-full" : "h-full w-full"} />
+          {slogan && <div className="truncate pt-[2%] text-center text-[clamp(6px,1.4vw,11px)] font-black text-ink">{slogan}</div>}
         </div>
       )}
       {scene === "desk" && <div className="absolute inset-x-0 bottom-0 h-[24%] bg-amber-800/70" />}

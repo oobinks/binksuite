@@ -11,10 +11,36 @@ export const PRINT_SIZES_REAL = ["A5", "A4", "A3", "US Letter", "8x10"] as const
 
 const AI_NOTE = "AI estimate from general knowledge. The free Cloudflare AI can't browse the web, so double-check big decisions on Etsy yourself.";
 
+/** An Analyst idea to make the product stronger, which you can switch on. */
+export interface Booster {
+  id: string;
+  kind: "slogan" | "art" | "bundle" | "listing";
+  title: string;
+  why: string;
+  /** How the art should change if chosen. */
+  artHint?: string;
+  /** What the listing should mention if chosen. */
+  listingHint?: string;
+  /** Slogan options (kind = slogan). */
+  slogans?: string[];
+}
+
+/** A booster you chose (slogan = the exact wording you picked/edited). */
+export interface ChosenBooster {
+  id: string;
+  kind: Booster["kind"];
+  title: string;
+  artHint?: string;
+  listingHint?: string;
+  slogan?: string;
+}
+
 interface ProductData {
   suggestion?: { idea: string; notes?: string };
   report?: MarketReport;
   brief?: Brief;
+  boosters?: ChosenBooster[];
+  slogan?: string;
   images?: ArtImage[];
   keptImages?: string[];
   listing?: { title: string; tags: string[]; description: string; designedBy: "seller" };
@@ -82,10 +108,24 @@ export function cleanKeywords(list: string[], max: number = ETSY_LIMITS.tagsMax)
   return out;
 }
 
+export interface LiveMarket {
+  keyword: string;
+  totalListings: number;
+  medianPricePence: number;
+  lowPricePence: number;
+  favsPerDay: number;
+  newListings30d: number;
+  scannedAt?: string | null;
+}
+
 export async function researchIdeaWithAi(ctx: RealContext, idea: string, notes?: string): Promise<MarketReport> {
+  const market = (ctx.product.data as { market?: LiveMarket }).market;
+  const marketLine = market
+    ? `Live Etsy data for "${market.keyword}": ${market.totalListings} active competing listings; new listings are getting ${market.favsPerDay} favourites per day; ${market.newListings30d} of the newest 100 were listed in the last 30 days; median price £${(market.medianPricePence / 100).toFixed(2)}, cheaper quarter at £${(market.lowPricePence / 100).toFixed(2)}. Base demand and competition scores on this.\n`
+    : "";
   const r = await ctx.ai.json({
     system: `${SHOP_CONTEXT} You are Scout, a market researcher. Score each 1-10. For competition, 10 means extremely crowded.`,
-    prompt: `Assess this product idea for the shop.\nIdea: ${idea}\n${notes ? `Owner's notes: ${notes}\n` : ""}Give: scores, a 1-2 sentence summary, exactly 3 reasons, risks (trademarks, seasonality, hard-to-make details), 3 specific angles to stand out, 8 Etsy search keywords (each under 20 characters), a typical price range in GBP for similar digital downloads, and when it sells best.`,
+    prompt: `Assess this product idea for the shop.\nIdea: ${idea}\n${notes ? `Owner's notes: ${notes}\n` : ""}${marketLine}Give: scores, a 1-2 sentence summary, exactly 3 reasons, risks (trademarks, seasonality, hard-to-make details), 3 specific angles to stand out, 8 Etsy search keywords (each under 20 characters), a typical price range in GBP for similar digital downloads, and when it sells best.`,
     schema: reportSchema,
     jsonSchema: reportJsonSchema,
   });
@@ -99,8 +139,9 @@ export async function researchIdeaWithAi(ctx: RealContext, idea: string, notes?:
   const blocked = blockedTermsIn(`${idea} ${notes ?? ""}`, ctx.settings.blocklist);
   const risks = r.risks.slice(0, 5);
   if (blocked.length) risks.unshift(`Uses a protected name (${blocked.join(", ")}). Etsy can remove listings like this. Pick an unbranded version instead.`);
-  const lo = Math.max(99, Math.round(Math.min(r.priceLowGBP, r.priceHighGBP) * 100));
-  const hi = Math.max(lo + 100, Math.round(Math.max(r.priceLowGBP, r.priceHighGBP) * 100));
+  // Real Etsy prices beat the AI's guess whenever we have them.
+  const lo = market?.lowPricePence || Math.max(99, Math.round(Math.min(r.priceLowGBP, r.priceHighGBP) * 100));
+  const hi = market?.medianPricePence && market.medianPricePence > lo ? market.medianPricePence : Math.max(lo + 100, Math.round(Math.max(r.priceLowGBP, r.priceHighGBP) * 100));
   return {
     idea,
     verdict: verdictFrom(overall, blocked.length > 0),
@@ -113,7 +154,9 @@ export async function researchIdeaWithAi(ctx: RealContext, idea: string, notes?:
     keywords: cleanKeywords(r.keywords, 8),
     priceRangePence: [lo, hi],
     seasonality: r.seasonality.trim() || "Sells year-round.",
-    sources: AI_NOTE,
+    sources: market
+      ? `Live Etsy data (${market.totalListings.toLocaleString()} competing listings, checked ${market.scannedAt ? new Date(market.scannedAt).toLocaleDateString("en-GB") : "recently"}) plus AI judgement. Price range = cheaper quarter to median.`
+      : AI_NOTE,
   };
 }
 
@@ -152,7 +195,50 @@ const briefSchema = z.object({
   style: z.string(),
   palette: z.array(z.string()),
   imagePrompts: z.array(z.string()).min(1),
+  boosters: z
+    .array(
+      z.object({
+        kind: z.string(),
+        title: z.string(),
+        why: z.string(),
+        artHint: z.string().optional(),
+        listingHint: z.string().optional(),
+        slogans: z.array(z.string()).optional(),
+      }),
+    )
+    .default([]),
 });
+
+const BOOSTER_KINDS = ["slogan", "art", "bundle", "listing"] as const;
+
+/** Tidy the Analyst's booster ideas; always offer a slogan option. */
+export function tidyBoosters(raw: z.infer<typeof briefSchema>["boosters"], idea: string): Booster[] {
+  const out: Booster[] = [];
+  for (const b of raw.slice(0, 6)) {
+    const kind = (BOOSTER_KINDS as readonly string[]).includes(b.kind) ? (b.kind as Booster["kind"]) : "art";
+    const slogans = (b.slogans ?? []).map((x) => x.replace(/^["“']|["”']$/g, "").trim()).filter((x) => x && x.length <= 60).slice(0, 4);
+    if (kind === "slogan" && !slogans.length) continue;
+    out.push({
+      id: `b${out.length + 1}`,
+      kind,
+      title: b.title.trim().slice(0, 80),
+      why: b.why.trim().slice(0, 200),
+      artHint: b.artHint?.trim().slice(0, 300) || undefined,
+      listingHint: b.listingHint?.trim().slice(0, 300) || undefined,
+      slogans: kind === "slogan" ? slogans : undefined,
+    });
+  }
+  if (!out.some((b) => b.kind === "slogan")) {
+    out.unshift({
+      id: "b0",
+      kind: "slogan",
+      title: "Add a catchy slogan",
+      why: "A short line of text makes prints more giftable and easier to find in search.",
+      slogans: [idea.split(/\s+/).slice(0, 4).join(" ")],
+    });
+  }
+  return out;
+}
 
 async function writeBrief(ctx: RealContext): Promise<StepResult> {
   const data = d(ctx.product);
@@ -160,7 +246,7 @@ async function writeBrief(ctx: RealContext): Promise<StepResult> {
   const report = data.report;
   const b = await ctx.ai.json({
     system: `${SHOP_CONTEXT} You are Analyst. Turn an approved idea into a product brief and image-generation prompts.`,
-    prompt: `Idea: ${idea}\n${data.suggestion?.notes ? `Owner's notes: ${data.suggestion.notes}\n` : ""}${report ? `Scout's angles: ${report.angles.join("; ")}\n` : ""}Write: a short product title (under 50 characters), the target audience, the art style, a palette of 5 hex colours, and ${IMAGES_PER_PRODUCT} different image prompts for a text-to-image model. Prompts must describe printable artwork only: no words, letters or watermarks in the image, no brands or characters, plain composition suitable for framing.`,
+    prompt: `Idea: ${idea}\n${data.suggestion?.notes ? `Owner's notes: ${data.suggestion.notes}\n` : ""}${report ? `Scout's angles: ${report.angles.join("; ")}\n` : ""}Write: a short product title (under 50 characters), the target audience, the art style, a palette of 5 hex colours, and ${IMAGES_PER_PRODUCT} different image prompts for a text-to-image model. Prompts must describe printable artwork only: no words, letters or watermarks in the image, no brands or characters, plain composition suitable for framing.\nThen think like a shop owner who wants this to outsell competitors: suggest 3-5 "boosters", creative improvements the owner can switch on. Always include one kind "slogan" with 3 short catchy slogan options (under 40 characters, original, no song lyrics or trademarks). Other kinds: "art" (a style/colour/composition twist, with artHint describing how the image should change), "bundle" (e.g. matching set, multiple colourways, extra sizes, with listingHint), "listing" (e.g. personalisation offer, gift angle, with listingHint). Each with a one-sentence why.`,
     schema: briefSchema,
     jsonSchema: {
       type: "object",
@@ -170,10 +256,27 @@ async function writeBrief(ctx: RealContext): Promise<StepResult> {
         style: { type: "string" },
         palette: { type: "array", items: { type: "string" } },
         imagePrompts: { type: "array", items: { type: "string" } },
+        boosters: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["slogan", "art", "bundle", "listing"] },
+              title: { type: "string" },
+              why: { type: "string" },
+              artHint: { type: "string" },
+              listingHint: { type: "string" },
+              slogans: { type: "array", items: { type: "string" } },
+            },
+            required: ["kind", "title", "why"],
+          },
+        },
       },
-      required: ["productTitle", "audience", "style", "palette", "imagePrompts"],
+      required: ["productTitle", "audience", "style", "palette", "imagePrompts", "boosters"],
     },
+    maxTokens: 1600,
   });
+  const boosters = tidyBoosters(b.boosters, idea);
   const brief: Brief = {
     productTitle: b.productTitle.trim().slice(0, 60) || idea,
     audience: b.audience.trim(),
@@ -184,11 +287,35 @@ async function writeBrief(ctx: RealContext): Promise<StepResult> {
     ),
   };
   return {
-    output: { productType: "Digital printable", ...brief, sizes: PRINT_SIZES_REAL },
+    output: { productType: "Digital printable", ...brief, sizes: PRINT_SIZES_REAL, boosters },
     productData: { brief, palette: brief.palette, audience: brief.audience },
     productTitle: brief.productTitle,
-    log: `Brief ready for “${brief.productTitle}” → off to the Studio`,
+    log: `Brief ready for “${brief.productTitle}”, with ${boosters.length} ideas to make it stronger`,
   };
+}
+
+/** You approve the brief with the boosters you like (and any idea of your own). */
+function chooseBoosters(task: TaskRow, _product: ProductRow, data: Record<string, unknown> | undefined) {
+  const offered = ((task.output as { boosters?: Booster[] } | null)?.boosters ?? []) as Booster[];
+  const picks = Array.isArray(data?.chosen) ? (data!.chosen as { id?: unknown; slogan?: unknown }[]) : [];
+  const chosen: ChosenBooster[] = [];
+  for (const p of picks) {
+    const b = offered.find((o) => o.id === p.id);
+    if (!b) continue;
+    const slogan = b.kind === "slogan" ? String(p.slogan ?? b.slogans?.[0] ?? "").trim().slice(0, 60) : undefined;
+    if (b.kind === "slogan" && !slogan) continue;
+    chosen.push({ id: b.id, kind: b.kind, title: b.title, artHint: b.artHint, listingHint: b.listingHint, slogan });
+  }
+  const custom = typeof data?.custom === "string" ? data.custom.trim().slice(0, 300) : "";
+  if (custom) chosen.push({ id: "own", kind: "art", title: "Your idea", artHint: custom, listingHint: custom });
+  const slogan = chosen.find((c) => c.kind === "slogan")?.slogan;
+  return { productData: { boosters: chosen, slogan: slogan ?? null } };
+}
+
+/** Image prompt with your chosen art boosters woven in. Slogans are added as real text by the Printer instead. */
+export function boostedPrompt(base: string, boosters: ChosenBooster[] | undefined): string {
+  const hints = (boosters ?? []).filter((b) => b.artHint && b.kind !== "slogan").map((b) => b.artHint);
+  return hints.length ? `${base}. Also: ${hints.join("; ")}` : base;
 }
 
 // ───────────── Designer: generate the art, one image per tick ─────────────
@@ -198,7 +325,7 @@ async function generateArt(ctx: RealContext): Promise<StepResult | PartialResult
   if (!brief) throw new Error("No brief yet — the Analyst needs to finish first.");
   const done = ((ctx.task.output as { images?: ArtImage[] } | null)?.images ?? []).slice();
   const i = done.length;
-  const prompt = brief.imagePrompts[i % brief.imagePrompts.length];
+  const prompt = boostedPrompt(brief.imagePrompts[i % brief.imagePrompts.length], d(ctx.product).boosters);
   const b64 = await ctx.ai.image(prompt);
   // Stored as base64 text: decoding happens in your browser, which keeps the
   // Worker well inside the free plan's 10 ms CPU limit.
@@ -236,7 +363,7 @@ function keepImages(task: TaskRow, product: ProductRow, data: Record<string, unk
 async function planPrint(ctx: RealContext): Promise<StepResult> {
   const kept = d(ctx.product).keptImages ?? [];
   return {
-    output: { sizes: PRINT_SIZES_REAL, images: kept, dpi: 300, buildInBrowser: true },
+    output: { sizes: PRINT_SIZES_REAL, images: kept, dpi: 300, buildInBrowser: true, slogan: d(ctx.product).slogan ?? null },
     log: `Ready to build ${PRINT_SIZES_REAL.length} print sizes from ${kept.length} image(s). Tap to build on your device`,
   };
 }
@@ -254,7 +381,8 @@ function acceptPrintFiles(_task: TaskRow, product: ProductRow, data: Record<stri
 async function styleMockups(ctx: RealContext): Promise<StepResult> {
   const kept = d(ctx.product).keptImages ?? [];
   const scenes = ["frame", "desk", "tablet", "gallery"];
-  const mockups = scenes.map((scene, i) => ({ scene, imageKey: kept[i % Math.max(1, kept.length)] ?? null, seed: ctx.product.seed * 10 + i }));
+  const slogan = d(ctx.product).slogan ?? null;
+  const mockups = scenes.map((scene, i) => ({ scene, imageKey: kept[i % Math.max(1, kept.length)] ?? null, seed: ctx.product.seed * 10 + i, slogan }));
   return { output: { mockups }, productData: { mockups }, log: `Staged ${mockups.length} mockups with your art` };
 }
 
@@ -283,7 +411,7 @@ async function writeListing(ctx: RealContext): Promise<StepResult> {
   const keywords = [...(data.report?.keywords ?? []), ...cleanKeywords(ctx.product.niche.split(/\s+/))];
   const r = await ctx.ai.json({
     system: `${SHOP_CONTEXT} You are Copywriter. Tone of voice: ${ctx.settings.toneOfVoice}`,
-    prompt: `Write an Etsy listing for a digital printable.\nProduct: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${brief ? `Audience: ${brief.audience}\nStyle: ${brief.style}\n` : ""}Sizes included: ${PRINT_SIZES_REAL.join(", ")} at 300 DPI (PDF).\nUseful keywords: ${keywords.join(", ")}\nRules: title under 140 characters, front-load the main keyword, no brand or character names. Exactly 13 tags, each under 20 characters. Description: first sentence must say it was created with AI assistance; then what it is, what's included, how to print, and a friendly note. No emojis in the title.`,
+    prompt: `Write an Etsy listing for a digital printable.\nProduct: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${brief ? `Audience: ${brief.audience}\nStyle: ${brief.style}\n` : ""}${data.slogan ? `The print features the slogan: "${data.slogan}"\n` : ""}${(data.boosters ?? []).filter((b) => b.listingHint).map((b) => `Highlight: ${b.listingHint}\n`).join("")}Sizes included: ${PRINT_SIZES_REAL.join(", ")} at 300 DPI (PDF).\nUseful keywords: ${keywords.join(", ")}\nRules: title under 140 characters, front-load the main keyword, no brand or character names. Exactly 13 tags, each under 20 characters. Description: first sentence must say it was created with AI assistance; then what it is, what's included, how to print, and a friendly note. No emojis in the title.`,
     schema: z.object({ title: z.string(), tags: z.array(z.string()), description: z.string() }),
     jsonSchema: {
       type: "object",
@@ -310,7 +438,8 @@ export const REAL_STEPS: Record<string, Partial<StepDef>> = {
       };
     },
   },
-  brief: { realSeconds: 15, real: writeBrief },
+  // Analyst pitches boosters, so you get a say before any art is made.
+  brief: { realSeconds: 20, real: writeBrief, needsApproval: (p) => !p.demo, onApprove: (t, p, data) => (p.demo ? {} : chooseBoosters(t, p, data)) },
   images: { realSeconds: 40, real: generateArt },
   inspect: { realSeconds: 1, real: inspectArt, onApprove: keepImages },
   print_files: {

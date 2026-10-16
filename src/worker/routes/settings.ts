@@ -18,7 +18,7 @@ const R2_FREE_BYTES = 10 * 1024 ** 3;
 export const settingsRoutes = newApp()
   .get("/settings", (c) => c.json(c.get("settings")))
   .put("/settings", async (c) => {
-    const patch = await body(c, settingsSchema.partial().extend({ fees: feeSettingsSchema.partial().optional(), ai: settingsSchema.shape.ai.partial().optional() }));
+    const patch = await body(c, settingsSchema.partial().extend({ fees: feeSettingsSchema.partial().optional(), ai: settingsSchema.shape.ai.partial().optional(), radar: settingsSchema.shape.radar.partial().optional() }));
     const db = c.get("db");
     const before = c.get("settings");
     const merged: Settings = {
@@ -27,6 +27,7 @@ export const settingsRoutes = newApp()
       fees: { ...before.fees, ...(patch.fees ?? {}) },
       agentsEnabled: { ...before.agentsEnabled, ...(patch.agentsEnabled ?? {}) },
       ai: { ...before.ai, ...(patch.ai ?? {}) },
+      radar: { ...before.radar, ...(patch.radar ?? {}) },
     };
     const saved = await saveSettings(db, merged);
     await recordEvent(db, "settings_saved", saved.demoMode);

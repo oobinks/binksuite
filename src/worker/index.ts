@@ -9,6 +9,7 @@ import { hqRoutes } from "./routes/hq";
 import { financeRoutes } from "./routes/finance";
 import { settingsRoutes } from "./routes/settings";
 import { fileRoutes } from "./routes/files";
+import { radarRoutes } from "./routes/radar";
 import { runCron } from "./cron";
 
 const app = newApp();
@@ -51,6 +52,7 @@ app.route("/api", hqRoutes);
 app.route("/api/finance", financeRoutes);
 app.route("/api", settingsRoutes);
 app.route("/api", fileRoutes);
+app.route("/api", radarRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

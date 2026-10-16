@@ -23,9 +23,16 @@ function toJpeg(canvas: HTMLCanvasElement, quality = 0.9): Promise<ArrayBuffer> 
   );
 }
 
-/** Draw the art centred on a white page with a small border (fits any paper shape). */
-function renderPage(img: HTMLImageElement, w: number, h: number): HTMLCanvasElement {
-  const c = document.createElement("canvas");
+const SLOGAN_FONT = "Nunito";
+const SLOGAN_INK = "#3b2f2a";
+
+/**
+ * Draw the art centred on a white page with a small border (fits any paper shape).
+ * With a slogan, the art moves up and the slogan is set underneath as real text,
+ * so it's always spelled exactly as you typed it.
+ */
+export function renderPage(img: HTMLImageElement, w: number, h: number, slogan?: string | null, canvas?: HTMLCanvasElement): HTMLCanvasElement {
+  const c = canvas ?? document.createElement("canvas");
   c.width = w;
   c.height = h;
   const ctx = c.getContext("2d")!;
@@ -34,11 +41,37 @@ function renderPage(img: HTMLImageElement, w: number, h: number): HTMLCanvasElem
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   const margin = Math.round(Math.min(w, h) * 0.05);
-  const scale = Math.min((w - margin * 2) / img.naturalWidth, (h - margin * 2) / img.naturalHeight);
+  const text = slogan?.trim();
+  const band = text ? Math.round(h * 0.16) : 0;
+  const scale = Math.min((w - margin * 2) / img.naturalWidth, (h - margin * 2 - band) / img.naturalHeight);
   const dw = img.naturalWidth * scale;
   const dh = img.naturalHeight * scale;
-  ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  const top = (h - band - dh) / 2;
+  ctx.drawImage(img, (w - dw) / 2, top, dw, dh);
+  if (text) {
+    // Biggest size that fits the width, capped so short slogans don't shout.
+    let size = Math.round(band * 0.42);
+    const maxWidth = dw * 0.95;
+    ctx.font = `900 ${size}px ${SLOGAN_FONT}, sans-serif`;
+    while (ctx.measureText(text).width > maxWidth && size > 8) {
+      size -= Math.max(1, Math.round(size * 0.05));
+      ctx.font = `900 ${size}px ${SLOGAN_FONT}, sans-serif`;
+    }
+    ctx.fillStyle = SLOGAN_INK;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, w / 2, top + dh + (h - (top + dh) - margin) / 2);
+  }
   return c;
+}
+
+/** Make sure the slogan font is ready before drawing with it. */
+export async function loadSloganFont() {
+  try {
+    await document.fonts.load(`900 64px ${SLOGAN_FONT}`);
+  } catch {
+    /* falls back to the system sans-serif */
+  }
 }
 
 export interface PrintPack {
@@ -52,6 +85,7 @@ export async function buildPrintPack(
   title: string,
   imageKeys: string[],
   onProgress: (step: string, fraction: number) => void,
+  slogan?: string | null,
 ): Promise<PrintPack> {
   if (!imageKeys.length) throw new Error("There are no kept images to print.");
   const base = slug(title);
@@ -59,6 +93,7 @@ export async function buildPrintPack(
   const files: string[] = [];
 
   onProgress("Loading your art…", 0.02);
+  if (slogan) await loadSloganFont();
   const images = await Promise.all(imageKeys.map(async (k) => loadImg(await loadImageSrc(k))));
 
   // Originals, handy as listing photos.
@@ -81,7 +116,7 @@ export async function buildPrintPack(
     pdf.setCreator("BinkSuite");
     for (const img of images) {
       onProgress(`Printing ${size.name} at ${dpi} DPI…`, 0.05 + (0.85 * done) / total);
-      const jpg = await pdf.embedJpg(await toJpeg(renderPage(img, w, h)));
+      const jpg = await pdf.embedJpg(await toJpeg(renderPage(img, w, h, slogan)));
       // PDF pages are measured in points (72 per inch).
       const page = pdf.addPage([size.inches[0] * 72, size.inches[1] * 72]);
       page.drawImage(jpg, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });

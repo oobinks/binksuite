@@ -7,6 +7,8 @@ import { intBetween, pick } from "../../../shared/rng";
 import { DEMO_NICHES, INSPECTOR_ISSUES, MOCKUP_SCENES, PRINT_SIZES, TRICKY_PHRASE } from "./demoContent";
 import type { ProductRow, StepDef } from "./types";
 import { nicheFromSuggestion, researchIdea, type MarketReport } from "./marketResearch";
+import { friendlyPrice, priceStats, type CompetitorPrice } from "../../../shared/pricing";
+import { undercutPrice } from "../../../shared/market";
 import { REAL_STEPS } from "./real";
 
 export type { StepDef } from "./types";
@@ -191,20 +193,48 @@ export const STEPS: StepDef[] = [
     durationMs: [5_000, 8_000],
     estimatedCostPence: 0,
     title: (p) => `Set price: ${p.title}`,
-    run: ({ settings, rng }) => {
+    run: ({ product, settings, rng }) => {
       const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
-      // Round up to a friendly .49/.99 price above the floor.
-      const pounds = Math.max(Math.ceil(floor / 100), intBetween(rng, 3, 7));
-      const pricePence = pounds * 100 + (rng() < 0.5 ? 49 : 99) - 100;
-      const finalPrice = pricePence < floor ? pricePence + 50 : pricePence;
+      const d = product.data as {
+        report?: MarketReport;
+        competitors?: CompetitorPrice[];
+        market?: { medianPricePence: number; totalListings: number };
+        listing?: { tags?: string[] };
+      };
+      // Undercut the market: your own competitor checks first, then live Etsy data,
+      // then Scout's estimate. Never below the price that clears your minimum profit.
+      const yours = priceStats((d.competitors ?? []).map((c) => c.pricePence));
+      const range = d.report?.priceRangePence;
+      const median = yours?.medianPence ?? (d.market?.medianPricePence || (range ? range[1] : 0));
+      const finalPrice = median
+        ? undercutPrice(median, settings.radar.undercutPercent, floor)
+        : friendlyPrice(Math.max(floor, intBetween(rng, 3, 7) * 100 - 2));
       const fees = calculateFees({ pricePence: finalPrice, costPence: 10 }, settings.fees);
       return {
-        output: { pricePence: finalPrice, floorPence: floor, netPence: fees.netPence, feesPence: fees.totalFeesPence, minProfitPence: settings.minProfitPence },
+        output: {
+          pricePence: finalPrice,
+          floorPence: floor,
+          netPence: fees.netPence,
+          feesPence: fees.totalFeesPence,
+          minProfitPence: settings.minProfitPence,
+          marketRangePence: range ?? null,
+          marketMedianPence: median || null,
+          undercutPercent: settings.radar.undercutPercent,
+          marketSource: yours ? "your checks" : d.market?.medianPricePence ? "live Etsy data" : range ? "Scout's estimate" : null,
+          searchQuery: (d.report?.keywords?.[0] ?? product.niche).slice(0, 80),
+        },
         pricePence: finalPrice,
         log: `Priced at £${(finalPrice / 100).toFixed(2)} (net £${(fees.netPence / 100).toFixed(2)})`,
       };
     },
     next: "compliance_check",
+    // You can set your own price when approving.
+    onApprove: (_t, _p, data) => {
+      if (data?.pricePence === undefined) return {};
+      const price = Number(data.pricePence);
+      if (!Number.isInteger(price) || price < 20 || price > 100_000_00) return { error: "That price doesn't look right." };
+      return { pricePence: price };
+    },
   },
   {
     kind: "compliance_check",
@@ -251,6 +281,27 @@ export const STEPS: StepDef[] = [
     next: null,
   },
 ];
+
+// 👀 Price Watch alerts live in the Listing Office but aren't a pipeline step.
+STEPS.push({
+  kind: "price_watch",
+  agent: "pricer",
+  room: "listing",
+  needsApproval: true,
+  approvalKind: "review",
+  durationMs: [0, 0],
+  estimatedCostPence: 0,
+  standalone: true,
+  title: (p) => `Price check: ${p.title}`,
+  run: ({ task }) => ({ output: task.output ?? {}, log: "Price check ready" }),
+  next: null,
+  onApprove: (_t, _p, data) => {
+    if (data?.pricePence === undefined) return {};
+    const price = Number(data.pricePence);
+    if (!Number.isInteger(price) || price < 20 || price > 100_000_00) return { error: "That price doesn't look right." };
+    return { pricePence: price };
+  },
+});
 
 // Phase 2: upgrade steps with their real (Workers AI) versions for real products.
 for (const step of STEPS) Object.assign(step, REAL_STEPS[step.kind] ?? {});

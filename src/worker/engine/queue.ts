@@ -95,7 +95,14 @@ export async function spawnDemoProduct(db: DB, rng: () => number = Math.random):
 }
 
 /** You suggest an idea; Scout researches it next (suggestions jump the queue). */
-export async function suggestIdea(db: DB, settings: Settings, idea: string, notes?: string, realAi = false): Promise<ProductRow> {
+export async function suggestIdea(
+  db: DB,
+  settings: Settings,
+  idea: string,
+  notes?: string,
+  realAi = false,
+  extra: { market?: Record<string, unknown> | null; trendKeyword?: string; origin?: "you" | "daily" | "radar" } = {},
+): Promise<ProductRow> {
   const now = nowIso();
   const clean = idea.trim().replace(/\s+/g, " ");
   const product: ProductRow = {
@@ -105,7 +112,11 @@ export async function suggestIdea(db: DB, settings: Settings, idea: string, note
     stage: "research",
     seed: Math.floor(Math.random() * 1e6),
     pricePence: null,
-    data: { suggestion: { idea: clean, notes: notes?.trim() || undefined } },
+    data: {
+      suggestion: { idea: clean, notes: notes?.trim() || undefined, origin: extra.origin ?? "you" },
+      ...(extra.market ? { market: extra.market } : {}),
+      ...(extra.trendKeyword ? { trendKeyword: extra.trendKeyword } : {}),
+    },
     // With real AI your idea is a real product. Without it, in demo mode, it's simulated.
     demo: !realAi && settings.demoMode,
     createdAt: now,
@@ -113,7 +124,7 @@ export async function suggestIdea(db: DB, settings: Settings, idea: string, note
   };
   await db.insert(products).values(product);
   await createTask(db, product, FIRST_STEP, { demo: product.demo, input: { suggestion: true } });
-  await logActivity(db, "scout", "research", "new", `💡 You suggested “${clean}”. Scout is on it!`, product.demo);
+  if ((extra.origin ?? "you") === "you") await logActivity(db, "scout", "research", "new", `💡 You suggested “${clean}”. Scout is on it!`, product.demo);
   return product;
 }
 
@@ -127,11 +138,12 @@ export async function listSuggestions(db: DB, demoMode: boolean) {
     .limit(20)
     .all();
   return rows.map((p) => {
-    const d = p.data as { suggestion: { idea: string; notes?: string }; report?: { verdict: string; overall: number }; dropped?: boolean };
+    const d = p.data as { suggestion: { idea: string; notes?: string; origin?: string }; report?: { verdict: string; overall: number }; dropped?: boolean };
     return {
       productId: p.id,
       idea: d.suggestion.idea,
       notes: d.suggestion.notes ?? null,
+      origin: d.suggestion.origin ?? "you",
       stage: d.dropped ? "dropped" : p.stage,
       verdict: d.report?.verdict ?? null,
       overall: d.report?.overall ?? null,
@@ -433,15 +445,16 @@ export async function approveTask(db: DB, id: string, settings: Settings, note?:
   if (t.state !== "needs_approval") throw new EngineError("That task isn't waiting for approval.");
   const refusal = step.canApprove?.(t, note);
   if (refusal) throw new EngineError(refusal);
+  if (step.standalone) return approveStandalone(db, t, step, settings, note, data);
   const product = await getProduct(db, t.productId);
   const decision = step.onApprove?.(t, product, data);
   if (decision?.error) throw new EngineError(decision.error);
   const now = new Date();
   await transition(db, t, "approve", { note: note ?? null });
-  if (decision?.productData && Object.keys(decision.productData).length) {
+  if ((decision?.productData && Object.keys(decision.productData).length) || decision?.pricePence) {
     await db
       .update(products)
-      .set({ data: { ...product.data, ...decision.productData }, updatedAt: nowIso(now) })
+      .set({ data: { ...product.data, ...(decision.productData ?? {}) }, pricePence: decision.pricePence ?? product.pricePence, updatedAt: nowIso(now) })
       .where(eq(products.id, product.id));
   }
   await decideApproval(db, t.id, "approved", note);
@@ -458,10 +471,27 @@ export async function approveTask(db: DB, id: string, settings: Settings, note?:
   return getTask(db, id);
 }
 
+/** Alerts like Price Watch: approving closes them (and records your new price if you gave one). */
+async function approveStandalone(db: DB, t: TaskRow, step: StepDef, settings: Settings, note?: string, data?: Record<string, unknown>) {
+  const product = t.productId ? await db.select().from(products).where(eq(products.id, t.productId)).get() : undefined;
+  const decision = product ? step.onApprove?.(t, product, data) : step.onApprove?.(t, { data: {} } as ProductRow, data);
+  if (decision?.error) throw new EngineError(decision.error);
+  await transition(db, t, "approve", { note: note ?? null });
+  await decideApproval(db, t.id, "approved", note);
+  if (product && decision?.pricePence) {
+    await db.update(products).set({ pricePence: decision.pricePence, updatedAt: nowIso() }).where(eq(products.id, product.id));
+  }
+  await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "approved", `You sorted: ${t.title}${decision?.pricePence ? ` (now £${(decision.pricePence / 100).toFixed(2)})` : ""}`, t.demo);
+  await recordEvent(db, "task_approved", t.demo);
+  await awardXp(db, XP.approveTask, `Sorted: ${t.title}`, t.demo, settings.demoMode);
+  return getTask(db, t.id);
+}
+
 export async function rejectTask(db: DB, id: string, note: string) {
   const t = await getTask(db, id);
   const step = STEP_BY_KIND[t.kind];
   if (t.state !== "needs_approval") throw new EngineError("That task isn't waiting for approval.");
+  if (step.standalone) return dropTask(db, id, note || "Ignored");
   await decideApproval(db, t.id, "rejected", note);
   if (step.rejectTo) {
     await transition(db, t, "send_back", { note });

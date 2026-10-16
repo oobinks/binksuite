@@ -13,6 +13,7 @@ import { TaskBoard } from "./shared/TaskBoard";
 import { ReviewModal } from "./shared/ReviewModal";
 import { ComingSoon } from "./shared/ComingSoon";
 import { SuggestionBox } from "./research/SuggestionBox";
+import { TrendRadar } from "./research/TrendRadar";
 import { darkFloor } from "../hq/HQMap";
 
 /** Rooms whose agents do real work for real products in Phase 2. */
@@ -87,6 +88,7 @@ function PipelineRoom({ roomId }: { roomId: RoomId }) {
   const agents = agentsInRoom(roomId);
   return (
     <>
+      {roomId === "research" && snap && <TrendRadar settings={snap.settings} />}
       {roomId === "research" && <SuggestionBox tasks={data?.tasks ?? []} onOpen={setOpen} aiReady={!!snap?.aiReady} />}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {agents.map((a) => (
