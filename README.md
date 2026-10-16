@@ -71,11 +71,12 @@ stateDiagram-v2
 
 The rules live in `src/shared/tasks.ts`, and the engine refuses any other move. Anything that publishes, sends, overspends or deletes creates an `approvals` record and only happens after you tap Approve.
 
-## Phase 1: what's real and what's demo
+## What's real and what's demo
 
 | Real now | Demo (real AI in later phases) |
 |---|---|
-| 💡 Suggestion box in the Research Lab (your ideas jump the queue) | Scout's market-research report on your idea |
+| 🤖 **Real AI for your ideas** (free Cloudflare Workers AI): Scout's report, ✨ idea brainstorm, Analyst brief, Designer art, Copywriter listing | Demo products the simulator invents (they stay pretend) |
+| 🖨️ Printer builds real 300 DPI PDFs + ZIP on your device; download from the Launch Pad | |
 | Login, Key Vault, settings, export | Agent output in Research, Studio, Mockups, Listing, Compliance |
 | Fee calculator, ledger, charts, CSV, trading-allowance tracker | Demo sales trickling in for demo products |
 | Task queue, hand-offs, XP, levels, quests, achievements | Demo art (drawn in your browser from a seed, no image API) |

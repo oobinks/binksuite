@@ -1,6 +1,7 @@
 // The demo image provider's "art": a deterministic, cosy SVG drawn from a seed.
 // Real images (Phase 2) come from R2 instead.
 import { mulberry32, pick } from "../../shared/rng";
+import { ArtImage } from "./ArtImage";
 
 const PALETTES = [
   ["#c8643b", "#e9a96b", "#7a5c3e", "#f3dcc0", "#5b6b3a"],
@@ -59,25 +60,27 @@ export function DemoArt({ seed, palette, className = "", label }: { seed: number
   );
 }
 
-export function Mockup({ scene, seed, palette }: { scene: string; seed: number; palette?: string[] }) {
+export function Mockup({ scene, seed, palette, imageKey }: { scene: string; seed: number; palette?: string[]; imageKey?: string | null }) {
+  const Art = ({ s, className }: { s: number; className: string }) =>
+    imageKey ? <ArtImage imageKey={imageKey} className={className} /> : <DemoArt seed={s} palette={palette} className={className} />;
   const wall = scene === "desk" ? "#efe6da" : scene === "tablet" ? "#d9e2ec" : scene === "gallery" ? "#f4efe9" : "#e9e1d6";
   return (
     <div className="relative aspect-[4/3] overflow-hidden rounded-xl" style={{ background: wall }}>
       {scene === "tablet" ? (
         <div className="absolute inset-[14%_22%] rounded-[10px] bg-stone-800 p-1.5 shadow-lg">
-          <DemoArt seed={seed} palette={palette} className="h-full w-full rounded-md object-cover" />
+          <Art s={seed} className="h-full w-full rounded-md object-cover" />
         </div>
       ) : scene === "gallery" ? (
         <div className="absolute inset-[12%_10%] flex items-center justify-center gap-[5%]">
           {[0, 1, 2].map((i) => (
             <div key={i} className="h-[80%] w-[28%] border-4 border-stone-700 bg-white p-[3%] shadow-md">
-              <DemoArt seed={seed + i} palette={palette} className="h-full w-full" />
+              <Art s={seed + i} className="h-full w-full" />
             </div>
           ))}
         </div>
       ) : (
         <div className={`absolute ${scene === "desk" ? "inset-[8%_32%_30%]" : "inset-[10%_30%_18%]"} border-[6px] border-amber-900/80 bg-white p-[4%] shadow-xl`}>
-          <DemoArt seed={seed} palette={palette} className="h-full w-full" />
+          <Art s={seed} className="h-full w-full" />
         </div>
       )}
       {scene === "desk" && <div className="absolute inset-x-0 bottom-0 h-[24%] bg-amber-800/70" />}

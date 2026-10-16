@@ -15,6 +15,9 @@ import { ComingSoon } from "./shared/ComingSoon";
 import { SuggestionBox } from "./research/SuggestionBox";
 import { darkFloor } from "../hq/HQMap";
 
+/** Rooms whose agents do real work for real products in Phase 2. */
+const REAL_AI_ROOMS: RoomId[] = ["research", "studio", "mockups", "listing", "compliance", "launch"];
+
 // Charts are heavy — only load them when you open the vault.
 const FinanceRoom = lazy(() => import("./finance/FinanceRoom").then((m) => ({ default: m.FinanceRoom })));
 
@@ -50,7 +53,11 @@ export function RoomPage() {
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             {locked && <span className="chip bg-ink px-3 py-1 text-cream">🔒 Unlocks at Lv {room.unlockLevel}</span>}
-            {room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🎮 Demo agents · real AI in Phase {room.phase}</span>}
+            {room.demoInteractive && snap?.aiReady && REAL_AI_ROOMS.includes(room.id) ? (
+              <span className="chip bg-sky-100 px-3 py-1 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100">🤖 Real AI (free) for your ideas · demo products stay pretend</span>
+            ) : (
+              room.demoInteractive && <span className="chip bg-honey/30 px-3 py-1 text-amber-900 dark:text-amber-100">🎮 Demo agents · real AI in Phase {room.phase}</span>
+            )}
             {room.phase === 1 && <span className="chip bg-mint/25 px-3 py-1 text-emerald-900 dark:text-emerald-100">✅ Live now</span>}
           </div>
         </div>
@@ -88,7 +95,7 @@ function PipelineRoom({ roomId, locked }: { roomId: RoomId; locked: boolean }) {
           🔒 This room opens at <b>Lv {ROOM_BY_ID[roomId].unlockLevel}</b>. Parcels waiting here will start moving as soon as you level up — approve tasks and claim quests to earn XP.
         </div>
       )}
-      {roomId === "research" && !locked && <SuggestionBox tasks={data?.tasks ?? []} onOpen={setOpen} />}
+      {roomId === "research" && !locked && <SuggestionBox tasks={data?.tasks ?? []} onOpen={setOpen} aiReady={!!snap?.aiReady} />}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {agents.map((a) => (
           <AgentCard key={a.id} id={a.id} state={snap?.agents.find((s) => s.id === a.id)} />

@@ -4,6 +4,8 @@ export interface Env {
   ASSETS: Fetcher;
   /** Workers AI — free daily allowance on every Cloudflare account. */
   AI?: Ai;
+  /** Local testing only: "1" swaps in a stand-in AI (see providers/fakeAi.ts). */
+  FAKE_AI?: string;
   /** Signs the login cookie. Set as a Cloudflare secret. */
   SESSION_SECRET?: string;
   /** Encrypts Key Vault entries. Set as a Cloudflare secret. */

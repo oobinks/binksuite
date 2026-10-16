@@ -23,6 +23,7 @@ const build = {
 };
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), cloudflare()],
+  // BS_OFFLINE=1 runs locally without Cloudflare's remote AI binding (no login needed).
+  plugins: [react(), tailwindcss(), cloudflare({ remoteBindings: !process.env.BS_OFFLINE })],
   define: { __BUILD_INFO__: JSON.stringify(build) },
 });
