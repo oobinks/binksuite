@@ -1,17 +1,19 @@
 // Printer: builds the real print pack on your device, then you approve it.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReviewDef } from "../shared/types";
 import { ArtImage } from "../../components/ArtImage";
 import { ErrorNote, ProgressBar } from "../../components/ui";
 import { pixelsFor, PRINT_SIZES } from "../../lib/printSizes";
+import { loadImageSrc } from "../../lib/files";
 import type { PrintPack } from "../../lib/print";
 
 export const printReview: ReviewDef = {
   approveLabel: "👍 Files look good → Mockups",
   rejectLabel: "🔁 Start again",
   Body: ({ task, setReady, setData }) => {
-    const out = task.output as { images?: string[]; files?: { name: string }[] } | null;
+    const out = task.output as { images?: string[]; slogan?: string | null } | null;
     const keys = out?.images ?? [];
+    const [slogan, setSlogan] = useState(out?.slogan ?? "");
     const [step, setStep] = useState<{ label: string; f: number } | null>(null);
     const [pack, setPack] = useState<PrintPack | null>(null);
     const [error, setError] = useState<unknown>(null);
@@ -27,7 +29,7 @@ export const printReview: ReviewDef = {
       setPack(null);
       try {
         const { buildPrintPack } = await import("../../lib/print"); // PDF + ZIP tools load only when needed
-        const p = await buildPrintPack(task.productId!, task.productTitle, keys, (label, f) => setStep({ label, f }));
+        const p = await buildPrintPack(task.productId!, task.productTitle, keys, (label, f) => setStep({ label, f }), slogan.trim() || null);
         setPack(p);
         setData({ zipKey: p.zipKey, files: p.files });
         setReady(true);
@@ -48,6 +50,16 @@ export const printReview: ReviewDef = {
             <ArtImage key={k} imageKey={k} className="h-24 w-24 shrink-0 rounded-lg" />
           ))}
         </div>
+        {(out?.slogan || slogan) && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl bg-black/[0.03] p-2 dark:bg-white/[0.04]">
+            {keys[0] && <SloganPreview imageKey={keys[0]} slogan={slogan} />}
+            <label className="min-w-0 flex-1">
+              <span className="label">💬 Slogan on the prints</span>
+              <input className="input" value={slogan} maxLength={60} onChange={(e) => setSlogan(e.target.value)} disabled={!!step} aria-label="Slogan" />
+              <span className="mt-1 block text-xs text-cocoa dark:text-stone-400">Set as real text under the art. Clear it to print without.</span>
+            </label>
+          </div>
+        )}
         <ul className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-3">
           {PRINT_SIZES.map((s) => {
             const px = pixelsFor(s);
@@ -82,3 +94,23 @@ export const printReview: ReviewDef = {
     );
   },
 };
+
+/** A small live preview of an A4 page with the slogan, drawn exactly like the real print. */
+function SloganPreview({ imageKey, slogan }: { imageKey: string; slogan: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [{ renderPage, loadSloganFont }, src] = await Promise.all([import("../../lib/print"), loadImageSrc(imageKey)]);
+      await loadSloganFont();
+      const img = new Image();
+      img.src = src;
+      await img.decode();
+      if (!cancelled && ref.current) renderPage(img, 210, 297, slogan, ref.current);
+    })().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [imageKey, slogan]);
+  return <canvas ref={ref} className="h-[149px] w-[105px] rounded shadow ring-1 ring-black/10" aria-label="Print preview" />;
+}

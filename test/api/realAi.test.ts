@@ -27,13 +27,25 @@ const fakeAi = (log: string[] = []): AiServices => ({
         seasonality: "Autumn",
       };
     else if (keys.includes("imagePrompts"))
-      out = { productTitle: "Cottage Mushroom Prints", audience: "Plant lovers", style: "watercolour", palette: ["#aa5533", "nope"], imagePrompts: ["a red mushroom", "a mushroom ring"] };
+      out = {
+        productTitle: "Cottage Mushroom Prints",
+        audience: "Plant lovers",
+        style: "watercolour",
+        palette: ["#aa5533", "nope"],
+        imagePrompts: ["a red mushroom", "a mushroom ring"],
+        boosters: [
+          { kind: "slogan", title: "Catchy slogan", why: "giftable", slogans: ["“Grow wild”", "Stay cosy"] },
+          { kind: "art", title: "Retro colours", why: "stands out", artHint: "bold retro palette" },
+          { kind: "bundle", title: "Set of 3", why: "sells more", listingHint: "Matching set of 3" },
+        ],
+      };
     else if (keys.includes("ideas")) out = { ideas: [{ idea: "Frog teacher posters", why: "Back to school" }] };
     else out = { title: "Cottage Mushroom Wall Art Printable Disney", tags: ["mushroom art", "cottagecore"], description: "A lovely set of prints." };
     return req.schema.parse(out);
   },
-  async image() {
+  async image(prompt: string) {
     log.push("image");
+    log.push(`prompt:${prompt}`);
     return btoa("fake-jpeg");
   },
 });
@@ -75,11 +87,24 @@ describe("real AI pipeline (Workers AI)", () => {
     expect(report.sources).toMatch(/can't browse/);
     await approveTask(db, research.id, settings);
 
-    // Analyst → Designer: 4 images, one per tick, stored in R2.
+    // Analyst pitches boosters; you pick a slogan (edited) and the retro twist.
+    await runUntil(db, settings, ai, async () => (await taskOf(p.id, "brief"))?.state === "needs_approval");
+    const brief = await taskOf(p.id, "brief");
+    const offered = JSON.parse(brief.output).boosters;
+    expect(offered.map((b: any) => b.kind)).toEqual(["slogan", "art", "bundle"]);
+    expect(offered[0].slogans).toEqual(["Grow wild", "Stay cosy"]);
+    await approveTask(db, brief.id, settings, undefined, { chosen: [{ id: offered[0].id, slogan: "Grow wild, stay cosy" }, { id: offered[1].id }], custom: "add a tiny snail" });
+
+    // Designer: 4 images, one per tick, stored in R2, with your art boosters woven in.
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "inspect"))?.state === "needs_approval");
+    const prompts = calls.filter((c) => c.startsWith("prompt:"));
+    expect(prompts[0]).toMatch(/bold retro palette/);
+    expect(prompts[0]).toMatch(/tiny snail/);
+    expect(prompts[0]).not.toMatch(/Grow wild/); // slogans are added as real text by the Printer
     expect(calls.filter((c) => c === "image")).toHaveLength(4);
     const product = await env.DB.prepare("SELECT * FROM products WHERE id = ?").bind(p.id).first<any>();
     expect(product.title).toBe("Cottage Mushroom Prints");
+    expect(JSON.parse(product.data).slogan).toBe("Grow wild, stay cosy");
     const images = JSON.parse(product.data).images;
     expect(images).toHaveLength(4);
     expect(await (await env.FILES.get(images[0].key))!.text()).toBe(btoa("fake-jpeg"));
@@ -93,6 +118,7 @@ describe("real AI pipeline (Workers AI)", () => {
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "print_files"))?.state === "needs_approval");
     const print = await taskOf(p.id, "print_files");
     expect(JSON.parse(print.output).images).toHaveLength(2);
+    expect(JSON.parse(print.output).slogan).toBe("Grow wild, stay cosy");
     await expect(approveTask(db, print.id, settings)).rejects.toThrow(/Build the print files/);
     await env.FILES.put(`products/${p.id}/pack.zip`, "zip");
     await approveTask(db, print.id, settings, undefined, { zipKey: `products/${p.id}/pack.zip`, files: ["a.pdf"] });

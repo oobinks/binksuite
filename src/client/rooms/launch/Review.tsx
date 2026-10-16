@@ -13,7 +13,7 @@ interface Pack {
   zip?: string;
   zipKey?: string;
   images?: string[];
-  mockups?: { scene: string; seed: number; imageKey?: string | null }[];
+  mockups?: { scene: string; seed: number; imageKey?: string | null; slogan?: string | null }[];
 }
 
 export const launchReview: ReviewDef = {
@@ -68,7 +68,7 @@ export const launchReview: ReviewDef = {
             <div className="label">Listing photos</div>
             <div className="grid grid-cols-2 gap-2">
               {p.mockups.map((m) => (
-                <Mockup key={m.scene} scene={m.scene} seed={m.seed} imageKey={m.imageKey} />
+                <Mockup key={m.scene} scene={m.scene} seed={m.seed} imageKey={m.imageKey} slogan={m.slogan} />
               ))}
             </div>
           </div>

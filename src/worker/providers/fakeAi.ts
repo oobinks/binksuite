@@ -30,6 +30,12 @@ export const fakeAi: AiServices = {
         style: "soft gouache",
         palette: ["#c8643b", "#f6efe4", "#6d8b74", "#e9a96b", "#3b2f2a"],
         imagePrompts: ["a single red toadstool on moss", "a ring of toadstools", "a toadstool house", "toadstools under ferns"],
+        boosters: [
+          { kind: "slogan", title: "Add a catchy slogan", why: "(Local test) Slogans make prints giftable", slogans: ["Grow wild, stay cosy", "Toadally lovely", "Home is where the moss is"] },
+          { kind: "bundle", title: "Matching set of 3", why: "(Local test) Sets sell for more", listingHint: "Sold as a matching set of 3 prints" },
+          { kind: "art", title: "Bold retro colourway", why: "(Local test) Stands out in search", artHint: "bold retro 70s colour palette" },
+          { kind: "listing", title: "Personalised name option", why: "(Local test) Personalised items convert well", listingHint: "Message us to add a name for free" },
+        ],
       };
     else if (keys.includes("ideas"))
       out = { ideas: [{ idea: "Cottagecore toadstool prints", why: "(Local test) steady autumn demand" }, { idea: "Frog reading nook posters", why: "(Local test) cute and giftable" }] };
