@@ -37,8 +37,22 @@ export const fakeAi: AiServices = {
           { kind: "listing", title: "Personalised name option", why: "(Local test) Personalised items convert well", listingHint: "Message us to add a name for free" },
         ],
       };
-    else if (keys.includes("ideas"))
-      out = { ideas: [{ idea: "Cottagecore toadstool prints", why: "(Local test) steady autumn demand" }, { idea: "Frog reading nook posters", why: "(Local test) cute and giftable" }] };
+    else if (keys.includes("ideas")) {
+      // Trend Radar asks about specific niches ("- keyword: …"); the brainstorm button doesn't.
+      const kws = [...req.prompt.matchAll(/^- ([^:]+):/gm)].map((m) => m[1]);
+      out = kws.length
+        ? { ideas: kws.map((k) => ({ keyword: k, idea: `${k.replace(/\b\w/g, (c) => c.toUpperCase())}: cosy twist`, angle: "(Local test) a fresh cosy twist", why: "(Local test) favourites rising" })) }
+        : { ideas: [{ idea: "Cottagecore toadstool prints", why: "(Local test) steady autumn demand" }, { idea: "Frog reading nook posters", why: "(Local test) cute and giftable" }] };
+    } else if (keys.includes("niches"))
+      out = {
+        niches: ["mushroom wall art", "christmas gift tags", "habit tracker", "frog print", "autumn print", "advent calendar printable"].map((k, i) => ({
+          keyword: k,
+          demand: 9 - i,
+          competition: 3 + i,
+          typicalPriceGBP: 3.5 + i,
+          note: "(Local test) seasonal interest",
+        })),
+      };
     else
       out = {
         title: "Cottage Toadstool Print Set | Cottagecore Wall Art | Woodland Mushroom Poster | Printable",

@@ -8,6 +8,7 @@ import { DEMO_NICHES, INSPECTOR_ISSUES, MOCKUP_SCENES, PRINT_SIZES, TRICKY_PHRAS
 import type { ProductRow, StepDef } from "./types";
 import { nicheFromSuggestion, researchIdea, type MarketReport } from "./marketResearch";
 import { friendlyPrice, priceStats, type CompetitorPrice } from "../../../shared/pricing";
+import { undercutPrice } from "../../../shared/market";
 import { REAL_STEPS } from "./real";
 
 export type { StepDef } from "./types";
@@ -194,13 +195,20 @@ export const STEPS: StepDef[] = [
     title: (p) => `Set price: ${p.title}`,
     run: ({ product, settings, rng }) => {
       const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
-      const d = product.data as { report?: MarketReport; competitors?: CompetitorPrice[]; listing?: { tags?: string[] } };
-      // Aim for the middle of what similar items sell for (your own competitor checks
-      // first, then Scout's estimate), never below the price that clears your minimum profit.
+      const d = product.data as {
+        report?: MarketReport;
+        competitors?: CompetitorPrice[];
+        market?: { medianPricePence: number; totalListings: number };
+        listing?: { tags?: string[] };
+      };
+      // Undercut the market: your own competitor checks first, then live Etsy data,
+      // then Scout's estimate. Never below the price that clears your minimum profit.
       const yours = priceStats((d.competitors ?? []).map((c) => c.pricePence));
       const range = d.report?.priceRangePence;
-      const target = yours?.medianPence ?? (range ? Math.round((range[0] + range[1]) / 2) : intBetween(rng, 3, 7) * 100 - 1);
-      const finalPrice = friendlyPrice(Math.max(floor, target - 1));
+      const median = yours?.medianPence ?? (d.market?.medianPricePence || (range ? range[1] : 0));
+      const finalPrice = median
+        ? undercutPrice(median, settings.radar.undercutPercent, floor)
+        : friendlyPrice(Math.max(floor, intBetween(rng, 3, 7) * 100 - 2));
       const fees = calculateFees({ pricePence: finalPrice, costPence: 10 }, settings.fees);
       return {
         output: {
@@ -210,6 +218,9 @@ export const STEPS: StepDef[] = [
           feesPence: fees.totalFeesPence,
           minProfitPence: settings.minProfitPence,
           marketRangePence: range ?? null,
+          marketMedianPence: median || null,
+          undercutPercent: settings.radar.undercutPercent,
+          marketSource: yours ? "your checks" : d.market?.medianPricePence ? "live Etsy data" : range ? "Scout's estimate" : null,
           searchQuery: (d.report?.keywords?.[0] ?? product.niche).slice(0, 80),
         },
         pricePence: finalPrice,
@@ -270,6 +281,27 @@ export const STEPS: StepDef[] = [
     next: null,
   },
 ];
+
+// 👀 Price Watch alerts live in the Listing Office but aren't a pipeline step.
+STEPS.push({
+  kind: "price_watch",
+  agent: "pricer",
+  room: "listing",
+  needsApproval: true,
+  approvalKind: "review",
+  durationMs: [0, 0],
+  estimatedCostPence: 0,
+  standalone: true,
+  title: (p) => `Price check: ${p.title}`,
+  run: ({ task }) => ({ output: task.output ?? {}, log: "Price check ready" }),
+  next: null,
+  onApprove: (_t, _p, data) => {
+    if (data?.pricePence === undefined) return {};
+    const price = Number(data.pricePence);
+    if (!Number.isInteger(price) || price < 20 || price > 100_000_00) return { error: "That price doesn't look right." };
+    return { pricePence: price };
+  },
+});
 
 // Phase 2: upgrade steps with their real (Workers AI) versions for real products.
 for (const step of STEPS) Object.assign(step, REAL_STEPS[step.kind] ?? {});

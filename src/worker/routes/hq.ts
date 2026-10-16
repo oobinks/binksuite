@@ -7,7 +7,10 @@ import { DEMO_NICHES } from "../engine/agents/demoContent";
 import { isAiLimit } from "../providers/ai";
 import { activity, products, tasks } from "../db/schema";
 import { secretsStatus } from "../env";
-import { kvSet, visible } from "../lib/store";
+import { kvGet, kvSet, visible } from "../lib/store";
+import { radarTick } from "../engine/trends";
+import { priceWatchTick } from "../engine/priceWatch";
+import { etsyFor } from "./radar";
 import { tick, approveTask, rejectTask, retryTask, dropTask, suggestIdea, listSuggestions, EngineError } from "../engine/queue";
 import { buildBriefing, buildSnapshot } from "../engine/snapshot";
 import { recordEvent, checkAchievements } from "../engine/game";
@@ -84,6 +87,17 @@ export const hqRoutes = newApp()
       // Slow AI jobs finish after this response is sent, so the map never waits on them.
       defer: (job) => c.executionCtx.waitUntil(job),
     });
+    // While you're watching, keep the radar ticking every few minutes in the background.
+    const lastRadar = (await kvGet<number>(db, "radarLastRun")) ?? 0;
+    if (Date.now() - lastRadar > 4 * 60_000) {
+      await kvSet(db, "radarLastRun", Date.now());
+      const etsy = await etsyFor(c);
+      c.executionCtx.waitUntil(
+        radarTick(db, settings, { etsy, ai: aiFor(c), budget: 4 })
+          .then(() => priceWatchTick(db, settings, etsy, new Date(), 4))
+          .catch((e) => console.error("radar", e)),
+      );
+    }
     const snap = await buildSnapshot(db, settings, {
       afterNotification: Number(c.req.query("n") ?? 0) || 0,
       afterHandoff: Number(c.req.query("h") ?? 0) || 0,

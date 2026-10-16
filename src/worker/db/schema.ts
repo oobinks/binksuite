@@ -182,3 +182,27 @@ export const vault = sqliteTable("vault", {
   last4: text("last4").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+/** Trend Radar: niches being watched, with the latest market read from Etsy (or an AI estimate). */
+export const trendNiches = sqliteTable(
+  "trend_niches",
+  {
+    keyword: text("keyword").primaryKey(),
+    category: text("category").notNull().default("general"),
+    /** seed | ai | you */
+    origin: text("origin").notNull().default("seed"),
+    /** etsy = live Etsy data; ai = AI estimate (no Etsy key yet) */
+    source: text("source"),
+    lastScanned: text("last_scanned"),
+    totalListings: integer("total_listings"),
+    medianPricePence: integer("median_price_pence"),
+    lowPricePence: integer("low_price_pence"),
+    /** Average favourites per day on recently listed items: our "trending now" signal. */
+    favsPerDay: real("favs_per_day"),
+    newListings30d: integer("new_listings_30d"),
+    score: real("score").notNull().default(0),
+    note: text("note"),
+    lastSuggested: text("last_suggested"),
+  },
+  (t) => [index("trend_score_idx").on(t.score)],
+);

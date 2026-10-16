@@ -66,6 +66,8 @@ export interface StepDef {
     product: ProductRow,
     data: Record<string, unknown> | undefined,
   ): { productData?: Record<string, unknown>; pricePence?: number; error?: string };
+  /** Not part of the product pipeline (e.g. Price Watch alerts): approving just closes it. */
+  standalone?: boolean;
   /** Next step kind after approval / auto-finish; null = product goes live. */
   next: string | null;
   /** Rejecting sends the product back to this step instead of redoing this one. */

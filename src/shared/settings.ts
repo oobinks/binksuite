@@ -41,6 +41,18 @@ export const settingsSchema = z.object({
     /** Stop for the day at this many estimated "neurons" (free allowance is 10,000/day). */
     dailyNeuronCap: z.number().int().min(0).max(1_000_000),
   }),
+  /** Trend Radar, Daily ideas, undercut pricing and Price Watch. */
+  radar: z.object({
+    /** Automatically research the day's best ideas every morning. */
+    autoDaily: z.boolean(),
+    dailyIdeas: z.number().int().min(1).max(10),
+    /** Price this % below the market median (never below your minimum profit). */
+    undercutPercent: z.number().min(0).max(60),
+    /** Price Watch flags listings priced more than this % above the market. */
+    priceTolerancePercent: z.number().min(0).max(100),
+    /** Your Etsy shop name, so Price Watch can check your live listings. */
+    etsyShopName: z.string().max(60),
+  }),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -64,6 +76,13 @@ export const DEFAULT_SETTINGS: Settings = {
     imageModel: "@cf/black-forest-labs/flux-1-schnell",
     dailyNeuronCap: 9000,
   },
+  radar: {
+    autoDaily: true,
+    dailyIdeas: 5,
+    undercutPercent: 10,
+    priceTolerancePercent: 10,
+    etsyShopName: "",
+  },
 };
 
 /** Merge stored (possibly older) settings with defaults so new fields always exist. */
@@ -75,6 +94,7 @@ export function withDefaults(stored: Partial<Settings> | null | undefined): Sett
     fees: { ...DEFAULT_SETTINGS.fees, ...(s.fees ?? {}) },
     agentsEnabled: { ...DEFAULT_SETTINGS.agentsEnabled, ...(s.agentsEnabled ?? {}) },
     ai: { ...DEFAULT_SETTINGS.ai, ...(s.ai ?? {}) },
+    radar: { ...DEFAULT_SETTINGS.radar, ...(s.radar ?? {}) },
   };
 }
 
@@ -83,7 +103,7 @@ export const VAULT_PROVIDERS = [
   { id: "openai", name: "OpenAI (images)", phase: 2 },
   { id: "replicate", name: "Replicate", phase: 2 },
   { id: "ideogram", name: "Ideogram", phase: 2 },
-  { id: "etsy", name: "Etsy API key", phase: 4 },
+  { id: "etsy", name: "Etsy API (keystring:sharedsecret)", phase: 2 },
 ] as const;
 
 export type VaultProvider = (typeof VAULT_PROVIDERS)[number]["id"];

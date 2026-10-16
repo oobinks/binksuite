@@ -108,10 +108,24 @@ export function cleanKeywords(list: string[], max: number = ETSY_LIMITS.tagsMax)
   return out;
 }
 
+export interface LiveMarket {
+  keyword: string;
+  totalListings: number;
+  medianPricePence: number;
+  lowPricePence: number;
+  favsPerDay: number;
+  newListings30d: number;
+  scannedAt?: string | null;
+}
+
 export async function researchIdeaWithAi(ctx: RealContext, idea: string, notes?: string): Promise<MarketReport> {
+  const market = (ctx.product.data as { market?: LiveMarket }).market;
+  const marketLine = market
+    ? `Live Etsy data for "${market.keyword}": ${market.totalListings} active competing listings; new listings are getting ${market.favsPerDay} favourites per day; ${market.newListings30d} of the newest 100 were listed in the last 30 days; median price £${(market.medianPricePence / 100).toFixed(2)}, cheaper quarter at £${(market.lowPricePence / 100).toFixed(2)}. Base demand and competition scores on this.\n`
+    : "";
   const r = await ctx.ai.json({
     system: `${SHOP_CONTEXT} You are Scout, a market researcher. Score each 1-10. For competition, 10 means extremely crowded.`,
-    prompt: `Assess this product idea for the shop.\nIdea: ${idea}\n${notes ? `Owner's notes: ${notes}\n` : ""}Give: scores, a 1-2 sentence summary, exactly 3 reasons, risks (trademarks, seasonality, hard-to-make details), 3 specific angles to stand out, 8 Etsy search keywords (each under 20 characters), a typical price range in GBP for similar digital downloads, and when it sells best.`,
+    prompt: `Assess this product idea for the shop.\nIdea: ${idea}\n${notes ? `Owner's notes: ${notes}\n` : ""}${marketLine}Give: scores, a 1-2 sentence summary, exactly 3 reasons, risks (trademarks, seasonality, hard-to-make details), 3 specific angles to stand out, 8 Etsy search keywords (each under 20 characters), a typical price range in GBP for similar digital downloads, and when it sells best.`,
     schema: reportSchema,
     jsonSchema: reportJsonSchema,
   });
@@ -125,8 +139,9 @@ export async function researchIdeaWithAi(ctx: RealContext, idea: string, notes?:
   const blocked = blockedTermsIn(`${idea} ${notes ?? ""}`, ctx.settings.blocklist);
   const risks = r.risks.slice(0, 5);
   if (blocked.length) risks.unshift(`Uses a protected name (${blocked.join(", ")}). Etsy can remove listings like this. Pick an unbranded version instead.`);
-  const lo = Math.max(99, Math.round(Math.min(r.priceLowGBP, r.priceHighGBP) * 100));
-  const hi = Math.max(lo + 100, Math.round(Math.max(r.priceLowGBP, r.priceHighGBP) * 100));
+  // Real Etsy prices beat the AI's guess whenever we have them.
+  const lo = market?.lowPricePence || Math.max(99, Math.round(Math.min(r.priceLowGBP, r.priceHighGBP) * 100));
+  const hi = market?.medianPricePence && market.medianPricePence > lo ? market.medianPricePence : Math.max(lo + 100, Math.round(Math.max(r.priceLowGBP, r.priceHighGBP) * 100));
   return {
     idea,
     verdict: verdictFrom(overall, blocked.length > 0),
@@ -139,7 +154,9 @@ export async function researchIdeaWithAi(ctx: RealContext, idea: string, notes?:
     keywords: cleanKeywords(r.keywords, 8),
     priceRangePence: [lo, hi],
     seasonality: r.seasonality.trim() || "Sells year-round.",
-    sources: AI_NOTE,
+    sources: market
+      ? `Live Etsy data (${market.totalListings.toLocaleString()} competing listings, checked ${market.scannedAt ? new Date(market.scannedAt).toLocaleDateString("en-GB") : "recently"}) plus AI judgement. Price range = cheaper quarter to median.`
+      : AI_NOTE,
   };
 }
 
