@@ -438,10 +438,10 @@ export async function approveTask(db: DB, id: string, settings: Settings, note?:
   if (decision?.error) throw new EngineError(decision.error);
   const now = new Date();
   await transition(db, t, "approve", { note: note ?? null });
-  if (decision?.productData && Object.keys(decision.productData).length) {
+  if ((decision?.productData && Object.keys(decision.productData).length) || decision?.pricePence) {
     await db
       .update(products)
-      .set({ data: { ...product.data, ...decision.productData }, updatedAt: nowIso(now) })
+      .set({ data: { ...product.data, ...(decision.productData ?? {}) }, pricePence: decision.pricePence ?? product.pricePence, updatedAt: nowIso(now) })
       .where(eq(products.id, product.id));
   }
   await decideApproval(db, t.id, "approved", note);

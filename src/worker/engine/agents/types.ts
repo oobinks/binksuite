@@ -61,7 +61,11 @@ export interface StepDef {
   /** Roughly how long the real job takes, for the progress bar. */
   realSeconds?: number;
   /** Validate the owner's choices on approval (e.g. which images to keep) and turn them into product data. */
-  onApprove?(task: TaskRow, product: ProductRow, data: Record<string, unknown> | undefined): { productData?: Record<string, unknown>; error?: string };
+  onApprove?(
+    task: TaskRow,
+    product: ProductRow,
+    data: Record<string, unknown> | undefined,
+  ): { productData?: Record<string, unknown>; pricePence?: number; error?: string };
   /** Next step kind after approval / auto-finish; null = product goes live. */
   next: string | null;
   /** Rejecting sends the product back to this step instead of redoing this one. */

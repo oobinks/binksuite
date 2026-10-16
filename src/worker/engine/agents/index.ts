@@ -7,6 +7,7 @@ import { intBetween, pick } from "../../../shared/rng";
 import { DEMO_NICHES, INSPECTOR_ISSUES, MOCKUP_SCENES, PRINT_SIZES, TRICKY_PHRASE } from "./demoContent";
 import type { ProductRow, StepDef } from "./types";
 import { nicheFromSuggestion, researchIdea, type MarketReport } from "./marketResearch";
+import { friendlyPrice, priceStats, type CompetitorPrice } from "../../../shared/pricing";
 import { REAL_STEPS } from "./real";
 
 export type { StepDef } from "./types";
@@ -191,20 +192,38 @@ export const STEPS: StepDef[] = [
     durationMs: [5_000, 8_000],
     estimatedCostPence: 0,
     title: (p) => `Set price: ${p.title}`,
-    run: ({ settings, rng }) => {
+    run: ({ product, settings, rng }) => {
       const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
-      // Round up to a friendly .49/.99 price above the floor.
-      const pounds = Math.max(Math.ceil(floor / 100), intBetween(rng, 3, 7));
-      const pricePence = pounds * 100 + (rng() < 0.5 ? 49 : 99) - 100;
-      const finalPrice = pricePence < floor ? pricePence + 50 : pricePence;
+      const d = product.data as { report?: MarketReport; competitors?: CompetitorPrice[]; listing?: { tags?: string[] } };
+      // Aim for the middle of what similar items sell for (your own competitor checks
+      // first, then Scout's estimate), never below the price that clears your minimum profit.
+      const yours = priceStats((d.competitors ?? []).map((c) => c.pricePence));
+      const range = d.report?.priceRangePence;
+      const target = yours?.medianPence ?? (range ? Math.round((range[0] + range[1]) / 2) : intBetween(rng, 3, 7) * 100 - 1);
+      const finalPrice = friendlyPrice(Math.max(floor, target - 1));
       const fees = calculateFees({ pricePence: finalPrice, costPence: 10 }, settings.fees);
       return {
-        output: { pricePence: finalPrice, floorPence: floor, netPence: fees.netPence, feesPence: fees.totalFeesPence, minProfitPence: settings.minProfitPence },
+        output: {
+          pricePence: finalPrice,
+          floorPence: floor,
+          netPence: fees.netPence,
+          feesPence: fees.totalFeesPence,
+          minProfitPence: settings.minProfitPence,
+          marketRangePence: range ?? null,
+          searchQuery: (d.report?.keywords?.[0] ?? product.niche).slice(0, 80),
+        },
         pricePence: finalPrice,
         log: `Priced at £${(finalPrice / 100).toFixed(2)} (net £${(fees.netPence / 100).toFixed(2)})`,
       };
     },
     next: "compliance_check",
+    // You can set your own price when approving.
+    onApprove: (_t, _p, data) => {
+      if (data?.pricePence === undefined) return {};
+      const price = Number(data.pricePence);
+      if (!Number.isInteger(price) || price < 20 || price > 100_000_00) return { error: "That price doesn't look right." };
+      return { pricePence: price };
+    },
   },
   {
     kind: "compliance_check",

@@ -12,6 +12,7 @@ import { tick, approveTask, rejectTask, retryTask, dropTask, suggestIdea, listSu
 import { buildBriefing, buildSnapshot } from "../engine/snapshot";
 import { recordEvent, checkAchievements } from "../engine/game";
 import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared/registry";
+import type { CompetitorPrice } from "../../shared/pricing";
 import type { ActivityView, TaskView } from "../../shared/api";
 import type { DB } from "../db";
 
@@ -152,6 +153,32 @@ export const hqRoutes = newApp()
     } catch (e) {
       throw new HttpError(isAiLimit(e) ? 429 : 502, e instanceof Error ? e.message : "Scout couldn't think of anything just now.");
     }
+  })
+  .get("/products/:id", async (c) => {
+    const p = await c.get("db").select().from(products).where(eq(products.id, c.req.param("id"))).get();
+    if (!p) throw new HttpError(404, "No such product");
+    const d = p.data as { competitors?: CompetitorPrice[]; report?: { priceRangePence?: [number, number]; keywords?: string[] } };
+    return c.json({
+      id: p.id,
+      title: p.title,
+      niche: p.niche,
+      pricePence: p.pricePence,
+      competitors: d.competitors ?? [],
+      marketRangePence: d.report?.priceRangePence ?? null,
+      keywords: d.report?.keywords ?? [],
+    });
+  })
+  .put("/products/:id/competitors", async (c) => {
+    // Prices you've spotted on similar Etsy listings.
+    const b = await body(c, z.object({ competitors: z.array(z.object({ pricePence: z.number().int().min(1).max(100_000_00), note: z.string().max(120).optional() })).max(30) }));
+    const db = c.get("db");
+    const p = await db.select().from(products).where(eq(products.id, c.req.param("id"))).get();
+    if (!p) throw new HttpError(404, "No such product");
+    await db
+      .update(products)
+      .set({ data: { ...p.data, competitors: b.competitors }, updatedAt: new Date().toISOString() })
+      .where(eq(products.id, p.id));
+    return c.json({ ok: true, competitors: b.competitors });
   })
   .post("/tasks/:id/retry", async (c) => {
     const t = await engineErrors(retryTask(c.get("db"), c.req.param("id")));

@@ -66,3 +66,25 @@ describe("fee calculator", () => {
     expect(formatGBP(-5)).toBe("-£0.05");
   });
 });
+
+import { priceStats, percentVsAverage, friendlyPrice, etsySearchUrl } from "../../src/shared/pricing";
+
+describe("competitor price comparison", () => {
+  it("works out average, median and range", () => {
+    expect(priceStats([499, 299, 399, 0, 899])).toEqual({ count: 4, averagePence: 524, medianPence: 449, minPence: 299, maxPence: 899 });
+    expect(priceStats([350])).toMatchObject({ averagePence: 350, medianPence: 350 });
+    expect(priceStats([])).toBeNull();
+  });
+  it("compares your price with the average", () => {
+    expect(percentVsAverage(400, priceStats([500])!)).toBe(-20);
+  });
+  it("rounds to .49 / .99 prices", () => {
+    expect(friendlyPrice(312)).toBe(349);
+    expect(friendlyPrice(349)).toBe(349);
+    expect(friendlyPrice(350)).toBe(399);
+    expect(friendlyPrice(399)).toBe(399);
+  });
+  it("builds an Etsy UK search link", () => {
+    expect(etsySearchUrl("mushroom print & art")).toBe("https://www.etsy.com/uk/search?q=mushroom%20print%20%26%20art&ship_to=GB");
+  });
+});
