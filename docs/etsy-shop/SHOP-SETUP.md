@@ -38,7 +38,7 @@ The coin and the name sit in the middle, so phones crop it nicely. Check Etsy's 
 Cosy, cheerful printables you can download the moment you buy.
 Print at home, at a local print shop, or online, as many times as you like for your own use.
 
-🎄 Christmas printables are landing now. New designs added every week.
+🎄 Christmas printables are landing soon. New designs added every week.
 💛 Something not right with a file? Send me a message and I'll sort it quickly.
 ```
 
