@@ -84,7 +84,7 @@ describe("spreadsheet products", () => {
     await approveTask(db, (await taskOf(p.id, "mockups")).id, settings);
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "price"))?.state === "needs_approval");
     expect(prompts.at(-1)).toMatch(/Excel spreadsheet \(\.xlsx\)/);
-    expect(prompts.at(-1)).toMatch(/Tabs: Summary; Gifts/);
+    expect(prompts.at(-1)).toMatch(/Tabs: Dashboard; Gifts/);
     const listing = (await dataOf(p.id)).listing;
     expect(listing.tags).toEqual(expect.arrayContaining(["excel template", "google sheets"]));
     expect(listing.description).toMatch(/^This design was created with AI assistance/);

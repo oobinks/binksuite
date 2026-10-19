@@ -51,8 +51,17 @@ types, nothing else, no code fences). Then make it excellent:
 - **Artwork briefs** (when the prompt mentions vector art / SVG): describe compositions you'd
   be proud to draw yourself in the next jobs.
 - **Spreadsheet designs (`sheet`, `tabs`, `summary`):** follow the "Design rules" in the prompt
-  to the letter, because BinkSuite rejects formulas outside its formula language. Design it like a
-  best-selling Etsy template:
+  to the letter, because BinkSuite rejects formulas outside its formula language. The bar is the
+  best-selling Etsy templates: complete systems of **15–25 tabs**, not a single table. Use the
+  building blocks:
+  - a monthly tab (`"repeat": "months"`, which becomes Jan–Dec);
+  - Settings `lists` that feed `optionsFrom` dropdowns;
+  - `breakdowns` (doughnut charts);
+  - `trends` (month-by-month bar or line charts);
+  - `goals` (progress bars);
+  - extra tabs a buyer would value, such as debts, bills, savings or a yearly overview.
+
+  Also design it like a best-selling Etsy template:
   - clear tabs;
   - realistic example rows;
   - an input for each number the buyer types once;
