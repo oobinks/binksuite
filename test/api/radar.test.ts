@@ -119,7 +119,7 @@ describe("Trend Radar", () => {
     const { db, settings } = await setup();
     await env.DB.prepare("UPDATE trend_niches SET score = 0").run();
     await env.DB.prepare(
-      "INSERT INTO trend_niches (keyword, category, origin, source, score, median_price_pence) VALUES ('cheap niche','x','you','etsy',90,250), ('roomy niche','x','you','etsy',60,600) ON CONFLICT(keyword) DO UPDATE SET score = excluded.score, median_price_pence = excluded.median_price_pence",
+      "INSERT INTO trend_niches (keyword, category, origin, source, score, median_price_pence) VALUES ('cheap niche','x','you','etsy',90,150), ('roomy niche','x','you','etsy',60,600) ON CONFLICT(keyword) DO UPDATE SET score = excluded.score, median_price_pence = excluded.median_price_pence",
     ).run();
     const items = await makeDailyIdeas(db, { ...settings, radar: { ...settings.radar, dailyIdeas: 1 } }, fakeAi(), now);
     expect(items.map((i) => i.keyword)).toEqual(["roomy niche"]);

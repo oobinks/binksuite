@@ -61,7 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   demoMode: true,
   theme: "system",
   fees: DEFAULT_FEES,
-  minProfitPence: 250,
+  minProfitPence: 150,
   monthlyTargetPence: 20000,
   dailyCapPence: 200,
   monthlyCapPence: 2000,
