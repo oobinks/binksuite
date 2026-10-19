@@ -181,4 +181,14 @@ describe("radar API", () => {
     expect(row.origin).toBe("you");
     expect((await c.get("/api/radar/test")).data.ok).toBe(false);
   });
+
+  it("once live Etsy data exists, AI guesses drop out of the ranking", async () => {
+    const c = await setUpOwner();
+    await c.get("/api/radar");
+    await env.DB.prepare("UPDATE trend_niches SET score = 0, source = NULL").run();
+    await env.DB.prepare("UPDATE trend_niches SET source = 'ai', score = 80 WHERE keyword = 'cat print'").run();
+    expect((await c.get("/api/radar")).data.niches.map((n: any) => n.keyword)).toEqual(["cat print"]);
+    await env.DB.prepare("UPDATE trend_niches SET source = 'etsy', score = 12 WHERE keyword = 'bee print'").run();
+    expect((await c.get("/api/radar")).data.niches.map((n: any) => n.keyword)).toEqual(["bee print"]);
+  });
 });
