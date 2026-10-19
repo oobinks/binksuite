@@ -10,6 +10,7 @@ import { printReview } from "../studio/PrintReview";
 import { boostersReview } from "../research/BoostersReview";
 import { priceWatchReview } from "../listing/PriceWatchReview";
 import { sheetReview } from "../studio/SheetReview";
+import { bundleReview } from "../studio/BundleReview";
 
 /** Steps that need their own screen, regardless of room. */
 export const KIND_REVIEWS: Record<string, ReviewDef> = {
@@ -17,6 +18,7 @@ export const KIND_REVIEWS: Record<string, ReviewDef> = {
   brief: boostersReview,
   price_watch: priceWatchReview,
   sheet_build: sheetReview,
+  bundle_build: bundleReview,
 };
 
 export const REVIEWS: Partial<Record<RoomId, ReviewDef>> = {

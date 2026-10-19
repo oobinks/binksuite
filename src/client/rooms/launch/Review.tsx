@@ -12,6 +12,7 @@ import { seoCheck, type KeywordResearch } from "../../../shared/seo";
 interface Pack {
   listing?: { title: string; tags: string[]; description: string };
   seo?: KeywordResearch;
+  bundle?: { items: { id: string; title: string; pricePence: number }[]; separatePence: number; savePercent: number };
   pricePence: number | null;
   files?: string[];
   zip?: string;
@@ -30,6 +31,14 @@ export const launchReview: ReviewDef = {
     return (
       <div className="space-y-4">
         <p className="rounded-xl bg-honey/20 p-2 text-sm font-semibold">Open Etsy → Shop Manager → Listings → Add a listing, then copy each piece across. Etsy API publishing arrives in Phase 4.</p>
+        {p.bundle && (
+          <div className="rounded-xl bg-honey/20 p-3 text-sm">
+            <div className="font-black">
+              🎁 Bundle of {p.bundle.items.length}: buyers save {p.bundle.savePercent}% ({formatGBP(p.bundle.separatePence)} separately)
+            </div>
+            <p className="text-xs">The description says so. Keep these listings live at their current prices so the saving stays true: {p.bundle.items.map((i) => `${i.title} (${formatGBP(i.pricePence)})`).join(", ")}.</p>
+          </div>
+        )}
         <ListingCheck listing={l} research={p.seo} />
         <Field label={`Title (${l.title.length}/140)`} text={l.title} />
         <div>

@@ -1119,3 +1119,6 @@ export async function buildListingPhotos(spec: SheetSpec, format: ProductFormat)
   const toBlob = (cv: HTMLCanvasElement) => toJpeg(cv);
   return { listing, screens: { table: await toBlob(excel ? tableShot : page), dash: dashShot ? await toBlob(dashShot) : undefined, page: await toBlob(page) } };
 }
+
+// The kit, for other photo sets (🎁 bundles).
+export { backdrop, badge, canvas, check, clip, eyebrow, featureBar, INK, MUTED, plant, rr, SANS, serifTitle, shadowed, slideTitle, toJpeg };

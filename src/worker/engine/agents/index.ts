@@ -10,6 +10,7 @@ import { nicheFromSuggestion, researchIdea, type MarketReport } from "./marketRe
 import { friendlyPrice, priceStats, type CompetitorPrice } from "../../../shared/pricing";
 import { undercutPrice } from "../../../shared/market";
 import { REAL_STEPS } from "./real";
+import { separatePrice, savingPercent, type BundleSpec } from "../../../shared/bundle";
 import { formatOf, isSheetFormat } from "../../../shared/format";
 
 export type { StepDef } from "./types";
@@ -102,6 +103,20 @@ export const STEPS: StepDef[] = [
     // Only real products reach this step (see brief.nextFor); the real version lives in real.ts.
     run: () => ({ output: {}, log: "Spreadsheet files are built on your device" }),
     next: "mockups",
+  },
+  {
+    kind: "bundle_build",
+    agent: "printer",
+    room: "studio",
+    needsApproval: true,
+    approvalKind: "review",
+    durationMs: [3_000, 5_000],
+    estimatedCostPence: 0,
+    title: (p) => `Build bundle: ${p.title}`,
+    // 🎁 Only real products are bundled (see engine/bundles.ts); the real version lives in real.ts.
+    run: () => ({ output: {}, log: "Bundle files are put together on your device" }),
+    // The bundle's own photos are its listing photos, so straight to the Copywriter.
+    next: "copy",
   },
   {
     kind: "images",
@@ -211,6 +226,28 @@ export const STEPS: StepDef[] = [
     title: (p) => `Set price: ${p.title}`,
     run: ({ product, settings, rng }) => {
       const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
+      const bundle = (product.data as { bundle?: BundleSpec }).bundle;
+      if (bundle) {
+        // 🎁 A real saving on what the products sell for separately (never an invented "was" price).
+        const separate = separatePrice(bundle.items);
+        const target = friendlyPrice(Math.round(separate * (1 - bundle.savePercent / 100)));
+        const pricePence = Math.max(floor, Math.min(target, separate - 1));
+        const fees = calculateFees({ pricePence, costPence: 10 }, settings.fees);
+        return {
+          output: {
+            pricePence,
+            floorPence: floor,
+            netPence: fees.netPence,
+            feesPence: fees.totalFeesPence,
+            minProfitPence: settings.minProfitPence,
+            separatePence: separate,
+            savePercent: savingPercent(separate, pricePence),
+            items: bundle.items.map((i) => ({ title: i.title, pricePence: i.pricePence })),
+          },
+          pricePence,
+          log: `Bundle priced at £${(pricePence / 100).toFixed(2)}: ${savingPercent(separate, pricePence)}% less than £${(separate / 100).toFixed(2)} separately`,
+        };
+      }
       const d = product.data as {
         report?: MarketReport;
         competitors?: CompetitorPrice[];
@@ -245,10 +282,12 @@ export const STEPS: StepDef[] = [
     },
     next: "compliance_check",
     // You can set your own price when approving.
-    onApprove: (_t, _p, data) => {
+    onApprove: (_t, p, data) => {
       if (data?.pricePence === undefined) return {};
       const price = Number(data.pricePence);
       if (!Number.isInteger(price) || price < 20 || price > 100_000_00) return { error: "That price doesn't look right." };
+      const bundle = (p.data as { bundle?: BundleSpec }).bundle;
+      if (bundle && price >= separatePrice(bundle.items)) return { error: "A bundle has to cost less than buying the products separately." };
       return { pricePence: price };
     },
   },
@@ -289,8 +328,13 @@ export const STEPS: StepDef[] = [
     title: (p) => `Launch: ${p.title}`,
     run: ({ product }) => {
       const d = product.data as Record<string, unknown>;
+      const bundle = d.bundle as BundleSpec | undefined;
+      const separate = bundle ? separatePrice(bundle.items) : 0;
       return {
-        output: { listing: d.listing, seo: d.seo, pricePence: product.pricePence, files: d.files, zip: d.zip, zipKey: d.zipKey, mockups: d.mockups, images: d.keptImages },
+        output: {
+          bundle: bundle && product.pricePence ? { items: bundle.items.map((i) => ({ id: i.id, title: i.title, pricePence: i.pricePence })), separatePence: separate, savePercent: savingPercent(separate, product.pricePence) } : undefined,
+          listing: bundle && product.pricePence ? withSaving(d.listing as { description: string }, separate, product.pricePence) : d.listing,
+          seo: d.seo, pricePence: product.pricePence, files: d.files, zip: d.zip, zipKey: d.zipKey, mockups: d.mockups, images: d.keptImages },
         log: "Copy-paste pack ready for Etsy",
       };
     },
@@ -331,4 +375,13 @@ export const FIRST_STEP = STEPS[0].kind;
 
 function cap(s: string) {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** 🎁 The bundle's saving, worked out from the final price, goes into the description just before the notes. */
+export function withSaving<L extends { description: string }>(listing: L, separatePence: number, pricePence: number): L {
+  if (!listing || separatePence <= pricePence) return listing;
+  const line = `✦ BETTER VALUE\nBought separately, these cost £${(separatePence / 100).toFixed(2)}. As a bundle: £${(pricePence / 100).toFixed(2)} (save ${savingPercent(separatePence, pricePence)}%).`;
+  const at = listing.description.indexOf("✦ PLEASE NOTE");
+  const description = at >= 0 ? `${listing.description.slice(0, at)}${line}\n\n${listing.description.slice(at)}` : `${listing.description}\n\n${line}`;
+  return { ...listing, description };
 }

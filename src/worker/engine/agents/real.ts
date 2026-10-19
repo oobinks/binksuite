@@ -8,6 +8,7 @@ import type { PartialResult, ProductRow, RealContext, StepDef, StepResult, TaskR
 import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../../shared/format";
 import { hasDashboard, normaliseSpec, pageCount, SHEET_JSON_SCHEMA, SHEET_RULES, tabCount, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
 import { cleanPhrase, fitTitle, phrasesFromListings, seoCheck, type KeywordResearch } from "../../../shared/seo";
+import { bundleKeyword, type BundleSpec } from "../../../shared/bundle";
 import { SCENE_VARIANTS, sceneKey, scenesFor, type MockupView, type SceneDef } from "../../../shared/mockupScenes";
 
 export const IMAGES_PER_PRODUCT = 4;
@@ -49,6 +50,7 @@ interface ProductData {
   keptImages?: string[];
   listing?: { title: string; tags: string[]; description: string; designedBy: "seller" };
   sheet?: SheetSpec;
+  bundle?: BundleSpec;
   /** Spreadsheet pictures for mockup screens: the table, the dashboard and a printed page. */
   screens?: { table?: string; dash?: string; page?: string };
   zipKey?: string;
@@ -693,6 +695,7 @@ export function tidyListing(raw: ListingRaw, blocklist: string[], format: Produc
 /** The phrase a product should rank for, worded for its format. */
 export function mainKeyword(product: ProductRow, format: ProductFormat): string {
   const data = product.data as ProductData & { market?: LiveMarket };
+  if (data.bundle) return bundleKeyword(data.bundle, format);
   const base = cleanPhrase(data.market?.keyword ?? data.report?.keywords?.[0] ?? product.niche).split(" ").slice(0, 4).join(" ");
   if (format === "excel" && !/spreadsheet|excel|sheets?\b/.test(base)) return `${base} spreadsheet`;
   if (format === "pdf" && !/printable|planner|tracker|checklist|pdf|journal|log\b/.test(base)) return `${base} printable`;
@@ -746,7 +749,13 @@ async function writeListing(ctx: RealContext): Promise<StepResult | PartialResul
         sh.breakdowns.length + sh.trends.length ? `Charts: ${[...sh.breakdowns.map((b) => `${b.title} (${b.chart})`), ...sh.trends.map((t) => `${t.title} (${t.chart})`)].join(", ")}.\n` : ""
       }`
     : "";
-  const included = includedBullets(format, sh, data.keptImages?.length ?? 0);
+  const bundle = data.bundle;
+  const included = bundle
+    ? [...bundle.items.map((i) => `${i.title}: ${i.included}`), "Each product in its own folder, ready to download"]
+    : includedBullets(format, sh, data.keptImages?.length ?? 0);
+  const bundleLine = bundle
+    ? `This is a BUNDLE of ${bundle.items.length} products sold together for less than buying them separately:\n${bundle.items.map((i) => `- ${i.title} (${FORMAT_INFO[i.format].long}): ${i.included}`).join("\n")}\nMention that it's a bundle (and how many products) in the title, and give each product its own feature bullet. Don't state a saving or percentage: BinkSuite adds the exact saving once the price is set.\n`
+    : "";
   const phrases = seo.phrases.slice(0, 25);
   const phraseLine = phrases.length
     ? seo.source === "etsy"
@@ -758,7 +767,7 @@ async function writeListing(ctx: RealContext): Promise<StepResult | PartialResul
     prompt: `Write an Etsy listing for a digital download.\n${formatLine(format)}\nProduct: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${brief ? `Audience: ${brief.audience}\nStyle: ${brief.style}\n` : ""}${sheetLine}${data.slogan && !isSheetFormat(format) ? `The print features the slogan: "${data.slogan}"\n` : ""}${(data.boosters ?? [])
       .filter((b) => b.listingHint)
       .map((b) => `Highlight: ${b.listingHint}\n`)
-      .join("")}What's included: ${included.join("; ")}.\nMain search phrase: "${seo.keyword}"\n${phraseLine}
+      .join("")}${bundleLine}What's included: ${included.join("; ")}.\nMain search phrase: "${seo.keyword}"\n${phraseLine}
 Rules:
 - title: 100 to 140 characters. Start with the main search phrase (or a closer match from the list), then 3 to 5 more phrases buyers search for, separated by " | ". Cover what it is, what it does, and who it's for or the occasion.${format === "excel" ? ' Include "Excel" and "Google Sheets".' : format === "pdf" ? ' Include "Printable".' : ""} No word more than twice, normal case, no emojis, no brand or character names.
 - tags: exactly 13, all different. Each a 2 or 3 word phrase a buyer would type, at most 20 characters. Prefer the phrases from the list that truly describe this product, then add specific long-tail ones (who it's for, the occasion, the style). No single words and no plural / singular duplicates.
@@ -815,6 +824,17 @@ export const REAL_STEPS: Record<string, Partial<StepDef>> = {
     realSeconds: 15,
     real: planSheet,
     // The files are built in your browser, so you approve this step by building them.
+    needsApproval: true,
+    onApprove: (t, p, data) => acceptSheetFiles(t, p, data),
+  },
+  bundle_build: {
+    realSeconds: 1,
+    real: async (ctx) => {
+      const bundle = d(ctx.product).bundle;
+      if (!bundle) throw new Error("This isn't a bundle.");
+      return { output: { bundle, buildInBrowser: true }, log: `Ready to put ${bundle.items.length} products together. Tap to build the bundle on your device` };
+    },
+    // The bundle's ZIP and photos are made in your browser, so you approve this step by building them.
     needsApproval: true,
     onApprove: (t, p, data) => acceptSheetFiles(t, p, data),
   },
