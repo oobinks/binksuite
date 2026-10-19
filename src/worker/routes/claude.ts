@@ -13,6 +13,16 @@ import { sha256Hex } from "./agent";
 const ROUTINE_URL = /^https:\/\/api\.anthropic\.com\/v1\/claude_code\/routines\/[A-Za-z0-9_-]{4,80}\/fire$/;
 /** Don't start a second session while one is probably still working. */
 const RUN_COOLDOWN_MS = 12 * 60_000;
+/** A session that hasn't picked up a job by now didn't get going (e.g. it couldn't connect). */
+const RUN_STARTUP_MS = 3 * 60_000;
+
+/** Is a Claude session probably still at work? */
+function isRunning(run: ClaudeRun | null | undefined, jobsInHand: number, now = Date.now()) {
+  if (!run || run.error) return false;
+  const age = now - new Date(run.at).getTime();
+  if (age >= RUN_COOLDOWN_MS) return false;
+  return jobsInHand > 0 || (!run.finishedAt && age < RUN_STARTUP_MS);
+}
 
 interface ClaudeRun {
   at: string;
@@ -40,7 +50,7 @@ export const claudeRoutes = newApp()
       .all();
     const run = await kvGet<ClaudeRun>(db, "claudeRun");
     const routine = await db.select({ last4: vault.last4, updatedAt: vault.updatedAt }).from(vault).where(eq(vault.provider, "claude-routine")).get();
-    const running = !!run && !run.finishedAt && Date.now() - new Date(run.at).getTime() < RUN_COOLDOWN_MS;
+    const running = isRunning(run, n("working"));
     return c.json({
       provider: c.get("settings").ai.provider,
       autoStart: c.get("settings").ai.claudeAutoStart,
@@ -82,9 +92,8 @@ export const claudeRoutes = newApp()
     const waiting = await db.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(claudeJobs).where(eq(claudeJobs.status, "waiting")).get();
     if (!waiting?.n) return c.json({ started: false, reason: "Nothing on Claude's to-do list right now." });
     const run = await kvGet<ClaudeRun>(db, "claudeRun");
-    const recent = run && Date.now() - new Date(run.at).getTime() < RUN_COOLDOWN_MS;
     const busy = await db.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(claudeJobs).where(and(eq(claudeJobs.status, "working"))).get();
-    if (recent && (!run.finishedAt || busy?.n) && !run.error) return c.json({ started: false, running: true, reason: "A Claude session is already working on it." });
+    if (isRunning(run, busy?.n ?? 0)) return c.json({ started: false, running: true, reason: "A Claude session is already working on it." });
     if (b.auto && run?.error && Date.now() - new Date(run.at).getTime() < RUN_COOLDOWN_MS) return c.json({ started: false, reason: run.error });
     const secret = await vaultSecret(db, c.env, "claude-routine");
     if (!secret) throw new HttpError(400, "Connect Claude Code first: Settings → Claude Code.");

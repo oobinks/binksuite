@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { SELF, env } from "cloudflare:test";
 import { getDb } from "../../src/worker/db";
-import { getSettings } from "../../src/worker/lib/store";
+import { getSettings, kvSet } from "../../src/worker/lib/store";
 import { suggestIdea, tick, approveTask } from "../../src/worker/engine/queue";
 import { claudeCodeAi, CLAUDE_WAITING } from "../../src/worker/providers/claudeCode";
 import { BASE, setUpOwner } from "./helpers";
@@ -134,5 +134,17 @@ describe("Claude Code engine", () => {
     // The token is stored encrypted, never in plain text.
     const row = await env.DB.prepare("SELECT ciphertext FROM vault WHERE provider = 'claude-routine'").first<any>();
     expect(row.ciphertext).not.toMatch(/sk-ant/);
+  });
+
+  it("doesn't call a session 'working' once it clearly never got going", async () => {
+    const { owner } = await setup();
+    const db = getDb(env.DB);
+    const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+    await kvSet(db, "claudeRun", { at: ago(1) });
+    expect((await owner.get("/api/claude")).data.running).toBe(true); // just started
+    await kvSet(db, "claudeRun", { at: ago(5) });
+    expect((await owner.get("/api/claude")).data.running).toBe(false); // 5 min and no job picked up: it failed to connect
+    await kvSet(db, "claudeRun", { at: ago(1), finishedAt: ago(0) });
+    expect((await owner.get("/api/claude")).data.running).toBe(false); // reported done
   });
 });
