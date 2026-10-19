@@ -131,6 +131,24 @@ describe("artwork safety filter", () => {
   });
 });
 
+describe("listing photo words", () => {
+  it("fills in badges and features from the design, and talks pages (not tabs) for a printable", async () => {
+    const { MONTHLY_BUDGET } = await import("../fixtures/monthlyBudget");
+    const { marketingFor, pageCount, tabCount } = await import("../../src/shared/sheetSpec");
+    const { spec } = tidySheetSpec(MONTHLY_BUDGET, "x");
+    const excel = marketingFor(spec, "excel");
+    expect(excel.badges[0]).toBe(`${tabCount(spec)} TABS`);
+    expect(excel.badges).toContain("AUTO DASHBOARD");
+    expect(excel.tagline).toBe(spec.subtitle.replace(/\s*·\s*/g, " | "));
+    const pdf = marketingFor(spec, "pdf");
+    expect(pdf.badges[0]).toBe(`${pageCount(spec)} PAGES`);
+    expect(pdf.badges.join(" ")).not.toMatch(/TAB|DASHBOARD|CHART/);
+    expect(pageCount(spec)).toBe(14);
+    const own = marketingFor({ ...spec, marketing: { tagline: "Mine", badges: ["A"], features: ["B"] } }, "pdf");
+    expect(own).toEqual({ tagline: "Mine", badges: ["A"], features: ["B"] });
+  });
+});
+
 describe("full-size designs", () => {
   it("builds 12 month tabs, Settings lists, breakdowns, trends and goals that all check out", async () => {
     const { MONTHLY_BUDGET } = await import("../fixtures/monthlyBudget");

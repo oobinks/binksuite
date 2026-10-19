@@ -115,6 +115,17 @@ export interface SheetSpec {
   breakdowns: Breakdown[];
   trends: Trend[];
   goals: Goal[];
+  /** Words for the listing photos (written by the Analyst; worked out if missing). */
+  marketing?: Marketing;
+}
+
+export interface Marketing {
+  /** Feature line under the title, e.g. "Monthly Budget | Debt Tracker | Bill Calendar". */
+  tagline: string;
+  /** 2-4 round badges, e.g. "16 TABS", "AUTO DASHBOARD". */
+  badges: string[];
+  /** 4-6 short benefits, e.g. "Totals update as you type". */
+  features: string[];
 }
 
 export const LIMITS = {
@@ -167,6 +178,54 @@ export const LIST_HEADER_ROW = 4;
 
 export function tabRowCount(t: SheetTab) {
   return t.exampleRows.length + t.blankRows;
+}
+
+/** Total number of tabs in the finished workbook. */
+export function tabCount(spec: SheetSpec) {
+  return dataSheets(spec).length + 1 + (hasDashboard(spec) ? 1 : 0) + (spec.lists.length ? 1 : 0);
+}
+
+/** The listing-photo words: the Analyst's, topped up with ones worked out from the design. */
+/** Pages in the printable PDF: an overview page (when there's anything on it), then one per sheet. */
+export function pageCount(spec: SheetSpec) {
+  return dataSheets(spec).length + (spec.inputs.length || spec.summary.length || spec.howTo.length ? 1 : 0);
+}
+
+export function marketingFor(spec: SheetSpec, format: "art" | "excel" | "pdf" = "excel"): Marketing {
+  const m = spec.marketing;
+  if (format === "pdf") {
+    const monthly = spec.tabs.some((t) => t.repeat === "months");
+    const ticks = spec.tabs.some((t) => t.columns.some((c) => c.type === "checkbox"));
+    return {
+      tagline: m?.tagline || spec.subtitle.replace(/\s*·\s*/g, " | ") || spec.tabs.map((t) => t.name).slice(0, 3).join(" | "),
+      badges: (m?.badges.length ? m.badges : [`${pageCount(spec)} PAGES`, monthly ? "12 MONTHS" : null, "A4 + LETTER", "PRINT AT HOME"].filter(Boolean) as string[]).slice(0, 4),
+      features: (m?.features.length
+        ? m.features
+        : (["Print as many as you like", monthly ? "A page for every month" : null, ticks ? "Tick boxes to track progress" : null, "A4 and US Letter sizes", "Fill in by hand", "Instant download"].filter(Boolean) as string[])
+      ).slice(0, 6),
+    };
+  }
+  const charts = spec.breakdowns.filter((b) => b.chart !== "none").length + spec.trends.filter((t) => t.chart !== "none").length;
+  const autoBadges = [
+    `${tabCount(spec)} TABS`,
+    hasDashboard(spec) ? "AUTO DASHBOARD" : null,
+    spec.tabs.some((t) => t.repeat === "months") ? "12 MONTHS" : null,
+    charts ? `${charts} CHART${charts === 1 ? "" : "S"}` : null,
+    spec.lists.length ? "EDITABLE LISTS" : null,
+  ].filter(Boolean) as string[];
+  const autoFeatures = [
+    "Totals update as you type",
+    charts ? "Charts build themselves" : null,
+    spec.lists.length ? `Edit your own ${spec.lists[0].name.toLowerCase()}` : null,
+    spec.tabs.some((t) => t.repeat === "months") ? "A tab for every month" : null,
+    spec.goals.length ? "Progress bars for your goals" : null,
+    "Works in Excel and Google Sheets",
+  ].filter(Boolean) as string[];
+  return {
+    tagline: m?.tagline || spec.subtitle.replace(/\s*·\s*/g, " | ") || spec.tabs.map((t) => t.name).slice(0, 3).join(" | "),
+    badges: (m?.badges.length ? m.badges : autoBadges).slice(0, 4),
+    features: (m?.features.length ? m.features : autoFeatures).slice(0, 6),
+  };
 }
 
 /** Designs saved before lists, breakdowns, trends and goals existed: fill in the gaps. */
@@ -369,6 +428,7 @@ export interface RawSpec {
   breakdowns?: unknown;
   trends?: unknown;
   goals?: unknown;
+  marketing?: unknown;
 }
 
 /**
@@ -531,6 +591,11 @@ export function tidySheetSpec(raw: RawSpec, fallbackTitle: string): { spec: Shee
     spec.goals.push({ label: clean(g?.label, 40) || `${current.label} vs ${target.label}`, current: current.label, target: target.label });
   }
 
+  const m = (raw.marketing ?? {}) as Record<string, unknown>;
+  const badges = arr(m.badges).map((b) => clean(b, 18).toUpperCase()).filter(Boolean).slice(0, 4);
+  const features = arr(m.features).map((f) => clean(f, 60)).filter(Boolean).slice(0, 6);
+  if (clean(m.tagline, 80) || badges.length || features.length) spec.marketing = { tagline: clean(m.tagline, 80), badges, features };
+
   if (!spec.howTo.length) {
     spec.howTo = ["Fill in the white cells. Shaded cells work themselves out.", "Delete the example rows when you're ready.", "Totals update as you type."];
   }
@@ -620,6 +685,11 @@ export const SHEET_JSON_SCHEMA = {
       type: "array",
       items: { type: "object", properties: { label: { type: "string" }, current: { type: "string" }, target: { type: "string" } }, required: ["label", "current", "target"] },
     },
+    marketing: {
+      type: "object",
+      properties: { tagline: { type: "string" }, badges: { type: "array", items: { type: "string" } }, features: { type: "array", items: { type: "string" } } },
+      required: ["tagline", "badges", "features"],
+    },
   },
   required: ["title", "subtitle", "howTo", "inputs", "summary", "tabs"],
 };
@@ -631,6 +701,7 @@ export const SHEET_RULES = `Design rules:
 - "lists": editable lists on the ${SETTINGS_TAB} tab (e.g. Categories: Rent, Groceries, Bills…; up to ${LIMITS.listItems} items). A choice column can use "optionsFrom": "<list name>" so its dropdown follows the list.
 - "breakdowns": a total per list item, e.g. { title: "Spending by category", list: "Categories", tab: "Monthly", by: "Category", sum: "Amount", chart: "doughnut" }. "by" must be a column using that list.
 - "trends": month-by-month totals of a monthly tab, e.g. { title: "Income vs spending", tab: "Monthly", series: ["Income", "Amount"], chart: "bar" } (up to ${LIMITS.series} series; chart "bar" or "line").
+- "marketing": words for the listing photos: "tagline" (the main parts joined with " | ", e.g. "Monthly Budget | Debt Tracker | Savings Goals"), 3-4 "badges" (max 18 characters each, e.g. "16 TABS", "AUTO DASHBOARD", "12 MONTHS"), and 5-6 "features" (short benefits, e.g. "Totals update as you type").
 - "goals": progress bars, e.g. { label: "Savings goal", current: "<summary label>", target: "<input label>" }.
 - Column types: ${COLUMN_TYPES.join(", ")}. "choice" needs 2-8 options (or optionsFrom). "checkbox" is a Yes/No dropdown.
 - A column can be calculated with "formula" using ONLY other columns in the same tab in curly braces, numbers and + - * / ( ), e.g. "{Budget} - {Spent}" or "{Price} * {Qty}". Inputs can be used as {input:Label}. A calculated column must not use another calculated column.
