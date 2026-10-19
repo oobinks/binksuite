@@ -16,6 +16,9 @@ export const fileRoutes = newApp()
     obj.writeHttpMetadata(headers);
     headers.set("etag", obj.httpEtag);
     headers.set("Cache-Control", "private, max-age=31536000, immutable");
+    // Artwork SVGs are cleaned before they're stored; this makes sure nothing in one can ever run.
+    headers.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
+    headers.set("X-Content-Type-Options", "nosniff");
     const download = c.req.query("download");
     if (download && SAFE_NAME.test(download)) headers.set("Content-Disposition", `attachment; filename="${download}"`);
     return new Response(obj.body, { headers });

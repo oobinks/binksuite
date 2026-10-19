@@ -126,7 +126,11 @@ describe("real AI pipeline (Workers AI)", () => {
     // Stylist uses your kept art; Copywriter's listing is tidied and disclosed.
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "mockups"))?.state === "needs_approval");
     const mock = JSON.parse((await taskOf(p.id, "mockups")).output);
+    expect(mock.mockups.map((m: any) => m.scene)).toEqual(["living", "nursery", "bedroom", "hallway"]);
     expect(mock.mockups[0].imageKey).toBe(images[0].key);
+    // Each room was painted once and saved to the scene library for the next products.
+    expect(calls.filter((c) => c.startsWith("prompt:") && /Nothing hanging on the wall/.test(c))).toHaveLength(4);
+    expect((await env.FILES.list({ prefix: "products/_scenes/" })).objects).toHaveLength(4);
     await approveTask(db, (await taskOf(p.id, "mockups")).id, settings);
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "price"))?.state === "needs_approval");
     const listing = JSON.parse((await env.DB.prepare("SELECT data FROM products WHERE id = ?").bind(p.id).first<any>()).data).listing;

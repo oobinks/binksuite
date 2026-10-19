@@ -115,3 +115,18 @@ describe("preview maths", () => {
     expect(formatValue(-10, "money", "£")).toBe("-£10.00");
   });
 });
+
+describe("artwork safety filter", () => {
+  it("keeps drawings and strips anything that could run or fetch", async () => {
+    const { sanitizeSvg, SvgError } = await import("../../src/shared/svg");
+    const out = sanitizeSvg(
+      `Here you go:\n<svg width="10" viewBox="0 0 1000 1250" onload="evil()"><script>bad()</script><a href="https://x.test"><rect width="10" height="10" fill="url(https://x.test/a.png)"/></a><image href="https://x.test/p.png"/><use href="#leaf"/><foreignObject><div>hi</div></foreignObject><circle r="4" style="fill:red" onmouseover="x()"/></svg> thanks`,
+    );
+    expect(out).not.toMatch(/script|onload|onmouseover|x\.test|foreignObject|<image/);
+    expect(out).toMatch(/<use href="#leaf"\/>/);
+    expect(out).toMatch(/xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+    expect(out).toMatch(/width="2400" height="3000"/);
+    expect(() => sanitizeSvg("no svg here")).toThrow(SvgError);
+    expect(() => sanitizeSvg('<svg viewBox="0 0 10 10"></svg>')).toThrow(/doesn't draw/);
+  });
+});

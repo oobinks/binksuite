@@ -10,6 +10,8 @@ import { financeRoutes } from "./routes/finance";
 import { settingsRoutes } from "./routes/settings";
 import { fileRoutes } from "./routes/files";
 import { radarRoutes } from "./routes/radar";
+import { agentRoutes } from "./routes/agent";
+import { claudeRoutes } from "./routes/claude";
 import { runCron } from "./cron";
 
 const app = newApp();
@@ -41,6 +43,8 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.route("/api/auth", authRoutes);
+// Claude Code sessions use a connection key, not the owner's login.
+app.route("/api/agent", agentRoutes);
 
 // Everything below requires a logged-in owner.
 app.use("/api/*", async (c, next) => {
@@ -53,6 +57,7 @@ app.route("/api/finance", financeRoutes);
 app.route("/api", settingsRoutes);
 app.route("/api", fileRoutes);
 app.route("/api", radarRoutes);
+app.route("/api", claudeRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

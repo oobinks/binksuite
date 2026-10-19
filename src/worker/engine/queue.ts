@@ -4,7 +4,7 @@
 // queries and no heavy CPU, so it fits the free plan's 10 ms budget.
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { DB } from "../db";
-import { activity, approvals, handoffs, ledger, products, tasks } from "../db/schema";
+import { activity, approvals, claudeJobs, handoffs, ledger, products, tasks } from "../db/schema";
 import { nextState, type TaskEvent, type TaskState } from "../../shared/tasks";
 import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared/registry";
 import { XP } from "../../shared/game";
@@ -18,6 +18,7 @@ import { formatOf, guessFormat, type ProductFormat } from "../../shared/format";
 import type { PartialResult, ProductRow, StepDef, StepResult, TaskRow } from "./agents/types";
 import { AiLimitError, aiUsageToday, isAiLimit, MAX_CALL_NEURONS, type AiServices } from "../providers/ai";
 import { DEMO_NICHES } from "./agents/demoContent";
+import { CLAUDE_WAITING, isClaudePending } from "../providers/claudeCode";
 import { awardXp, checkAchievements, notify, recordEvent } from "./game";
 
 export class EngineError extends Error {
@@ -207,6 +208,8 @@ const LEASE_MS = 90_000;
 async function aiBlockReason(db: DB, settings: Settings, opts: TickOptions): Promise<string | null> {
   if (!settings.ai.enabled) return "Real AI is switched off. Turn it on in Settings → AI engine.";
   if (!opts.ai || !opts.files) return "Real AI isn't available on this server.";
+  // Claude Code runs on your subscription: there's no daily neuron allowance to check.
+  if (settings.ai.provider === "claude-code") return null;
   const used = await aiUsageToday(db);
   // Keep headroom for a whole call so a job never starts only to be refused mid-way.
   if (used.neurons + MAX_CALL_NEURONS > settings.ai.dailyNeuronCap) return new AiLimitError().message;
@@ -248,8 +251,21 @@ export async function tick(db: DB, settings: Settings, opts: TickOptions): Promi
   const busy = new Set(active.filter((t) => t.state === "working" && t.agent).map((t) => t.agent));
   let spend = await apiSpend(db, demoMode, now);
   // Your own suggestions jump the queue.
+  // Tasks waiting on Claude stay put until their answer arrives (no point re-running them every tick).
+  const blockedIds = active.filter((t) => t.state === "blocked").map((t) => t.id);
+  const onClaude = new Set(
+    blockedIds.length
+      ? (
+          await db
+            .select({ taskId: claudeJobs.taskId })
+            .from(claudeJobs)
+            .where(and(inArray(claudeJobs.taskId, blockedIds), inArray(claudeJobs.status, ["waiting", "working"])))
+            .all()
+        ).map((r) => r.taskId)
+      : [],
+  );
   const waiting = active
-    .filter((t) => t.state === "queued" || t.state === "blocked")
+    .filter((t) => t.state === "queued" || (t.state === "blocked" && !onClaude.has(t.id)))
     .sort((a, b) => Number(!!(b.input as { suggestion?: boolean }).suggestion) - Number(!!(a.input as { suggestion?: boolean }).suggestion));
   for (const t of waiting) {
     const step = STEP_BY_KIND[t.kind];
@@ -335,7 +351,8 @@ export async function runReal(db: DB, t: TaskRow, settings: Settings, svc: { ai:
   const step = STEP_BY_KIND[t.kind];
   try {
     const product = await getProduct(db, t.productId);
-    const res = await step.real!({ task: t, product, settings, rng: mulberry32(hashString(t.id) ^ product.seed), ...svc });
+    const ai = svc.ai.forTask?.({ id: t.id, productId: t.productId, title: t.title }) ?? svc.ai;
+    const res = await step.real!({ task: t, product, settings, rng: mulberry32(hashString(t.id) ^ product.seed), ai, files: svc.files });
     if ("partial" in res) {
       const p = res as PartialResult;
       await db
@@ -348,6 +365,12 @@ export async function runReal(db: DB, t: TaskRow, settings: Settings, svc: { ai:
     t.leaseUntil = null;
     await applyResult(db, t, product, res as StepResult, now, { leaseUntil: null });
   } catch (e) {
+    if (isClaudePending(e)) {
+      // Saved to Claude's to-do list; the task waits until a Claude session answers.
+      await transition(db, t, "block", { error: CLAUDE_WAITING, leaseUntil: null }).catch(() => {});
+      await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "blocked", `✨ Added to Claude's to-do list: ${t.title}`, t.demo);
+      return;
+    }
     if (isAiLimit(e)) {
       const msg = new AiLimitError().message;
       await transition(db, t, "block", { error: msg, leaseUntil: null }).catch(() => {});

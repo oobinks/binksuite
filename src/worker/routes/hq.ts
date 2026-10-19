@@ -5,6 +5,7 @@ import { newApp, body, HttpError, aiFor } from "../app";
 import { brainstormIdeas } from "../engine/agents/real";
 import { DEMO_NICHES } from "../engine/agents/demoContent";
 import { isAiLimit } from "../providers/ai";
+import { isClaudePending } from "../providers/claudeCode";
 import { activity, products, tasks } from "../db/schema";
 import { secretsStatus } from "../env";
 import { kvGet, kvSet, visible } from "../lib/store";
@@ -168,6 +169,7 @@ export const hqRoutes = newApp()
     try {
       return c.json({ real: true, ideas: await brainstormIdeas(ai, b.theme?.trim() || undefined, recent) });
     } catch (e) {
+      if (isClaudePending(e)) return c.json({ real: true, pending: true, ideas: [] }, 202);
       throw new HttpError(isAiLimit(e) ? 429 : 502, e instanceof Error ? e.message : "Scout couldn't think of anything just now.");
     }
   })

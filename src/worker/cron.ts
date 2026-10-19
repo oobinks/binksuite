@@ -8,7 +8,7 @@ import { ensureMigrated } from "./db/migrate";
 import { activity, notifications, handoffs } from "./db/schema";
 import { getSettings } from "./lib/store";
 import { tick } from "./engine/queue";
-import { workersAi } from "./providers/ai";
+import { aiServices } from "./app";
 import { etsyClient } from "./providers/etsy";
 import { vaultSecret } from "./lib/vault";
 import { radarTick } from "./engine/trends";
@@ -20,7 +20,7 @@ export async function runCron(env: Env) {
   await ensureMigrated(env.DB);
   const db = getDb(env.DB);
   const settings = await getSettings(db);
-  const ai = env.AI && settings.ai.enabled ? workersAi(env.AI, db, settings) : null;
+  const ai = aiServices(env, db, settings);
   await tick(db, settings, { interactive: false, ai, files: env.FILES });
   // 📡 Trend Radar + 🎯 today's ideas + 👀 Price Watch (a few Etsy calls per run).
   const key = await vaultSecret(db, env, "etsy");

@@ -72,12 +72,15 @@ describe("spreadsheet products", () => {
       files: ["tracker.xlsx", "tracker-printable-A4.pdf"],
       previews: [`products/${p.id}/p1.jpg`, `products/${p.id}/p2.jpg`, "products/someone-else/x.jpg"],
     });
+    // (No screens sent here, so the mockups fall back to the listing photos.)
     expect((await dataOf(p.id)).keptImages).toEqual([`products/${p.id}/p1.jpg`, `products/${p.id}/p2.jpg`]);
 
     // Mockups use the preview pictures on a laptop; the listing talks about Excel.
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "mockups"))?.state === "needs_approval");
     const mock = JSON.parse((await taskOf(p.id, "mockups")).output).mockups;
-    expect(mock[0]).toMatchObject({ scene: "laptop", imageKey: `products/${p.id}/p1.jpg`, slogan: null });
+    expect(mock.map((m: any) => m.scene)).toEqual(["desk", "flatlay", "table"]);
+    expect(mock[0]).toMatchObject({ imageKey: `products/${p.id}/p1.jpg`, slogan: null });
+    expect(mock[0].bgKey).toMatch(/^products\/_scenes\/desk-1-/); // painted by the AI and kept in the scene library
     await approveTask(db, (await taskOf(p.id, "mockups")).id, settings);
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "price"))?.state === "needs_approval");
     expect(prompts.at(-1)).toMatch(/Excel spreadsheet \(\.xlsx\)/);

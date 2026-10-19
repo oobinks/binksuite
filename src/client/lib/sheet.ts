@@ -337,10 +337,21 @@ function clip(ctx: CanvasRenderingContext2D, text: string, max: number) {
 }
 
 /** Draw a spreadsheet-looking table of a tab (with example values) into a box. */
-function drawTable(ctx: CanvasRenderingContext2D, spec: SheetSpec, tab: SheetTab, rows: (string | number | null)[][], x: number, y: number, w: number, h: number, blank = false) {
+function drawTable(
+  ctx: CanvasRenderingContext2D,
+  spec: SheetSpec,
+  tab: SheetTab,
+  rows: (string | number | null)[][],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  blank = false,
+  fixedRowH?: number,
+) {
   const total = tab.columns.reduce((a, c) => a + c.width, 0);
   const widths = tab.columns.map((c) => (w * c.width) / total);
-  const rowH = Math.min(64, h / (Math.max(rows.length, 6) + 2));
+  const rowH = fixedRowH ?? Math.min(64, h / (Math.max(rows.length, 6) + 2));
   const font = Math.round(rowH * 0.42);
   let cx = x;
   ctx.textBaseline = "middle";
@@ -386,6 +397,7 @@ function drawTable(ctx: CanvasRenderingContext2D, spec: SheetSpec, tab: SheetTab
       cx += widths[i];
     });
   }
+  return { widths, rowH, rows: count };
 }
 
 function backdrop(ctx: CanvasRenderingContext2D, w: number, h: number, accent: string) {
@@ -422,89 +434,458 @@ function toJpeg(c: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't make the preview picture"))), "image/jpeg", 0.9));
 }
 
-export async function buildPreviews(spec: SheetSpec, format: ProductFormat): Promise<Blob[]> {
+/** Small rounded label, e.g. "Google Sheets". Returns its width. */
+function pill(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, bg: string, fg = "#fff", size = 34) {
+  ctx.font = `900 ${size}px Nunito, sans-serif`;
+  const w = ctx.measureText(text).width + size * 1.4;
+  ctx.fillStyle = bg;
+  roundRect(ctx, x, y, w, size * 1.7, size * 0.85);
+  ctx.fill();
+  ctx.fillStyle = fg;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + size * 0.7, y + size * 0.86);
+  return w;
+}
+
+function card(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 28) {
+  ctx.save();
+  ctx.shadowColor = "rgba(59,47,42,.2)";
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 14;
+  ctx.fillStyle = "#fff";
+  roundRect(ctx, x, y, w, h, r);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** A headline at the top of a listing picture. */
+function headline(ctx: CanvasRenderingContext2D, text: string, sub: string, W: number) {
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = INK;
+  ctx.font = "900 92px Nunito, sans-serif";
+  ctx.fillText(clip(ctx, text, W - 160), W / 2, 140);
+  ctx.fillStyle = "#7a5c4d";
+  ctx.font = "700 44px Nunito, sans-serif";
+  ctx.fillText(clip(ctx, sub, W - 200), W / 2, 205);
+}
+
+/** A curved arrow from a callout bubble to a point. */
+function arrow(ctx: CanvasRenderingContext2D, from: [number, number], to: [number, number], colour: string) {
+  const [x1, y1] = from;
+  const [x2, y2] = to;
+  const cx = (x1 + x2) / 2 + (y2 - y1) * 0.25;
+  const cy = (y1 + y2) / 2 - (x2 - x1) * 0.25;
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.quadraticCurveTo(cx, cy, x2, y2);
+  ctx.stroke();
+  const a = Math.atan2(y2 - cy, x2 - cx);
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - 34 * Math.cos(a - 0.45), y2 - 34 * Math.sin(a - 0.45));
+  ctx.lineTo(x2 - 34 * Math.cos(a + 0.45), y2 - 34 * Math.sin(a + 0.45));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function bubble(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, colour: string) {
+  ctx.font = "900 44px Nunito, sans-serif";
+  const w = ctx.measureText(text).width + 70;
+  const h = 92;
+  ctx.save();
+  ctx.shadowColor = "rgba(59,47,42,.25)";
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = colour;
+  roundRect(ctx, x - w / 2, y - h / 2, w, h, 46);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x, y + 2);
+  return { w, h };
+}
+
+/** The bar chart on the dashboard: first money column by the first text column (the example rows). */
+function chartData(spec: SheetSpec, rows: (string | number | null)[][]) {
+  const tab = spec.tabs[0];
+  const label = tab.columns.findIndex((c) => c.type === "text");
+  const money = tab.columns.findIndex((c) => (c.type === "money" || c.type === "number") && rows.some((r) => typeof r[tab.columns.indexOf(c)] === "number"));
+  if (label < 0 || money < 0) return null;
+  const items = rows.filter((r) => r[label] && typeof r[money] === "number").map((r) => ({ label: String(r[label]), value: Number(r[money]) }));
+  return items.length >= 2 ? { title: tab.columns[money].header, type: tab.columns[money].type, items: items.slice(0, 6) } : null;
+}
+
+function drawBars(ctx: CanvasRenderingContext2D, spec: SheetSpec, data: NonNullable<ReturnType<typeof chartData>>, x: number, y: number, w: number, h: number) {
+  const max = Math.max(...data.items.map((i) => Math.abs(i.value)), 1);
+  const rowH = Math.min(110, h / data.items.length);
+  const labelW = w * 0.28;
+  data.items.forEach((item, i) => {
+    const by = y + i * rowH;
+    ctx.fillStyle = INK;
+    ctx.font = "800 40px Nunito, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillText(clip(ctx, item.label, labelW - 20), x + labelW - 20, by + rowH / 2);
+    const bw = ((w - labelW - 220) * Math.abs(item.value)) / max;
+    ctx.fillStyle = i % 2 ? tint(spec.accent, 0.35) : spec.accent;
+    roundRect(ctx, x + labelW, by + rowH * 0.18, Math.max(bw, 12), rowH * 0.64, 14);
+    ctx.fill();
+    ctx.fillStyle = INK;
+    ctx.textAlign = "left";
+    ctx.fillText(formatValue(item.value, data.type, spec.currency), x + labelW + bw + 18, by + rowH / 2);
+  });
+}
+
+/** A spreadsheet "window" as the laptop screen shows it: toolbar, column letters, the table, tab strip. */
+function drawScreen(spec: SheetSpec, rows: (string | number | null)[][], format: ProductFormat) {
+  const W = 1600;
+  const H = 1000;
+  const [c, ctx] = canvas(W, H);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = format === "excel" ? "#1f7a4d" : spec.accent;
+  ctx.fillRect(0, 0, W, 70);
+  ctx.fillStyle = "#fff";
+  ctx.font = "800 34px Nunito, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(clip(ctx, `${spec.title}${format === "excel" ? ".xlsx" : ".pdf"}`, W - 80), 30, 36);
+  ctx.fillStyle = "#f3f3f3";
+  ctx.fillRect(0, 70, W, 56);
+  ctx.fillStyle = "#666";
+  ctx.font = "700 26px Nunito, sans-serif";
+  ["File", "Edit", "View", "Insert", "Format", "Data"].forEach((m, i) => ctx.fillText(m, 30 + i * 110, 98));
+  // Title row, as in the workbook.
+  ctx.fillStyle = spec.accent;
+  ctx.font = "900 46px Nunito, sans-serif";
+  ctx.fillText(clip(ctx, spec.title, W - 80), 40, 175);
+  drawTable(ctx, spec, spec.tabs[0], rows, 40, 220, W - 80, H - 320, format === "pdf", 52);
+  // Sheet tabs.
+  ctx.fillStyle = "#f3f3f3";
+  ctx.fillRect(0, H - 70, W, 70);
+  let tx = 30;
+  const names = [HOW_TO_TAB, ...(spec.inputs.length || spec.summary.length ? [SUMMARY_TAB] : []), ...spec.tabs.map((t) => t.name)];
+  names.forEach((n, i) => {
+    ctx.font = "800 26px Nunito, sans-serif";
+    const w = ctx.measureText(n).width + 40;
+    ctx.fillStyle = i === names.length - spec.tabs.length ? "#fff" : "#e4e4e4";
+    roundRect(ctx, tx, H - 60, w, 50, 8);
+    ctx.fill();
+    ctx.fillStyle = INK;
+    ctx.fillText(n, tx + 20, H - 35);
+    tx += w + 10;
+  });
+  return c;
+}
+
+/** The dashboard as a tall tablet screen: summary cards and the chart. */
+function drawDashScreen(spec: SheetSpec, values: ReturnType<typeof previewValues>) {
+  const W = 1200;
+  const H = 1600;
+  const [c, ctx] = canvas(W, H);
+  ctx.fillStyle = CREAM;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = spec.accent;
+  ctx.fillRect(0, 0, W, 190);
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = "900 64px Nunito, sans-serif";
+  ctx.fillText(clip(ctx, spec.title, W - 100), 50, 110);
+  ctx.font = "700 32px Nunito, sans-serif";
+  ctx.fillText(clip(ctx, spec.subtitle || SUMMARY_TAB, W - 100), 50, 160);
+  const items = [
+    ...spec.inputs.map((i) => ({ label: i.label, value: formatValue(i.example, i.type, spec.currency) })),
+    ...values.summary.map((s) => ({ label: s.label, value: formatValue(s.value, s.type, spec.currency) })),
+  ].slice(0, 6);
+  items.forEach((it, i) => {
+    const x = 50 + (i % 2) * 560;
+    const y = 240 + Math.floor(i / 2) * 210;
+    card(ctx, x, y, 540, 180, 24);
+    ctx.fillStyle = spec.accent;
+    roundRect(ctx, x, y, 14, 180, 7);
+    ctx.fill();
+    ctx.fillStyle = "#7a5c4d";
+    ctx.font = "800 32px Nunito, sans-serif";
+    ctx.fillText(clip(ctx, it.label, 480), x + 40, y + 62);
+    ctx.fillStyle = INK;
+    ctx.font = "900 62px Nunito, sans-serif";
+    ctx.fillText(clip(ctx, it.value, 480), x + 40, y + 145);
+  });
+  const chart = chartData(spec, values.tabs[0].rows);
+  if (chart) {
+    const top = 240 + Math.ceil(items.length / 2) * 210 + 30;
+    card(ctx, 50, top, W - 100, H - top - 60, 24);
+    ctx.fillStyle = INK;
+    ctx.font = "900 40px Nunito, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(chart.title, 90, top + 70);
+    drawBars(ctx, spec, chart, 80, top + 110, W - 160, H - top - 220);
+  }
+  return c;
+}
+
+/** A printed A4 page: title band, the table to fill in, tick boxes. */
+function drawPage(spec: SheetSpec, format: ProductFormat, rows: (string | number | null)[][]) {
+  const W = 1240;
+  const H = 1754;
+  const [c, ctx] = canvas(W, H);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = spec.accent;
+  ctx.fillRect(0, 0, W, 22);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = "900 70px Nunito, sans-serif";
+  ctx.fillText(clip(ctx, spec.title, W - 140), 70, 140);
+  ctx.fillStyle = "#7a5c4d";
+  ctx.font = "700 32px Nunito, sans-serif";
+  ctx.fillText(clip(ctx, spec.subtitle, W - 140), 70, 190);
+  // Handwriting-style example rows only on Excel's printed copy; PDF pages stay blank to fill in.
+  drawTable(ctx, spec, spec.tabs[0], format === "excel" ? rows : [], 70, 240, W - 140, H - 320, format === "pdf", 50);
+  return c;
+}
+
+export interface SheetPictures {
+  /** Listing photos, in order. */
+  listing: Blob[];
+  /** Screens for the photo mockups. */
+  screens: { table: Blob; dash?: Blob; page: Blob };
+}
+
+export async function buildPreviews(spec: SheetSpec, format: ProductFormat): Promise<SheetPictures> {
   await loadSloganFont();
   const W = 2000;
   const H = 1500;
   const values = previewValues(spec);
-  const out: Blob[] = [];
+  const rows = values.tabs[0].rows;
   const tab = spec.tabs[0];
+  const excel = format === "excel";
+  const screen = drawScreen(spec, rows, format);
+  const page = drawPage(spec, format, rows);
+  const dash = excel && (spec.inputs.length || spec.summary.length) ? drawDashScreen(spec, values) : null;
+  const listing: Blob[] = [];
 
-  // 1. Hero: the main tab, filled with the examples.
+  // 1. Hero: the product on a laptop (Excel) or a fanned pair of pages (PDF), with what you get.
   {
     const [c, ctx] = canvas(W, H);
     backdrop(ctx, W, H, spec.accent);
-    titleBlock(ctx, spec, W, format === "excel" ? "EXCEL + GOOGLE SHEETS" : "PRINTABLE PDF");
-    const x = 120;
-    const y = 360;
-    ctx.fillStyle = "#fff";
-    ctx.shadowColor = "rgba(59,47,42,.25)";
-    ctx.shadowBlur = 40;
-    roundRect(ctx, x - 20, y - 20, W - x * 2 + 40, H - y - 80, 24);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    drawTable(ctx, spec, tab, values.tabs[0].rows, x, y, W - x * 2, H - y - 120, format === "pdf");
-    out.push(await toJpeg(c));
-  }
-
-  // 2. Dashboard (Excel) or the printed page (PDF), plus what's included.
-  {
-    const [c, ctx] = canvas(W, H);
-    backdrop(ctx, W, H, spec.accent);
-    titleBlock(ctx, spec, W, format === "excel" ? "FORMULAS DO THE MATHS" : "PRINT & FILL IN");
-    const cards =
-      format === "excel" && values.summary.length
-        ? values.summary.slice(0, 6).map((s) => ({ label: s.label, value: formatValue(s.value, s.type, spec.currency) }))
-        : [...spec.inputs.map((i) => i.label), ...spec.summary.map((s) => s.label)].slice(0, 6).map((l) => ({ label: l, value: "" }));
-    const cols = 3;
-    const cw = (W - 240 - (cols - 1) * 40) / cols;
-    cards.forEach((card, i) => {
-      const cx = 120 + (i % cols) * (cw + 40);
-      const cy = 380 + Math.floor(i / cols) * 230;
-      ctx.fillStyle = "#fff";
-      ctx.shadowColor = "rgba(59,47,42,.18)";
-      ctx.shadowBlur = 30;
-      roundRect(ctx, cx, cy, cw, 190, 28);
+    titleBlock(ctx, spec, W, excel ? "EXCEL + GOOGLE SHEETS" : "PRINTABLE PDF");
+    if (excel) {
+      const lw = 1240;
+      const lh = lw * 0.62;
+      const lx = 150;
+      const ly = 380;
+      ctx.save();
+      ctx.shadowColor = "rgba(30,20,10,.35)";
+      ctx.shadowBlur = 50;
+      ctx.shadowOffsetY = 24;
+      ctx.fillStyle = "#1d1d1f";
+      roundRect(ctx, lx, ly, lw, lh, 26);
       ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = spec.accent;
-      roundRect(ctx, cx, cy, 16, 190, 8);
+      ctx.restore();
+      ctx.drawImage(screen, lx + 26, ly + 26, lw - 52, lh - 60);
+      ctx.fillStyle = "#c9c9cf";
+      ctx.beginPath();
+      ctx.moveTo(lx - 80, ly + lh);
+      ctx.lineTo(lx + lw + 80, ly + lh);
+      ctx.lineTo(lx + lw + 50, ly + lh + 36);
+      ctx.lineTo(lx - 50, ly + lh + 36);
       ctx.fill();
-      ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillStyle = "#7a5c4d";
-      ctx.font = "800 38px Nunito, sans-serif";
-      ctx.fillText(clip(ctx, card.label, cw - 70), cx + 46, cy + 70);
-      ctx.fillStyle = INK;
-      ctx.font = "900 70px Nunito, sans-serif";
-      if (card.value) ctx.fillText(clip(ctx, card.value, cw - 70), cx + 46, cy + 155);
-      else {
-        ctx.strokeStyle = INK;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(cx + 46, cy + 150);
-        ctx.lineTo(cx + cw - 40, cy + 150);
-        ctx.stroke();
+      if (dash) {
+        const pw = 420;
+        const ph = pw * 2;
+        const px = W - pw - 170;
+        const py = H - ph - 60;
+        ctx.save();
+        ctx.shadowColor = "rgba(30,20,10,.35)";
+        ctx.shadowBlur = 50;
+        ctx.fillStyle = "#1d1d1f";
+        roundRect(ctx, px, py, pw, ph, 56);
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        roundRect(ctx, px + 18, py + 18, pw - 36, ph - 36, 40);
+        ctx.clip();
+        ctx.drawImage(dash, 0, 0, dash.width, dash.width * ((ph - 36) / (pw - 36)), px + 18, py + 18, pw - 36, ph - 36);
+        ctx.restore();
       }
-    });
-    const included =
-      format === "excel"
-        ? ["✓ Excel file with working formulas", "✓ Opens in Google Sheets & Numbers", "✓ Printable PDF (A4 + US Letter)", "✓ Instant download"]
-        : ["✓ Printable PDF", "✓ A4 + US Letter sizes", "✓ Print as many as you like", "✓ Instant download"];
-    const top = 380 + Math.ceil(Math.max(1, cards.length) / cols) * 230 + 40;
-    ctx.fillStyle = "#fff";
-    roundRect(ctx, 120, top, W - 240, H - top - 90, 28);
-    ctx.fill();
-    ctx.fillStyle = INK;
-    ctx.font = "800 46px Nunito, sans-serif";
-    ctx.textBaseline = "middle";
-    included.forEach((t, i) => {
-      ctx.textAlign = "left";
-      ctx.fillText(t, 180 + (i % 2) * ((W - 240) / 2), top + (H - top - 90) * (i < 2 ? 0.3 : 0.7));
-    });
-    out.push(await toJpeg(c));
+    } else {
+      const ph = 1000;
+      const pw = ph / 1.414;
+      [-7, 5].forEach((deg, i) => {
+        ctx.save();
+        ctx.translate(W / 2 + (i ? 170 : -170), 380 + ph / 2);
+        ctx.rotate((deg * Math.PI) / 180);
+        ctx.shadowColor = "rgba(30,20,10,.3)";
+        ctx.shadowBlur = 40;
+        ctx.shadowOffsetY = 20;
+        ctx.drawImage(page, -pw / 2, -ph / 2, pw, ph);
+        ctx.restore();
+      });
+    }
+    let px = 120;
+    for (const t of excel ? ["Excel", "Google Sheets", "Printable PDF", "Instant download"] : ["A4 + US Letter", "Print at home", "Instant download"]) {
+      px += pill(ctx, t, px, H - 110, INK, "#fff", 32) + 20;
+    }
+    listing.push(await toJpeg(c));
   }
-  return out;
+
+  // 2. Feature callouts on the table.
+  {
+    const [c, ctx] = canvas(W, H);
+    backdrop(ctx, W, H, spec.accent);
+    headline(ctx, excel ? "It does the maths for you" : "Made to fill in by hand", excel ? "Type in the white cells, everything else works itself out" : "Print it, grab a pen, done", W);
+    const x = 150;
+    const y = 470;
+    const w = W - 300;
+    card(ctx, x - 30, y - 30, w + 60, 760);
+    const g = drawTable(ctx, spec, tab, rows, x, y, w, 700, !excel, 76);
+    const colX = (i: number) => x + g.widths.slice(0, i).reduce((a, b) => a + b, 0) + g.widths[i] / 2;
+    const formulaCol = tab.columns.findIndex((col) => col.formula);
+    const pickCol = tab.columns.findIndex((col) => col.type === "checkbox" || col.type === "choice");
+    const callouts: { text: string; at: [number, number]; from: [number, number] }[] = [];
+    if (excel && formulaCol >= 0) callouts.push({ text: "Works itself out", at: [colX(formulaCol), y + g.rowH * 1.5], from: [colX(formulaCol), 330] });
+    if (pickCol >= 0)
+      callouts.push({
+        text: tab.columns[pickCol].type === "checkbox" ? (excel ? "Tick off as you go" : "Tick boxes") : "Handy dropdowns",
+        at: [colX(pickCol), y + g.rowH * 2.5],
+        from: [Math.min(W - 300, colX(pickCol) + 120), 1380],
+      });
+    callouts.push({ text: excel ? "Plenty of rows, totals update" : "Plenty of room to write", at: [x + g.widths[0] / 2, y + g.rowH * 5.5], from: [420, 1380] });
+    callouts.forEach((co, i) => {
+      const colour = i === 1 ? "#2e7d32" : spec.accent;
+      arrow(ctx, [co.from[0], co.from[1] + (co.from[1] < co.at[1] ? 46 : -46)], co.at, colour);
+      bubble(ctx, co.text, co.from[0], co.from[1], colour);
+    });
+    listing.push(await toJpeg(c));
+  }
+
+  // 3. Dashboard with a chart (Excel), or a close-up of the printed page (PDF).
+  if (dash) {
+    const [c, ctx] = canvas(W, H);
+    backdrop(ctx, W, H, spec.accent);
+    headline(ctx, "Everything at a glance", "Your summary updates as you type", W);
+    const ch = 1180;
+    const cw = ch * (dash.width / dash.height);
+    card(ctx, 140, 270, cw, ch, 30);
+    ctx.save();
+    roundRect(ctx, 140, 270, cw, ch, 30);
+    ctx.clip();
+    ctx.drawImage(dash, 140, 270, cw, ch);
+    ctx.restore();
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    const notes = [
+      spec.inputs.length ? `Type your ${spec.inputs[0].label.toLowerCase()} once` : "Fill in your rows",
+      `${spec.summary.length} totals worked out for you`,
+      chartData(spec, rows) ? "See where it all goes" : "Colour-coded as you go",
+      "Works in Excel & Google Sheets",
+    ];
+    notes.forEach((n, i) => {
+      const ny = 420 + i * 230;
+      ctx.fillStyle = spec.accent;
+      ctx.beginPath();
+      ctx.arc(cw + 260, ny - 16, 34, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "900 40px Nunito, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(String(i + 1), cw + 260, ny - 2);
+      ctx.fillStyle = INK;
+      ctx.font = "800 46px Nunito, sans-serif";
+      ctx.textAlign = "left";
+      wrapText(ctx, n, cw + 320, ny, W - cw - 420, 56);
+    });
+    listing.push(await toJpeg(c));
+  }
+
+  // 4. What's inside: every tab (or page) as a card.
+  {
+    const [c, ctx] = canvas(W, H);
+    backdrop(ctx, W, H, spec.accent);
+    headline(ctx, "What's inside", excel ? "One file, everything set up" : "Every page, ready to print", W);
+    const parts = [
+      ...(excel ? [{ name: HOW_TO_TAB, note: `${spec.howTo.length} simple steps` }] : []),
+      ...(spec.inputs.length || spec.summary.length ? [{ name: excel ? SUMMARY_TAB : "Overview page", note: `${spec.inputs.length + spec.summary.length} boxes` }] : []),
+      ...spec.tabs.map((t) => ({ name: t.name, note: t.columns.map((col) => col.header).slice(0, 4).join(" · ") })),
+      ...(excel ? [{ name: "Printable PDF", note: "A4 + US Letter" }] : [{ name: "Two paper sizes", note: "A4 + US Letter" }]),
+    ].slice(0, 6);
+    const cols = parts.length > 4 ? 3 : 2;
+    const cw = (W - 240 - (cols - 1) * 50) / cols;
+    const chh = parts.length > cols ? 480 : 700;
+    parts.forEach((part, i) => {
+      const x = 120 + (i % cols) * (cw + 50);
+      const y = 290 + Math.floor(i / cols) * (chh + 50);
+      card(ctx, x, y, cw, chh);
+      ctx.fillStyle = spec.accent;
+      roundRect(ctx, x, y, cw, 90, 28);
+      ctx.fill();
+      ctx.fillRect(x, y + 50, cw, 40);
+      ctx.fillStyle = "#fff";
+      ctx.font = "900 44px Nunito, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(clip(ctx, part.name, cw - 60), x + 30, y + 47);
+      const t = spec.tabs.find((tt) => tt.name === part.name);
+      if (t) drawTable(ctx, spec, t, values.tabs[spec.tabs.indexOf(t)].rows, x + 24, y + 116, cw - 48, chh - 220, !excel, 40);
+      else {
+        ctx.fillStyle = tint(spec.accent, 0.9);
+        roundRect(ctx, x + 24, y + 116, cw - 48, chh - 220, 18);
+        ctx.fill();
+        ctx.fillStyle = spec.accent;
+        ctx.font = "900 120px Nunito, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(part.name === HOW_TO_TAB ? "?" : part.name.includes("PDF") || part.name.includes("sizes") ? "A4" : "£", x + cw / 2, y + 116 + (chh - 220) / 2);
+      }
+      ctx.fillStyle = "#7a5c4d";
+      ctx.font = "800 34px Nunito, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(clip(ctx, part.note, cw - 60), x + 30, y + chh - 52);
+    });
+    listing.push(await toJpeg(c));
+  }
+
+  // 5. The printed page.
+  {
+    const [c, ctx] = canvas(W, H);
+    backdrop(ctx, W, H, spec.accent);
+    headline(ctx, excel ? "Prefer paper? Print it" : "Print as many as you like", "A4 and US Letter included", W);
+    const ph = 1180;
+    const pw = ph / 1.414;
+    ctx.save();
+    ctx.translate(W / 2, 270 + ph / 2);
+    ctx.rotate((-3 * Math.PI) / 180);
+    ctx.shadowColor = "rgba(30,20,10,.3)";
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 20;
+    ctx.drawImage(page, -pw / 2, -ph / 2, pw, ph);
+    ctx.restore();
+    listing.push(await toJpeg(c));
+  }
+
+  return { listing, screens: { table: await toJpeg(screen), dash: dash ? await toJpeg(dash) : undefined, page: await toJpeg(page) } };
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, max: number, lineH: number) {
+  let line = "";
+  let yy = y;
+  for (const word of text.split(" ")) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > max && line) {
+      ctx.fillText(line, x, yy);
+      line = word;
+      yy += lineH;
+    } else line = test;
+  }
+  if (line) ctx.fillText(line, x, yy);
 }
 
 // ───────────── Pack it all up ─────────────
@@ -513,6 +894,7 @@ export interface SheetPack {
   zipKey: string;
   files: string[];
   previews: string[];
+  screens: { table?: string; dash?: string; page?: string };
   bytes: number;
 }
 
@@ -536,25 +918,28 @@ export async function buildSheetPack(productId: string, spec: SheetSpec, format:
     files.push(name);
   }
   for (const [i, size] of PAGE_SIZES.entries()) {
-    onProgress(`Making the printable PDF (${size.name})…`, 0.3 + i * 0.15);
+    onProgress(`Making the printable PDF (${size.name})…`, 0.25 + i * 0.1);
     const name = `${base}-printable-${size.name}.pdf`;
     zip.file(name, await buildPdf(spec, size, format));
     files.push(name);
   }
-  onProgress("Drawing the listing pictures…", 0.65);
+  onProgress("Drawing the listing pictures…", 0.5);
   const pictures = await buildPreviews(spec, format);
-  pictures.forEach((p, i) => {
-    const name = `${base}-preview-${i + 1}.jpg`;
+  pictures.listing.forEach((p, i) => {
+    const name = `${base}-listing-photo-${i + 1}.jpg`;
     zip.file(name, p);
     files.push(name);
   });
-  onProgress("Zipping…", 0.8);
+  onProgress("Zipping…", 0.75);
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  onProgress("Uploading…", 0.88);
+  onProgress("Uploading…", 0.82);
   const stamp = Date.now().toString(36);
   const zipKey = await upload(productId, `${base}-pack-${stamp}.zip`, blob, "application/zip");
   const previews: string[] = [];
-  for (const [i, p] of pictures.entries()) previews.push(await upload(productId, `${base}-preview-${i + 1}-${stamp}.jpg`, p, "image/jpeg"));
+  for (const [i, p] of pictures.listing.entries()) previews.push(await upload(productId, `${base}-listing-${i + 1}-${stamp}.jpg`, p, "image/jpeg"));
+  onProgress("Saving the mockup screens…", 0.94);
+  const screens: SheetPack["screens"] = {};
+  for (const [k, b] of Object.entries(pictures.screens)) if (b) screens[k as keyof SheetPack["screens"]] = await upload(productId, `${base}-screen-${k}-${stamp}.jpg`, b, "image/jpeg");
   onProgress("Done!", 1);
-  return { zipKey, files, previews, bytes: blob.size };
+  return { zipKey, files, previews, screens, bytes: blob.size };
 }

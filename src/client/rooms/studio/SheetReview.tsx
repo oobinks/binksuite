@@ -32,7 +32,7 @@ export const sheetReview: ReviewDef = {
         const { buildSheetPack } = await import("../../lib/sheet"); // Excel + PDF tools load only when needed
         const p = await buildSheetPack(task.productId!, o.sheet, o.format, (label, f) => setStep({ label, f }));
         setPack(p);
-        setData({ zipKey: p.zipKey, files: p.files, previews: p.previews });
+        setData({ zipKey: p.zipKey, files: p.files, previews: p.previews, screens: p.screens });
         setReady(true);
       } catch (e) {
         setError(e);
@@ -55,7 +55,7 @@ export const sheetReview: ReviewDef = {
           </details>
         )}
         <p className="text-sm">
-          Printer builds {o.format === "excel" ? <b>the Excel file, a printable PDF</b> : <b>the printable PDF</b>} (A4 and US Letter) and <b>2 listing pictures</b> on your device. It's
+          Printer builds {o.format === "excel" ? <b>the Excel file, a printable PDF</b> : <b>the printable PDF</b>} (A4 and US Letter) and <b>{o.format === "excel" ? 5 : 4} listing photos</b> on your device. It's
           free and takes a few seconds.
         </p>
         {step && !pack && (
@@ -74,7 +74,7 @@ export const sheetReview: ReviewDef = {
                 <li key={f}>📎 {f}</li>
               ))}
             </ul>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {pack.previews.map((k) => (
                 <ArtImage key={k} imageKey={k} className="aspect-[4/3] w-full rounded-lg" label="Listing preview" />
               ))}

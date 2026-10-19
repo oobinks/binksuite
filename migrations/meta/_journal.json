@@ -36,6 +36,13 @@
       "when": 1792405853623,
       "tag": "0004_rescan_digital_only",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792414662419,
+      "tag": "0005_claude_jobs",
+      "breakpoints": true
     }
   ]
 }

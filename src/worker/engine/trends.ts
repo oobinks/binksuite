@@ -18,6 +18,7 @@ import { readMarket, type MarketRead } from "../../shared/market";
 import type { Settings } from "../../shared/settings";
 import type { AiServices } from "../providers/ai";
 import { isAiLimit } from "../providers/ai";
+import { isClaudePending } from "../providers/claudeCode";
 import { EtsyError, type EtsyClient } from "../providers/etsy";
 import { suggestIdea, logActivity } from "./queue";
 import { notify } from "./game";
@@ -125,6 +126,8 @@ async function aiEstimate(db: DB, ai: AiServices, now: Date) {
   const month = now.toLocaleString("en-GB", { month: "long" });
   const pool = SEED_NICHES.map(([k]) => k);
   const r = await ai.json({
+    key: `estimate:${now.toISOString().slice(0, 10)}`,
+    label: "Trend Radar: today's estimates",
     system: "You are Scout, a market researcher for a UK Etsy shop selling digital printables. Be realistic; these are estimates.",
     prompt: `It's ${month}. From this list, pick the 15 niches most likely to be selling well on Etsy right now, and rate each: demand 1-10 (rising interest now), competition 1-10 (10 = very crowded), a typical price in GBP, and a short note why.\nList: ${pool.join(", ")}`,
     schema: aiEstimateSchema,
@@ -216,7 +219,7 @@ export async function radarTick(db: DB, settings: Settings, deps: RadarDeps): Pr
         await aiEstimate(db, deps.ai, now);
         await kvSet(db, "radarAiDay", day);
       } catch (e) {
-        if (!isAiLimit(e)) result.error = e instanceof Error ? e.message : String(e);
+        if (!isAiLimit(e) && !isClaudePending(e)) result.error = e instanceof Error ? e.message : String(e);
       }
     }
   }
@@ -228,7 +231,7 @@ export async function radarTick(db: DB, settings: Settings, deps: RadarDeps): Pr
       try {
         result.dailyCreated = (await makeDailyIdeas(db, settings, deps.ai, now)).length;
       } catch (e) {
-        if (!isAiLimit(e)) result.error = e instanceof Error ? e.message : String(e);
+        if (!isAiLimit(e) && !isClaudePending(e)) result.error = e instanceof Error ? e.message : String(e);
       }
     }
   }
@@ -264,7 +267,12 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     (n) =>
       `- ${n.keyword}: [${nicheFormat(n.keyword, n.category)}] ${n.source === "etsy" ? `${n.totalListings?.toLocaleString()} competing listings, new listings getting ${n.favsPerDay} favourites/day, median price £${((n.medianPricePence ?? 0) / 100).toFixed(2)}` : `AI estimate${n.note ? `: ${n.note}` : ""}`}`,
   );
+  // One batch per press: "More ideas now" asks for a fresh batch rather than reusing this morning's.
+  const date = now.toISOString().slice(0, 10);
+  const earlier = (await kvGet<DailyIdeas>(db, `daily:${date}`))?.items ?? [];
   const r = await ai.json({
+    key: `daily:${date}:${earlier.length}`,
+    label: `🎯 Today's ideas (${top.length})`,
     system:
       "You are Scout, the creative lead of a UK Etsy shop selling AI-assisted digital printables. Your job: beat competitors with fresh, specific, sellable ideas: a clear twist, not a copy. No brands, characters, celebrities or song lyrics.",
     prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital download that could outsell what's already there. Formats: "art" (printable wall art), "excel" (a ready-made spreadsheet with formulas, also works in Google Sheets), "pdf" (a printable planner/tracker/checklist). The format in [brackets] is the usual one for that niche; pick another if it would sell better. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence), format.`,
@@ -299,8 +307,6 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     items.push({ productId: p.id, keyword: niche.keyword, idea: idea.idea.slice(0, 120), angle: idea.angle.slice(0, 300), format });
   }
   // "More ideas now" adds to today's list rather than replacing it.
-  const date = now.toISOString().slice(0, 10);
-  const earlier = (await kvGet<DailyIdeas>(db, `daily:${date}`))?.items ?? [];
   const daily: DailyIdeas = { date, at: nowIso(now), items: [...earlier, ...items] };
   await kvSet(db, `daily:${daily.date}`, daily);
   if (items.length) {

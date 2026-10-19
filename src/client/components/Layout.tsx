@@ -6,6 +6,7 @@ import { useUi } from "../lib/store";
 import { formatGBP } from "../lib/format";
 import { ProgressBar, Modal } from "./ui";
 import { Logo } from "./Logo";
+import { ClaudeBar } from "./ClaudeBar";
 import { BriefingModal } from "../game/BriefingModal";
 import { ApprovalsDrawer } from "../game/ApprovalsDrawer";
 import { levelTitle } from "../../shared/game";
@@ -90,6 +91,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
           </div>
         </div>
+        <ClaudeBar provider={snap?.settings.ai.provider} />
         {snap && (!snap.secrets.sessionSecret || !snap.secrets.vaultMasterKey) && (
           <div className="bg-berry/15 px-4 py-1.5 text-center text-xs font-bold text-berry">
             A Cloudflare secret is missing. Open <Link className="underline" to="/setup">the setup guide</Link>.

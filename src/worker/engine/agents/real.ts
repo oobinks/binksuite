@@ -7,6 +7,7 @@ import type { MarketReport, Verdict } from "./marketResearch";
 import type { PartialResult, ProductRow, RealContext, StepDef, StepResult, TaskRow } from "./types";
 import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../../shared/format";
 import { SHEET_JSON_SCHEMA, SHEET_RULES, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
+import { SCENE_VARIANTS, sceneKey, scenesFor, type MockupView, type SceneDef } from "../../../shared/mockupScenes";
 
 export const IMAGES_PER_PRODUCT = 4;
 export const PRINT_SIZES_REAL = ["A5", "A4", "A3", "US Letter", "8x10"] as const;
@@ -47,6 +48,8 @@ interface ProductData {
   keptImages?: string[];
   listing?: { title: string; tags: string[]; description: string; designedBy: "seller" };
   sheet?: SheetSpec;
+  /** Spreadsheet pictures for mockup screens: the table, the dashboard and a printed page. */
+  screens?: { table?: string; dash?: string; page?: string };
   zipKey?: string;
   files?: string[];
 }
@@ -188,6 +191,8 @@ const ideasSchema = z.object({ ideas: z.array(z.object({ idea: z.string(), why: 
 
 export async function brainstormIdeas(ai: RealContext["ai"], theme: string | undefined, avoid: string[]) {
   const r = await ai.json({
+    key: `ideas:${new Date().toISOString().slice(0, 10)}:${(theme ?? "").toLowerCase().slice(0, 60)}`,
+    label: `💡 Suggest ideas${theme ? `: ${theme}` : ""}`,
     system: `${SHOP_CONTEXT} You are Scout. Suggest specific, sellable niches, not generic categories.`,
     prompt: `Suggest 5 digital download product ideas (a mix of wall art, printable planners/trackers and ready-made spreadsheets)${theme ? ` around: ${theme}` : " that suit the coming season"}. Avoid brands, characters and celebrities.${avoid.length ? ` Don't repeat: ${avoid.slice(0, 20).join("; ")}.` : ""} Each idea under 60 characters with a one-sentence reason.`,
     schema: ideasSchema,
@@ -269,9 +274,14 @@ async function writeBrief(ctx: RealContext): Promise<StepResult> {
   const data = d(ctx.product);
   const idea = data.suggestion?.idea ?? ctx.product.niche;
   const report = data.report;
+  // With Claude Code the artwork is drawn as vector art (SVG), so the briefs describe a design, not a photo prompt.
+  const vector = !!ctx.ai.svg;
+  const artAsk = vector
+    ? `${IMAGES_PER_PRODUCT} different artwork briefs for the Designer, who draws each one as crisp vector art (SVG): describe the composition, shapes, motifs, texture and mood in detail, as a matching set. Vector suits bold shapes, line art, typography, mid-century, boho, botanical and kids' styles. Lettering is fine only if it's part of the design. No brands or characters.`
+    : `${IMAGES_PER_PRODUCT} different image prompts for a text-to-image model. Prompts must describe printable artwork only: no words, letters or watermarks in the image, no brands or characters, plain composition suitable for framing.`;
   const b = await ctx.ai.json({
-    system: `${SHOP_CONTEXT} You are Analyst. Turn an approved idea into a product brief and image-generation prompts.`,
-    prompt: `Idea: ${idea}\n${data.suggestion?.notes ? `Owner's notes: ${data.suggestion.notes}\n` : ""}${report ? `Scout's angles: ${report.angles.join("; ")}\n` : ""}Write: a short product title (under 50 characters), the target audience, the art style, a palette of 5 hex colours, and ${IMAGES_PER_PRODUCT} different image prompts for a text-to-image model. Prompts must describe printable artwork only: no words, letters or watermarks in the image, no brands or characters, plain composition suitable for framing.\nThen think like a shop owner who wants this to outsell competitors: suggest 3-5 "boosters", creative improvements the owner can switch on. Always include one kind "slogan" with 3 short catchy slogan options (under 40 characters, original, no song lyrics or trademarks). Other kinds: "art" (a style/colour/composition twist, with artHint describing how the image should change), "bundle" (e.g. matching set, multiple colourways, extra sizes, with listingHint), "listing" (e.g. personalisation offer, gift angle, with listingHint). Each with a one-sentence why.`,
+    system: `${SHOP_CONTEXT} You are Analyst. Turn an approved idea into a product brief and ${vector ? "artwork briefs" : "image-generation prompts"}.`,
+    prompt: `Idea: ${idea}\n${data.suggestion?.notes ? `Owner's notes: ${data.suggestion.notes}\n` : ""}${report ? `Scout's angles: ${report.angles.join("; ")}\n` : ""}Write: a short product title (under 50 characters), the target audience, the art style, a palette of 5 hex colours, and ${artAsk}\nThen think like a shop owner who wants this to outsell competitors: suggest 3-5 "boosters", creative improvements the owner can switch on. Always include one kind "slogan" with 3 short catchy slogan options (under 40 characters, original, no song lyrics or trademarks). Other kinds: "art" (a style/colour/composition twist, with artHint describing how the image should change), "bundle" (e.g. matching set, multiple colourways, extra sizes, with listingHint), "listing" (e.g. personalisation offer, gift angle, with listingHint). Each with a one-sentence why.`,
     schema: briefSchema,
     jsonSchema: {
       type: "object",
@@ -307,8 +317,8 @@ async function writeBrief(ctx: RealContext): Promise<StepResult> {
     audience: b.audience.trim(),
     style: b.style.trim(),
     palette: b.palette.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 5),
-    imagePrompts: Array.from({ length: IMAGES_PER_PRODUCT }, (_, i) => b.imagePrompts[i % b.imagePrompts.length]).map(
-      (p) => `${p.trim()}. ${b.style.trim()} style, high detail printable wall art, no text, no lettering, no watermark`,
+    imagePrompts: Array.from({ length: IMAGES_PER_PRODUCT }, (_, i) => b.imagePrompts[i % b.imagePrompts.length]).map((p) =>
+      vector ? p.trim() : `${p.trim()}. ${b.style.trim()} style, high detail printable wall art, no text, no lettering, no watermark`,
     ),
   };
   return {
@@ -351,11 +361,21 @@ async function generateArt(ctx: RealContext): Promise<StepResult | PartialResult
   const done = ((ctx.task.output as { images?: ArtImage[] } | null)?.images ?? []).slice();
   const i = done.length;
   const prompt = boostedPrompt(brief.imagePrompts[i % brief.imagePrompts.length], d(ctx.product).boosters);
-  const b64 = await ctx.ai.image(prompt);
-  // Stored as base64 text: decoding happens in your browser, which keeps the
-  // Worker well inside the free plan's 10 ms CPU limit.
-  const key = `products/${ctx.product.id}/art-${i + 1}-${Date.now().toString(36)}.b64`;
-  await ctx.files.put(key, b64, { httpMetadata: { contentType: "text/plain" }, customMetadata: { kind: "art", mime: "image/jpeg" } });
+  let key: string;
+  if (ctx.ai.svg) {
+    // ✨ Claude draws it as vector art: razor-sharp at every print size.
+    const svg = await ctx.ai.svg(
+      `Product: ${ctx.product.title}\nArtwork ${i + 1} of ${IMAGES_PER_PRODUCT} in a matching set.\nBrief: ${prompt}\nStyle: ${brief.style}\nPalette: ${brief.palette.join(", ") || "your choice, harmonious"}\nAudience: ${brief.audience}`,
+    );
+    key = `products/${ctx.product.id}/art-${i + 1}-${Date.now().toString(36)}.svg`;
+    await ctx.files.put(key, svg, { httpMetadata: { contentType: "image/svg+xml" }, customMetadata: { kind: "art", mime: "image/svg+xml" } });
+  } else {
+    const b64 = await ctx.ai.image(prompt);
+    // Stored as base64 text: decoding happens in your browser, which keeps the
+    // Worker well inside the free plan's 10 ms CPU limit.
+    key = `products/${ctx.product.id}/art-${i + 1}-${Date.now().toString(36)}.b64`;
+    await ctx.files.put(key, b64, { httpMetadata: { contentType: "text/plain" }, customMetadata: { kind: "art", mime: "image/jpeg" } });
+  }
   done.push({ key, prompt });
   if (done.length < IMAGES_PER_PRODUCT) {
     return { partial: { provider: "workers-ai", images: done }, progress: done.length / IMAGES_PER_PRODUCT, log: `Painted image ${done.length} of ${IMAGES_PER_PRODUCT}` };
@@ -508,18 +528,60 @@ function acceptSheetFiles(_task: TaskRow, product: ProductRow, data: Record<stri
   const previews = Array.isArray(data?.previews)
     ? (data!.previews as unknown[]).filter((k): k is string => typeof k === "string" && k.startsWith(`products/${product.id}/`)).slice(0, 10)
     : [];
-  return { productData: { zipKey, files, zip: zipKey.split("/").pop()!, keptImages: previews } };
+  const own = (k: unknown) => (typeof k === "string" && k.startsWith(`products/${product.id}/`) ? k : undefined);
+  const raw = (data?.screens ?? {}) as Record<string, unknown>;
+  const screens = { table: own(raw.table), dash: own(raw.dash), page: own(raw.page) };
+  return { productData: { zipKey, files, zip: zipKey.split("/").pop()!, keptImages: previews, screens } };
 }
 
 // ───────────── Stylist: mockups from your kept art ─────────────
 
-async function styleMockups(ctx: RealContext): Promise<StepResult> {
-  const kept = d(ctx.product).keptImages ?? [];
+/** A painted background for this scene: reuse one from the library, or paint a new one (one AI picture). */
+async function sceneBackground(ctx: RealContext, scene: SceneDef): Promise<{ key: string | null; painted: boolean }> {
+  const listed = await ctx.files.list({ prefix: `products/_scenes/${scene.id}-` });
+  const keys = listed.objects.map((o) => o.key).sort();
+  const want = ctx.product.seed % SCENE_VARIANTS;
+  if (keys.length > want) return { key: keys[want], painted: false };
+  try {
+    const b64 = await ctx.ai.image(scene.prompt);
+    const key = sceneKey(scene.id, keys.length);
+    await ctx.files.put(key, b64, { httpMetadata: { contentType: "text/plain" }, customMetadata: { kind: "scene", mime: "image/jpeg" } });
+    return { key, painted: true };
+  } catch {
+    // Out of free AI for today (or a hiccup): use a library picture, or a plain styled backdrop.
+    return { key: keys[0] ?? null, painted: false };
+  }
+}
+
+/** What to show in each scene: your kept art, or the spreadsheet / printable pictures. */
+function sceneContent(data: ProductData, scene: SceneDef, i: number): string | null {
+  const kept = data.keptImages ?? [];
+  const screens = data.screens;
+  if (screens && (screens.table || screens.page)) {
+    if (scene.kind === "paper") return screens.page ?? screens.table ?? null;
+    if (scene.kind === "tablet") return screens.dash ?? screens.page ?? screens.table ?? null;
+    return screens.table ?? screens.page ?? null;
+  }
+  return kept[i % Math.max(1, kept.length)] ?? null;
+}
+
+async function styleMockups(ctx: RealContext): Promise<StepResult | PartialResult> {
+  const data = d(ctx.product);
   const format = formatOf(ctx.product);
-  const scenes = format === "excel" ? ["laptop", "tablet", "printed"] : format === "pdf" ? ["printed", "tablet", "laptop"] : ["frame", "desk", "tablet", "gallery"];
-  const slogan = isSheetFormat(format) ? null : (d(ctx.product).slogan ?? null);
-  const mockups = scenes.map((scene, i) => ({ scene, imageKey: kept[i % Math.max(1, kept.length)] ?? null, seed: ctx.product.seed * 10 + i, slogan }));
-  return { output: { mockups }, productData: { mockups }, log: `Staged ${mockups.length} mockups with your art` };
+  const scenes = scenesFor(format);
+  const slogan = isSheetFormat(format) ? null : (data.slogan ?? null);
+  const done = ((ctx.task.output as { mockups?: MockupView[] } | null)?.mockups ?? []).slice();
+  // Fill scenes in order; stop after painting one new background so each tick stays small.
+  while (done.length < scenes.length) {
+    const i = done.length;
+    const scene = scenes[i];
+    const bg = await sceneBackground(ctx, scene);
+    done.push({ scene: scene.id, seed: ctx.product.seed * 10 + i, bgKey: bg.key, imageKey: sceneContent(data, scene, i), slogan });
+    if (bg.painted && done.length < scenes.length) {
+      return { partial: { mockups: done }, progress: done.length / scenes.length, log: `Painted the ${scene.label.toLowerCase()} scene` };
+    }
+  }
+  return { output: { mockups: done }, productData: { mockups: done }, log: `Staged ${done.length} photo mockups` };
 }
 
 // ───────────── Copywriter: title, tags, description ─────────────
@@ -608,6 +670,6 @@ export const REAL_STEPS: Record<string, Partial<StepDef>> = {
     needsApproval: true,
     onApprove: (t, p, data) => acceptSheetFiles(t, p, data),
   },
-  mockups: { realSeconds: 1, real: styleMockups },
+  mockups: { realSeconds: 25, real: styleMockups },
   copy: { realSeconds: 20, real: writeListing },
 };
