@@ -1,5 +1,5 @@
 // 📡 Trend Radar, 🎯 today's ideas and 👀 Price Watch.
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { newApp, body, HttpError, aiFor, type Ctx } from "../app";
 import { trendNiches } from "../db/schema";
@@ -7,7 +7,7 @@ import { kvGet } from "../lib/store";
 import { vaultSecret } from "../lib/vault";
 import { etsyClient } from "../providers/etsy";
 import { isAiLimit } from "../providers/ai";
-import { makeDailyIdeas, marketOf, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
+import { liveOnly, makeDailyIdeas, marketOf, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
 import { priceWatchTick } from "../engine/priceWatch";
 import { listSuggestions, suggestIdea } from "../engine/queue";
 
@@ -21,8 +21,9 @@ export const radarRoutes = newApp()
     const db = c.get("db");
     await ensureSeeds(db);
     const day = new Date().toISOString().slice(0, 10);
+    const live = await liveOnly(db);
     const [niches, daily, error, etsy, suggestions] = await Promise.all([
-      db.select().from(trendNiches).where(sql`${trendNiches.score} > 0`).orderBy(desc(trendNiches.score)).limit(20).all(),
+      db.select().from(trendNiches).where(and(sql`${trendNiches.score} > 0`, live)).orderBy(desc(trendNiches.score)).limit(20).all(),
       kvGet<DailyIdeas>(db, `daily:${day}`),
       kvGet<{ at: string; message: string } | null>(db, "radarError"),
       etsyFor(c),

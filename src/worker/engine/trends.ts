@@ -229,7 +229,7 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
   const candidates = await db
     .select()
     .from(trendNiches)
-    .where(and(sql`${trendNiches.score} > 0`, or(isNull(trendNiches.lastSuggested), lt(trendNiches.lastSuggested, cutoff))))
+    .where(and(sql`${trendNiches.score} > 0`, or(isNull(trendNiches.lastSuggested), lt(trendNiches.lastSuggested, cutoff)), await liveOnly(db)))
     .orderBy(desc(trendNiches.score))
     .limit(settings.radar.dailyIdeas * 4)
     .all();
@@ -288,6 +288,15 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
 }
 
 export type NicheRow = typeof trendNiches.$inferSelect;
+
+/**
+ * AI guesses and live Etsy reads score on different scales, so once any niche
+ * has live data, rank only live niches. Returns a where-clause (or nothing).
+ */
+export async function liveOnly(db: DB) {
+  const live = await db.select({ k: trendNiches.keyword }).from(trendNiches).where(and(eq(trendNiches.source, "etsy"), sql`${trendNiches.score} > 0`)).limit(1).get();
+  return live ? eq(trendNiches.source, "etsy") : undefined;
+}
 
 export function marketOf(n: NicheRow) {
   return {
