@@ -21,6 +21,7 @@ import { isAiLimit } from "../providers/ai";
 import { EtsyError, type EtsyClient } from "../providers/etsy";
 import { suggestIdea, logActivity } from "./queue";
 import { notify } from "./game";
+import { minimumPriceFor } from "../../shared/fees";
 
 /** Starting watchlist: evergreen and seasonal digital-printable niches. You can add your own. */
 export const SEED_NICHES: [string, string][] = [
@@ -225,13 +226,17 @@ const ideasSchema = z.object({
 /** Turn the top niches into fresh, competitive product ideas and send them to Scout. */
 export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices, now = new Date()) {
   const cutoff = new Date(now.getTime() - SUGGEST_COOLDOWN_MS).toISOString();
-  const top = await db
+  const candidates = await db
     .select()
     .from(trendNiches)
     .where(and(sql`${trendNiches.score} > 0`, or(isNull(trendNiches.lastSuggested), lt(trendNiches.lastSuggested, cutoff))))
     .orderBy(desc(trendNiches.score))
-    .limit(settings.radar.dailyIdeas)
+    .limit(settings.radar.dailyIdeas * 4)
     .all();
+  // Prefer niches where we can undercut the median and still clear the minimum profit.
+  const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
+  const roomToUndercut = (n: NicheRow) => (n.medianPricePence ?? 0) > floor;
+  const top = [...candidates.filter(roomToUndercut), ...candidates.filter((n) => !roomToUndercut(n))].slice(0, settings.radar.dailyIdeas);
   if (!top.length) return [];
   const lines = top.map(
     (n) =>
@@ -259,8 +264,10 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     maxTokens: 1200,
   });
   const items: DailyIdeas["items"] = [];
+  const unused = [...r.ideas];
   for (const niche of top) {
-    const idea = r.ideas.find((i) => i.keyword.trim().toLowerCase() === niche.keyword) ?? r.ideas[items.length];
+    const at = unused.findIndex((i) => i.keyword.trim().toLowerCase() === niche.keyword);
+    const [idea] = unused.splice(at >= 0 ? at : 0, 1);
     if (!idea) continue;
     const market = niche.source === "etsy" ? marketOf(niche) : null;
     const notes = `Today's idea from Trend Radar (${niche.keyword}). Twist: ${idea.angle} Why: ${idea.why}`;
@@ -268,7 +275,10 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     await db.update(trendNiches).set({ lastSuggested: nowIso(now) }).where(eq(trendNiches.keyword, niche.keyword));
     items.push({ productId: p.id, keyword: niche.keyword, idea: idea.idea.slice(0, 120), angle: idea.angle.slice(0, 300) });
   }
-  const daily: DailyIdeas = { date: now.toISOString().slice(0, 10), at: nowIso(now), items };
+  // "More ideas now" adds to today's list rather than replacing it.
+  const date = now.toISOString().slice(0, 10);
+  const earlier = (await kvGet<DailyIdeas>(db, `daily:${date}`))?.items ?? [];
+  const daily: DailyIdeas = { date, at: nowIso(now), items: [...earlier, ...items] };
   await kvSet(db, `daily:${daily.date}`, daily);
   if (items.length) {
     await notify(db, "quest", `🎯 Today's ${items.length} ideas are in`, "Scout is researching them now. Check the Research Lab.", false);

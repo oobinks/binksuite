@@ -99,7 +99,10 @@ describe("Trend Radar", () => {
     const daily = await kvGet<any>(db, `daily:${now.toISOString().slice(0, 10)}`);
     expect(daily.items).toHaveLength(items.length);
     // Same niches aren't suggested again straight away.
-    expect((await makeDailyIdeas(db, settings, ai, now)).map((i) => i.keyword)).not.toContain(items[0].keyword);
+    const more = await makeDailyIdeas(db, settings, ai, now);
+    expect(more.map((i) => i.keyword)).not.toContain(items[0].keyword);
+    // "More ideas now" adds to today's list instead of replacing it.
+    expect((await kvGet<any>(db, `daily:${now.toISOString().slice(0, 10)}`)).items).toHaveLength(items.length + more.length);
 
     // Scout's report uses the real Etsy prices, not the AI's guess (£1–£99).
     const mush = items.find((i) => i.keyword.includes("mushroom"))!;
@@ -110,6 +113,16 @@ describe("Trend Radar", () => {
     const report = JSON.parse(t.output);
     expect(report.sources).toMatch(/Live Etsy data/);
     expect(report.priceRangePence[1]).toBeLessThan(1000);
+  });
+
+  it("picks niches with room to undercut before ones where the minimum profit is above the market", async () => {
+    const { db, settings } = await setup();
+    await env.DB.prepare("UPDATE trend_niches SET score = 0").run();
+    await env.DB.prepare(
+      "INSERT INTO trend_niches (keyword, category, origin, source, score, median_price_pence) VALUES ('cheap niche','x','you','etsy',90,150), ('roomy niche','x','you','etsy',60,600) ON CONFLICT(keyword) DO UPDATE SET score = excluded.score, median_price_pence = excluded.median_price_pence",
+    ).run();
+    const items = await makeDailyIdeas(db, { ...settings, radar: { ...settings.radar, dailyIdeas: 1 } }, fakeAi(), now);
+    expect(items.map((i) => i.keyword)).toEqual(["roomy niche"]);
   });
 });
 
