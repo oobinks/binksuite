@@ -495,32 +495,74 @@ async function writeSheetBrief(ctx: RealContext): Promise<StepResult> {
 
 // ───────────── Printer: plan the spreadsheet; your device builds the files ─────────────
 
-/** Weave your chosen "feature" boosters into the design (one extra AI pass), then hand it to your device to build. */
+/** What the senior designer scores before anything is built (1-10 each). */
+export const REVIEW_CRITERIA = {
+  depth: "Depth: a complete system as good as the best-selling Etsy templates, not a single table",
+  dashboard: "Dashboard: answers the buyer's real questions at a glance; the 3 most important numbers first",
+  clarity: "Clarity: friendly names, short headers, a How to use that names the real tabs",
+  examples: "Examples: 6-10 believable rows per tab that show off every feature",
+  formulas: "Formulas: correct, useful and safe (no tax, NI, pension or interest maths)",
+  polish: "Polish: sensible widths, dropdowns from Settings lists, charts, one tasteful accent colour",
+  value: "Value: a buyer would happily pay the price and leave a 5-star review",
+} as const;
+type Criterion = keyof typeof REVIEW_CRITERIA;
+
+export interface DesignReview {
+  score: number;
+  scores: Record<Criterion, number>;
+  fixes: string[];
+}
+
+/**
+ * The senior designer's pass, before anything is built: score the design against the
+ * premium bar, list what to fix, and return the improved design with your chosen
+ * "feature" boosters and any feedback woven in. Always runs, so the first version
+ * you see has already been critiqued and improved once.
+ */
 async function planSheet(ctx: RealContext): Promise<StepResult> {
   const data = d(ctx.product);
   const format = formatOf(ctx.product);
-  let spec = data.sheet;
-  if (!spec) throw new Error("No design yet. The Analyst needs to finish the brief first.");
+  const original = data.sheet;
+  if (!original) throw new Error("No design yet. The Analyst needs to finish the brief first.");
   const features = (data.boosters ?? []).filter((b) => b.kind === "feature" && b.artHint);
   // "Redesign" sends the step back with your note.
   const fix = ctx.task.note?.trim() || undefined;
-  let notes: string[] = [];
-  if (features.length || fix) {
-    const r = await ctx.ai.json({
-      system: `${SHOP_CONTEXT} You are Analyst. Update a spreadsheet design, keeping everything that already works.`,
-      prompt: `Current design (JSON):\n${JSON.stringify(spec)}\n${formatLine(format)}\nChanges to make:\n${features.map((f) => `- ${f.title}: ${f.artHint}`).join("\n")}${fix ? `\n- Owner's feedback: ${fix}` : ""}\nReturn the full updated design.\n${SHEET_RULES}`,
-      schema: z.record(z.string(), z.unknown()),
-      jsonSchema: SHEET_JSON_SCHEMA,
-      maxTokens: 2200,
-    });
-    const tidy = tidySheetSpec(r as RawSpec, spec.title);
-    spec = { ...tidy.spec, accent: spec.accent };
-    notes = tidy.dropped;
-  }
+  const report = data.report;
+  const price = report?.priceRangePence ? `£${(report.priceRangePence[0] / 100).toFixed(2)}-£${(report.priceRangePence[1] / 100).toFixed(2)}` : "£3-£8";
+  const keys = Object.keys(REVIEW_CRITERIA) as Criterion[];
+  const r = await ctx.ai.json({
+    label: `🔍 Design review: ${ctx.product.title}`,
+    system: `${SHOP_CONTEXT} You are the shop's senior product designer. You review a spreadsheet design before it goes on sale and make it outstanding: you are demanding, specific and honest, and you keep everything that already works.`,
+    prompt: `Product: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${formatLine(format)}\n${data.brief ? `Audience: ${data.brief.audience}\n` : ""}${report ? `Scout's angles: ${report.angles.join("; ")}\nBuyers search for: ${report.keywords.join(", ")}\n` : ""}It will sell for about ${price}.\nCurrent design (JSON):\n${JSON.stringify(original)}\n${
+      features.length || fix ? `Changes to make:\n${features.map((f) => `- ${f.title}: ${f.artHint}`).join("\n")}${fix ? `\n- Owner's feedback: ${fix}` : ""}\n` : ""
+    }First score the current design 1-10 on each of these, honestly:\n${keys.map((k) => `- ${k}: ${REVIEW_CRITERIA[k]}`).join("\n")}\nThen list the specific fixes that would make it a 10 (most important first), and return "sheet": the complete improved design with every fix${features.length || fix ? " and every change above" : ""} applied.\n${SHEET_RULES}`,
+    schema: z.object({ scores: z.record(z.string(), z.number()), fixes: z.array(z.string()), sheet: z.record(z.string(), z.unknown()) }),
+    jsonSchema: {
+      type: "object",
+      properties: {
+        scores: { type: "object", properties: Object.fromEntries(keys.map((k) => [k, { type: "number" }])), required: keys },
+        fixes: { type: "array", items: { type: "string" } },
+        sheet: SHEET_JSON_SCHEMA,
+      },
+      required: ["scores", "fixes", "sheet"],
+    },
+    maxTokens: 4000,
+  });
+  const tidy = tidySheetSpec(r.sheet as RawSpec, original.title);
+  // Keep the brief's colour, and never lose a whole part of the design by accident.
+  const improved = { ...tidy.spec, accent: original.accent };
+  const spec = improved.tabs.length ? improved : original;
+  const scores = Object.fromEntries(keys.map((k) => [k, Math.max(1, Math.min(10, Math.round(Number(r.scores[k]) || 0)))])) as Record<Criterion, number>;
+  const review: DesignReview = {
+    // The score is for the design as it came in; the fixes below have now been applied.
+    score: Math.round((keys.reduce((a, k) => a + scores[k], 0) / keys.length) * 10) / 10,
+    scores,
+    fixes: r.fixes.map((x) => x.trim()).filter(Boolean).slice(0, 10),
+  };
   return {
-    output: { format, sheet: spec, checks: notes, buildInBrowser: true, included: includedLine(format) },
-    productData: { sheet: spec },
-    log: `Design ready: ${spec.tabs.map((t) => t.name).join(", ")}. Tap to build the ${format === "excel" ? "spreadsheet and PDF" : "PDF"} on your device`,
+    output: { format, sheet: spec, checks: tidy.dropped, review, buildInBrowser: true, included: includedLine(format) },
+    productData: { sheet: spec, review },
+    log: `Design reviewed (${review.score}/10 before) and improved: ${review.fixes.length} fix${review.fixes.length === 1 ? "" : "es"}. Ready to build: ${spec.tabs.map((t) => t.name).join(", ")}`,
   };
 }
 

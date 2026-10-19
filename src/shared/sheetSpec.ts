@@ -156,6 +156,24 @@ const clean = (s: unknown, max = 60) =>
 /** Excel sheet names: ≤ 31 chars, none of : \ / ? * [ ] */
 export const safeTabName = (s: string) => clean(s, 31).replace(/[:\\/?*[\]']/g, "").trim() || "Sheet";
 
+/**
+ * The accent carries white text (title band, column headers), so it must be dark
+ * enough to read: lighter colours are deepened until they pass (WCAG ~4.5:1).
+ */
+export function readableAccent(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  let [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const lum = () => {
+    const ch = (c: number) => {
+      const v = c / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+  };
+  for (let i = 0; i < 20 && lum() > 0.18; i++) [r, g, b] = [r, g, b].map((c) => Math.round(c * 0.9));
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
 /** Column letter for a 0-based index (A, B, … Z, AA …). */
 export function colLetter(i: number): string {
   let s = "";
@@ -164,17 +182,30 @@ export function colLetter(i: number): string {
 }
 
 // ───────────── Layout: where things sit in the workbook ─────────────
-// Summary tab: title (row 1), subtitle (2), inputs from row 4, summary items after.
-// Data tabs: title (row 1), header (row 3), data from row 4.
+// Every sheet: a margin (column A, row 1), the title band (row 2), subtitle (row 3)
+// and navigation links (row 4). Content starts in column B.
+// Data tabs: column headers on row 6, entries from row 7.
+// Dashboard: headline cards (rows 6–7), then sections from row 10: your numbers
+// (from row 11), at a glance, goals down columns B–C; tables and charts from column E.
 
-export const TAB_HEADER_ROW = 3;
-export const TAB_FIRST_ROW = 4;
-export const SUMMARY_FIRST_ROW = 4;
+export const TITLE_ROW = 2;
+export const SUBTITLE_ROW = 3;
+export const NAV_ROW = 4;
+/** Data tabs start in column B (index 1), leaving column A as a margin. */
+export const TAB_FIRST_COL = 1;
+export const TAB_HEADER_ROW = 6;
+export const TAB_FIRST_ROW = 7;
+export const KPI_LABEL_ROW = 6;
+export const KPI_VALUE_ROW = 7;
+export const SUMMARY_FIRST_ROW = 11;
 export const SUMMARY_TAB = "Dashboard";
 export const SETTINGS_TAB = "Settings";
 export const HOW_TO_TAB = "How to use";
-/** Settings lists: names on row 4, items from row 5, one list every other column from B. */
-export const LIST_HEADER_ROW = 4;
+/** Settings lists: names on row 6, items from row 7, one list every other column from B. */
+export const LIST_HEADER_ROW = 6;
+
+/** The Excel column letter of a data tab's column (by index). */
+export const tabColLetter = (i: number) => colLetter(Math.max(0, i) + TAB_FIRST_COL);
 
 export function tabRowCount(t: SheetTab) {
   return t.exampleRows.length + t.blankRows;
@@ -281,7 +312,7 @@ export function columnRanges(spec: SheetSpec, tabName: string, colName: string):
   const tab = spec.tabs.find((t) => t.name.toLowerCase() === tabName.trim().toLowerCase());
   const i = tab ? tab.columns.findIndex((c) => c.header.toLowerCase() === colName.trim().toLowerCase()) : -1;
   if (!tab || i < 0) return null;
-  const L = colLetter(i);
+  const L = tabColLetter(i);
   return sheetNames(tab).map((n) => `'${n}'!$${L}$${TAB_FIRST_ROW}:$${L}$${TAB_FIRST_ROW + tabRowCount(tab) - 1}`);
 }
 
@@ -291,7 +322,7 @@ export function summaryCells(spec: SheetSpec) {
   const items = new Map<string, string>();
   let row = SUMMARY_FIRST_ROW;
   for (const i of spec.inputs) inputs.set(i.label.toLowerCase(), `'${SUMMARY_TAB}'!$C$${row++}`);
-  if (spec.inputs.length) row++;
+  if (spec.inputs.length) row += 2; // a gap, then the "At a glance" heading
   for (const s of spec.summary) items.set(s.label.toLowerCase(), `'${SUMMARY_TAB}'!$C$${row++}`);
   return { inputs, items, nextRow: row };
 }
@@ -314,10 +345,15 @@ export interface DashBlock {
  */
 export function dashboardLayout(spec: SheetSpec) {
   const cells = summaryCells(spec);
-  let row = cells.nextRow + (spec.summary.length ? 1 : 0);
+  // Section headings sit on the row above each section's first row.
+  const inputsHeading = spec.inputs.length ? SUMMARY_FIRST_ROW - 1 : null;
+  const summaryStart = cells.nextRow - spec.summary.length;
+  const summaryHeading = spec.summary.length ? summaryStart - 1 : null;
+  let row = cells.nextRow + (spec.summary.length ? 2 : 0);
+  const goalsHeading = spec.goals.length ? row - 1 : null;
   const goals = spec.goals.map((g) => ({ ...g, row: row++ }));
   const blocks: DashBlock[] = [];
-  let top = SUMMARY_FIRST_ROW;
+  let top = SUMMARY_FIRST_ROW - 1;
   const add = (kind: DashBlock["kind"], index: number, rows: number, valueCols: number, chart: ChartKind) => {
     const chartCol = 4 + 1 + valueCols + 1; // E + values + a gap
     const tableEnd = top + 2 + rows; // title, header, rows, total
@@ -327,7 +363,7 @@ export function dashboardLayout(spec: SheetSpec) {
   };
   spec.breakdowns.forEach((b, i) => add("breakdown", i, listPlace(spec, b.list)?.slots ?? 0, 1, b.chart));
   spec.trends.forEach((t, i) => add("trend", i, 12, t.series.length, t.chart));
-  return { ...cells, goals, blocks, lastRow: Math.max(row, top) };
+  return { ...cells, goals, blocks, headings: { inputs: inputsHeading, summary: summaryHeading, goals: goalsHeading }, lastRow: Math.max(row, top) };
 }
 
 // ───────────── The safe formula language ─────────────
@@ -352,7 +388,7 @@ export function columnFormula(formula: string, tab: SheetTab, row: number, spec:
     const i = tab.columns.findIndex((c) => c.header.toLowerCase() === r.toLowerCase());
     if (i < 0 || tab.columns[i].formula) bad = true; // no chains: keeps every formula simple
     usesColumn = true;
-    return `${colLetter(Math.max(0, i))}${row}`;
+    return `${tabColLetter(i)}${row}`;
   });
   return bad || !usesColumn ? null : out.trim();
 }
@@ -518,7 +554,7 @@ export function tidySheetSpec(raw: RawSpec, fallbackTitle: string): { spec: Shee
     title: clean(raw.title, 60) || clean(fallbackTitle, 60) || "My Tracker",
     subtitle: clean(raw.subtitle, 120),
     currency: clean(raw.currency, 3) || "£",
-    accent: hex(raw.accent, "#e89a1c"),
+    accent: readableAccent(hex(raw.accent, "#5b7f6e")),
     howTo: arr(raw.howTo).map((s) => clean(s, 200)).filter(Boolean).slice(0, LIMITS.howTo),
     inputs,
     summary: [],
@@ -700,7 +736,8 @@ export const SHEET_JSON_SCHEMA = {
 };
 
 /** The rules, in plain words, for the AI prompt. */
-export const SHEET_RULES = `Design rules:
+export const SHEET_RULES = `The bar: a premium Etsy template a buyer happily pays for, opened for the first time. Think like that buyer: what question do they open it to answer, what would delight them, what would make them leave a 5-star review?
+Design rules:
 - Aim for the depth of a best-selling Etsy template: a complete system, not a single table. 1 to ${LIMITS.tabs} tab designs (a "${HOW_TO_TAB}", a "${SUMMARY_TAB}" and, if you use lists, a "${SETTINGS_TAB}" tab are added automatically; don't include them). Up to ${LIMITS.columns} columns per tab.
 - A tab with "repeat": "months" becomes 12 tabs (Jan … Dec), e.g. a monthly budget or habit log. Only one tab can repeat. In formulas, Tab[Column] on that tab means all 12 months.
 - "lists": editable lists on the ${SETTINGS_TAB} tab (e.g. Categories: Rent, Groceries, Bills…; up to ${LIMITS.listItems} items). A choice column can use "optionsFrom": "<list name>" so its dropdown follows the list.
@@ -712,7 +749,16 @@ export const SHEET_RULES = `Design rules:
 - A column can be calculated with "formula" using ONLY other columns in the same tab in curly braces, numbers and + - * / ( ), e.g. "{Budget} - {Spent}" or "{Price} * {Qty}". Inputs can be used as {input:Label}. A calculated column must not use another calculated column.
 - "inputs": things the buyer types once (e.g. "Monthly take-home pay"), with a realistic example number.
 - "summary": the dashboard totals. Formula language ONLY: SUM(Tab[Column]), AVERAGE(Tab[Column]), COUNT(Tab[Column]), COUNTA(Tab[Column]), MAX(...), MIN(...), COUNTIF(Tab[Column], "Yes"), SUMIF(Tab[Column], "Text", Tab[NumberColumn]), {input:Label}, [Earlier summary label], numbers and + - * / ( ). Example: "{input:Christmas budget} - [Total spent]".
-- "exampleRows": 3-6 realistic example rows per tab (values in column order; leave calculated columns empty).
+- "exampleRows": 6-10 realistic example rows per tab (values in column order; leave calculated columns empty): believable UK names, amounts and dates that show every feature (some ticked, some not; a mix of categories). They make the file and the listing photos come alive.
+- Premium polish:
+  - Plain, friendly Title Case names; column headers of 1-3 words (max 18 characters).
+  - Sensible column widths (dates 12, short labels 14-18, names 22-28, notes 30-40, money 14).
+  - The first 3 summary items become big headline cards on the Dashboard, so put the 3 numbers the buyer cares about most first.
+  - Any category-like column uses a Settings list ("optionsFrom") and gets a breakdown chart; a monthly tab gets a trend chart.
+  - "blankRows" gives room for real use (a month of entries, a year of bills).
+  - "accent": one sophisticated, muted colour that suits the theme and carries white text (sage, navy, terracotta, plum, forest; never neon or pastel).
+  - "subtitle": the 3-4 main parts joined with " · ".
+  - "howTo": 4-6 friendly steps that name the real tabs.
 - Never calculate tax, National Insurance, pensions or interest rates. Buyers type their own take-home figures.
 - No brands, characters or celebrities.`;
 

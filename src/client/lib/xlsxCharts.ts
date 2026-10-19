@@ -61,7 +61,7 @@ function axesXml(numberFormat: string) {
   const text = `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900"><a:solidFill><a:srgbClr val="7A5C4D"/></a:solidFill></a:defRPr></a:pPr><a:endParaRPr lang="en-GB"/></a:p></c:txPr>`;
   return (
     `<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:solidFill><a:srgbClr val="D9D2C7"/></a:solidFill></a:ln></c:spPr>${text}<c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>` +
-    `<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>${grid}<c:numFmt formatCode="${esc(numberFormat)}" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${text}<c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`
+    `<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>${grid}<c:numFmt formatCode="${esc(numberFormat)}" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>${text}<c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>`
   );
 }
 
@@ -149,5 +149,34 @@ export async function addCharts(xlsx: ArrayBuffer, charts: ChartSpec[]): Promise
     zip.file(sheetPath, xml);
   }
   zip.file("[Content_Types].xml", types);
+  return zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
+}
+
+/**
+ * Links between tabs. The Excel library writes them as "external" links to "#'Tab'!A1";
+ * the standard (which Excel, Google Sheets and Numbers all follow) is an in-workbook
+ * link: location="'Tab'!A1" and no relationship. Rewrite them that way.
+ */
+export async function fixInternalLinks(xlsx: ArrayBuffer): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(xlsx);
+  const sheets = Object.keys(zip.files).filter((p) => /^xl\/worksheets\/sheet\d+\.xml$/.test(p));
+  for (const path of sheets) {
+    let xml = await zip.file(path)!.async("string");
+    const ids: string[] = [];
+    xml = xml.replace(/<hyperlink ([^>]*?)\/>/g, (tag, attrs: string) => {
+      const loc = /location="#([^"]*)"/.exec(attrs);
+      if (!loc) return tag;
+      const id = /r:id="([^"]+)"/.exec(attrs)?.[1];
+      if (id) ids.push(id);
+      const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "A1";
+      const tip = /tooltip="([^"]*)"/.exec(attrs)?.[1];
+      return `<hyperlink ref="${ref}" location="${loc[1]}"${tip ? ` tooltip="${tip}"` : ""}/>`;
+    });
+    zip.file(path, xml);
+    if (!ids.length) continue;
+    const relsPath = path.replace("worksheets/", "worksheets/_rels/").replace(/\.xml$/, ".xml.rels");
+    const rels = await zip.file(relsPath)?.async("string");
+    if (rels) zip.file(relsPath, rels.replace(/<Relationship [^>]*?\/>/g, (r) => (ids.some((id) => r.includes(`Id="${id}"`)) ? "" : r)));
+  }
   return zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
 }

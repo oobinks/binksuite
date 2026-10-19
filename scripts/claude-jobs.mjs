@@ -111,6 +111,48 @@ switch (cmd) {
     console.log(status === 200 ? "Reported to BinkSuite." : `Couldn't report (${status}).`);
     break;
   }
+  case "lint-sheet":
+    await lintSheet(args[0]);
+    break;
   default:
-    console.log("Commands: check | list | claim <id> | answer <id> <file> | preview <svg> [png] | wait [s] | done <n> [note]");
+    console.log("Commands: check | list | claim <id> | answer <id> <file> | preview <svg> [png] | lint-sheet <file> | wait [s] | done <n> [note]");
+}
+
+/**
+ * Check a spreadsheet design (a whole answer with "sheet" in it, or just the design)
+ * the way BinkSuite will: what gets dropped, what the example numbers work out to,
+ * and how it measures up to the premium bar. Fix everything it flags before answering.
+ */
+async function lintSheet(path) {
+  let m;
+  try {
+    m = await import(new URL("../src/shared/sheetSpec.ts", import.meta.url).href);
+  } catch (e) {
+    console.log(`(Can't run the checker on this Node version: ${e.message}. Check the design by hand against the Design rules.)`);
+    return;
+  }
+  const raw = JSON.parse(readFileSync(path, "utf8"));
+  const design = raw.sheet ?? raw;
+  const { spec, dropped } = m.tidySheetSpec(design, design.title ?? "Spreadsheet");
+  const v = m.previewValues(spec);
+  const sheets = m.dataSheets(spec).length + 1 + (m.hasDashboard(spec) ? 1 : 0) + (spec.lists.length ? 1 : 0);
+  const fmt = (x, t) => m.formatValue(x, t, spec.currency);
+  console.log(`${spec.title}: ${sheets} tabs (${spec.tabs.map((t) => (t.repeat === "months" ? `${t.name} ×12` : t.name)).join(", ")})`);
+  console.log(`Headline cards: ${v.summary.slice(0, 3).map((s) => `${s.label} = ${fmt(s.value, s.type)}`).join(" | ") || "none"}`);
+  for (const s of v.summary.slice(3)) console.log(`  ${s.label} = ${fmt(s.value, s.type)}`);
+  for (const g of v.goals) console.log(`  Goal ${g.label}: ${g.value}%`);
+  for (const b of v.breakdowns) console.log(`  ${b.title}: ${b.items.filter((i) => i.value).map((i) => `${i.label} ${i.value}`).join(", ") || "all zero"}`);
+  const problems = [...dropped.map((d) => `BinkSuite will drop or change: ${d}`)];
+  const warn = (ok, text) => ok || problems.push(text);
+  warn(sheets >= 8, `Only ${sheets} tabs: best sellers are complete systems (aim for 15-25 with a monthly tab).`);
+  warn(spec.summary.length >= 3, "Fewer than 3 summary items: the Dashboard's headline cards need 3 strong numbers.");
+  warn(spec.lists.length > 0, "No Settings lists: category-like columns should use optionsFrom dropdowns.");
+  warn(spec.breakdowns.length + spec.trends.length > 0, "No charts: add a breakdown (doughnut) and/or a trend (bar/line).");
+  for (const t of spec.tabs) {
+    warn(t.exampleRows.length >= 6, `${t.name}: only ${t.exampleRows.length} example rows (aim for 6-10 believable ones).`);
+    for (const c of t.columns) warn(c.header.length <= 18, `${t.name}: header "${c.header}" is long (max 18 characters).`);
+  }
+  for (const s of v.summary) warn(!(s.value === 0 && s.type === "money"), `"${s.label}" works out to 0 with the examples: check its formula and the example rows.`);
+  warn(spec.howTo.length >= 4, "How to use has fewer than 4 steps.");
+  console.log(problems.length ? `\n${problems.length} thing(s) to fix:\n- ${problems.join("\n- ")}` : "\nNo problems found. Now review it as the buyer would.");
 }

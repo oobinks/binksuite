@@ -272,17 +272,23 @@ export function renderSheetShot(spec: SheetSpec, values: Values, view: View, for
   const y0 = top + 46;
   const cw = w - x0 - 40;
 
+  // The workbook's title band and subtitle strip, as the buyer sees them.
   const title = (t: string, sub?: string) => {
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
     ctx.fillStyle = spec.accent;
-    ctx.font = `900 40px ${SANS}`;
-    ctx.fillText(clip(ctx, t, cw), x0, y0 + 30);
+    ctx.fillRect(x0, y0 - 6, cw, 52);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff";
+    ctx.font = `400 32px ${SERIF}`;
+    ctx.fillText(clip(ctx, t, cw - 40), x0 + 18, y0 + 21);
+    ctx.fillStyle = tint(spec.accent, 0.88);
+    ctx.fillRect(x0, y0 + 46, cw, 26);
     if (sub) {
-      ctx.fillStyle = MUTED;
-      ctx.font = `italic 600 20px ${SANS}`;
-      ctx.fillText(clip(ctx, sub, cw), x0, y0 + 60);
+      ctx.fillStyle = spec.accent;
+      ctx.font = `italic 600 16px ${SANS}`;
+      ctx.fillText(clip(ctx, sub, cw - 40), x0 + 18, y0 + 59);
     }
+    ctx.textBaseline = "alphabetic";
   };
 
   const sheets = [HOW_TO_TAB, ...(hasDashboard(spec) ? [SUMMARY_TAB] : []), ...(spec.lists.length ? [SETTINGS_TAB] : []), ...dataSheets(spec).map((d) => d.name)];

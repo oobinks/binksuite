@@ -22,7 +22,7 @@ import { isClaudePending } from "../providers/claudeCode";
 import { EtsyError, type EtsyClient } from "../providers/etsy";
 import { suggestIdea, logActivity } from "./queue";
 import { notify } from "./game";
-import { FORMATS, guessFormat, isFormat, type ProductFormat } from "../../shared/format";
+import { enabledFormats, guessFormat, isFormat, pickFormat, type FormatSwitches, type ProductFormat } from "../../shared/format";
 import { minimumPriceFor } from "../../shared/fees";
 
 /** Starting watchlist: evergreen and seasonal digital-printable niches. You can add your own. */
@@ -68,6 +68,9 @@ export const SEED_NICHES: [string, string][] = [
 ];
 
 /** What a radar niche would be made as: spreadsheet niches → Excel, tracker/planner niches → PDF. */
+/** Is this niche one the shop is making right now? */
+export const nicheWanted = (n: { keyword: string; category?: string | null }, on: FormatSwitches) => on[nicheFormat(n.keyword, n.category)];
+
 export function nicheFormat(keyword: string, category?: string | null): ProductFormat {
   if (category === "spreadsheets" || /spreadsheet|excel|google sheets/i.test(keyword)) return "excel";
   if (category === "printable trackers") return "pdf";
@@ -122,9 +125,9 @@ const aiEstimateSchema = z.object({
   niches: z.array(z.object({ keyword: z.string(), demand: z.number(), competition: z.number(), typicalPriceGBP: z.number(), note: z.string() })),
 });
 
-async function aiEstimate(db: DB, ai: AiServices, now: Date) {
+async function aiEstimate(db: DB, ai: AiServices, now: Date, on: FormatSwitches) {
   const month = now.toLocaleString("en-GB", { month: "long" });
-  const pool = SEED_NICHES.map(([k]) => k);
+  const pool = SEED_NICHES.filter(([keyword, category]) => nicheWanted({ keyword, category }, on)).map(([k]) => k);
   const r = await ai.json({
     key: `estimate:${now.toISOString().slice(0, 10)}`,
     label: "Trend Radar: today's estimates",
@@ -195,13 +198,14 @@ export async function radarTick(db: DB, settings: Settings, deps: RadarDeps): Pr
 
   if (deps.etsy) {
     const stale = await db
-      .select({ keyword: trendNiches.keyword })
+      .select({ keyword: trendNiches.keyword, category: trendNiches.category })
       .from(trendNiches)
       .where(or(isNull(trendNiches.lastScanned), lt(trendNiches.lastScanned, new Date(now.getTime() - SCAN_EVERY_MS).toISOString()), eq(trendNiches.source, "ai")))
       .orderBy(sql`${trendNiches.lastScanned} IS NOT NULL`, asc(trendNiches.lastScanned))
-      .limit(deps.budget ?? 6)
+      .limit((deps.budget ?? 6) * 4)
       .all();
-    for (const n of stale) {
+    // Only spend Etsy calls on the kinds of product you're making.
+    for (const n of stale.filter((x) => nicheWanted(x, settings.formats)).slice(0, deps.budget ?? 6)) {
       try {
         await scanNiche(db, deps.etsy, n.keyword, now);
         result.scanned++;
@@ -216,7 +220,7 @@ export async function radarTick(db: DB, settings: Settings, deps: RadarDeps): Pr
     const day = now.toISOString().slice(0, 10);
     if ((await kvGet<string>(db, "radarAiDay")) !== day) {
       try {
-        await aiEstimate(db, deps.ai, now);
+        await aiEstimate(db, deps.ai, now, settings.formats);
         await kvSet(db, "radarAiDay", day);
       } catch (e) {
         if (!isAiLimit(e) && !isClaudePending(e)) result.error = e instanceof Error ? e.message : String(e);
@@ -261,11 +265,18 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
   // Prefer niches where we can undercut the median and still clear the minimum profit.
   const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
   const roomToUndercut = (n: NicheRow) => (n.medianPricePence ?? 0) > floor;
-  const top = [...candidates.filter(roomToUndercut), ...candidates.filter((n) => !roomToUndercut(n))].slice(0, settings.radar.dailyIdeas);
+  const wanted = candidates.filter((n) => nicheWanted(n, settings.formats));
+  const top = [...wanted.filter(roomToUndercut), ...wanted.filter((n) => !roomToUndercut(n))].slice(0, settings.radar.dailyIdeas);
+  const formats = enabledFormats(settings.formats);
+  const formatHelp: Record<ProductFormat, string> = {
+    art: '"art" (printable wall art)',
+    excel: '"excel" (a ready-made spreadsheet with formulas, also works in Google Sheets)',
+    pdf: '"pdf" (a printable planner/tracker/checklist)',
+  };
   if (!top.length) return [];
   const lines = top.map(
     (n) =>
-      `- ${n.keyword}: [${nicheFormat(n.keyword, n.category)}] ${n.source === "etsy" ? `${n.totalListings?.toLocaleString()} competing listings, new listings getting ${n.favsPerDay} favourites/day, median price £${((n.medianPricePence ?? 0) / 100).toFixed(2)}` : `AI estimate${n.note ? `: ${n.note}` : ""}`}`,
+      `- ${n.keyword}: [${pickFormat(nicheFormat(n.keyword, n.category), settings.formats)}] ${n.source === "etsy" ? `${n.totalListings?.toLocaleString()} competing listings, new listings getting ${n.favsPerDay} favourites/day, median price £${((n.medianPricePence ?? 0) / 100).toFixed(2)}` : `AI estimate${n.note ? `: ${n.note}` : ""}`}`,
   );
   // One batch per press: "More ideas now" asks for a fresh batch rather than reusing this morning's.
   const date = now.toISOString().slice(0, 10);
@@ -275,7 +286,7 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     label: `🎯 Today's ideas (${top.length})`,
     system:
       "You are Scout, the creative lead of a UK Etsy shop selling AI-assisted digital printables. Your job: beat competitors with fresh, specific, sellable ideas: a clear twist, not a copy. No brands, characters, celebrities or song lyrics.",
-    prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital download that could outsell what's already there. Formats: "art" (printable wall art), "excel" (a ready-made spreadsheet with formulas, also works in Google Sheets), "pdf" (a printable planner/tracker/checklist). The format in [brackets] is the usual one for that niche; pick another if it would sell better. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence), format.`,
+    prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital download that could outsell what's already there. Formats (the shop only makes these right now): ${formats.map((f) => formatHelp[f]).join(", ")}. The format in [brackets] is the usual one for that niche; pick another of these if it would sell better. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence), format.`,
     schema: ideasSchema,
     jsonSchema: {
       type: "object",
@@ -284,7 +295,7 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
           type: "array",
           items: {
             type: "object",
-            properties: { keyword: { type: "string" }, idea: { type: "string" }, angle: { type: "string" }, why: { type: "string" }, format: { type: "string", enum: [...FORMATS] } },
+            properties: { keyword: { type: "string" }, idea: { type: "string" }, angle: { type: "string" }, why: { type: "string" }, format: { type: "string", enum: [...formats] } },
             required: ["keyword", "idea", "angle", "why", "format"],
           },
         },
@@ -301,7 +312,7 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     if (!idea) continue;
     const market = niche.source === "etsy" ? marketOf(niche) : null;
     const notes = `Today's idea from Trend Radar (${niche.keyword}). Twist: ${idea.angle} Why: ${idea.why}`;
-    const format = isFormat(idea.format) ? idea.format : nicheFormat(niche.keyword, niche.category);
+    const format = pickFormat(isFormat(idea.format) ? idea.format : nicheFormat(niche.keyword, niche.category), settings.formats);
     const p = await suggestIdea(db, settings, idea.idea.slice(0, 120), notes.slice(0, 1000), true, { market, trendKeyword: niche.keyword, origin: "daily", format });
     await db.update(trendNiches).set({ lastSuggested: nowIso(now) }).where(eq(trendNiches.keyword, niche.keyword));
     items.push({ productId: p.id, keyword: niche.keyword, idea: idea.idea.slice(0, 120), angle: idea.angle.slice(0, 300), format });

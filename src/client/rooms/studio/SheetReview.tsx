@@ -13,6 +13,7 @@ interface Out {
   sheet: SheetSpec;
   checks?: string[];
   included?: string;
+  review?: { score: number; scores: Record<string, number>; fixes: string[] };
 }
 
 export const sheetReview: ReviewDef = {
@@ -43,6 +44,25 @@ export const sheetReview: ReviewDef = {
     return (
       <div className="space-y-3">
         <p className="text-sm">📦 {o.included}</p>
+        {o.review && (
+          <details className="rounded-xl bg-violet-50 p-3 text-sm dark:bg-violet-900/25">
+            <summary className="cursor-pointer font-bold">
+              🔍 Senior designer review: scored {o.review.score}/10, then {o.review.fixes.length} improvement{o.review.fixes.length === 1 ? "" : "s"} made
+            </summary>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {Object.entries(o.review.scores).map(([k, v]) => (
+                <span key={k} className={`chip ${v >= 9 ? "bg-emerald-100 dark:bg-emerald-900/40" : v >= 7 ? "bg-amber-100 dark:bg-amber-900/40" : "bg-rose-100 dark:bg-rose-900/40"}`}>
+                  {k} {v}
+                </span>
+              ))}
+            </div>
+            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs">
+              {o.review.fixes.map((f) => (
+                <li key={f}>✅ {f}</li>
+              ))}
+            </ul>
+          </details>
+        )}
         <SheetPreview spec={o.sheet} />
         {!!o.checks?.length && (
           <details className="rounded-xl bg-honey/15 p-2 text-xs">

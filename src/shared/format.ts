@@ -34,3 +34,16 @@ export function formatOf(p: { demo?: boolean; niche?: string; title?: string; da
 
 /** Sheet-type products (Excel and PDF) are designed as tables rather than painted. */
 export const isSheetFormat = (f: ProductFormat) => f === "excel" || f === "pdf";
+
+/** Which kinds of product the shop is making right now (Settings → Products we make). */
+export type FormatSwitches = Record<ProductFormat, boolean>;
+export const ALL_FORMATS_ON: FormatSwitches = { art: true, excel: true, pdf: true };
+
+export const enabledFormats = (on: FormatSwitches = ALL_FORMATS_ON) => FORMATS.filter((f) => on[f]);
+
+/** The closest switched-on format: spreadsheets and printables stand in for each other; art becomes a printable. */
+export function pickFormat(wanted: ProductFormat, on: FormatSwitches = ALL_FORMATS_ON): ProductFormat {
+  if (on[wanted]) return wanted;
+  const order: Record<ProductFormat, ProductFormat[]> = { art: ["pdf", "excel"], excel: ["pdf", "art"], pdf: ["excel", "art"] };
+  return order[wanted].find((f) => on[f]) ?? wanted;
+}

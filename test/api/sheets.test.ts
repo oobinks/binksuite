@@ -82,6 +82,9 @@ describe("spreadsheet products", () => {
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "sheet_build"))?.state === "needs_approval");
     expect(await taskOf(p.id, "images")).toBeNull();
     expect(prompts.at(-1)).toMatch(/Add a card list tab/); // your chosen feature went into the redesign
+    // Every design gets the senior designer's review before it's built.
+    expect(prompts.at(-1)).toMatch(/First score the current design 1-10/);
+    expect(JSON.parse((await taskOf(p.id, "sheet_build")).output).review).toMatchObject({ score: 8.6, fixes: [expect.stringMatching(/example rows/)] });
     const build = await taskOf(p.id, "sheet_build");
     expect(build.room).toBe("studio");
     expect(JSON.parse(build.output).sheet.tabs[0].name).toBe("Gifts");
