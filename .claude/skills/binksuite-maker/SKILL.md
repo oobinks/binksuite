@@ -69,6 +69,8 @@ types, nothing else, no code fences). Then make it excellent:
   - choice columns where they save typing.
 
   Check every `{Column}` and `Tab[Column]` reference spelling against your own headers.
+  Fill in `marketing` too: a short tagline, up to 4 punchy badges (e.g. "16 TABS") and up to 6
+  features. They go on the listing photos, so keep them true to what's in the file.
 - **Listings (Copywriter):** front-load the main keyword, exactly 13 tags under 20 characters,
   first sentence discloses AI assistance, and describe exactly what's in the download.
 
