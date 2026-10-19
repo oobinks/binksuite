@@ -66,10 +66,10 @@ export const launchReview: ReviewDef = {
         </div>
         {p.images && p.images.length > 0 && (
           <div>
-            <div className="label">{task.productFormat === "art" ? "Your art (use as listing photos)" : "Preview pictures (use as listing photos)"}</div>
+            <div className="label">{task.productFormat === "art" ? "Your art (use as listing photos)" : `Listing photos (${p.images.length}): upload them to Etsy in this order`}</div>
             <div className="flex flex-wrap gap-2">
               {p.images.map((k, i) => (
-                <button key={k} className="group relative" onClick={() => downloadImage(k, `${task.productFormat === "art" ? "art" : "preview"}-${i + 1}.jpg`)} title="Download">
+                <button key={k} className="group relative" onClick={() => downloadImage(k, `${task.productFormat === "art" ? "art" : "listing-photo"}-${i + 1}.jpg`)} title="Download">
                   <ArtImage imageKey={k} className="h-20 w-20 rounded-lg" />
                   <span className="absolute inset-x-0 bottom-0 rounded-b-lg bg-black/50 text-[10px] font-bold text-white">⬇️ save</span>
                 </button>

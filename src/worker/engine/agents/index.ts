@@ -102,7 +102,8 @@ export const STEPS: StepDef[] = [
     title: (p) => `Build files: ${p.title}`,
     // Only real products reach this step (see brief.nextFor); the real version lives in real.ts.
     run: () => ({ output: {}, log: "Spreadsheet files are built on your device" }),
-    next: "mockups",
+    // The build makes the full listing photo set, so no room mockups: straight to the Copywriter.
+    next: "copy",
   },
   {
     kind: "bundle_build",
