@@ -2,6 +2,7 @@
 // src/shared/tasks.ts. `tick()` is called by the browser while the app is open
 // and by the cron trigger every 5 minutes. Each tick is cheap: a handful of
 // queries and no heavy CPU, so it fits the free plan's 10 ms budget.
+import type { EtsyClient } from "../providers/etsy";
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { DB } from "../db";
 import { activity, approvals, claudeJobs, handoffs, ledger, products, tasks } from "../db/schema";
@@ -197,6 +198,8 @@ export interface TickOptions {
   /** Real AI + file storage. Without them, real products wait (⛔). */
   ai?: AiServices | null;
   files?: R2Bucket | null;
+  /** Live Etsy search for steps that use it (keyword research). */
+  etsy?: () => Promise<EtsyClient | null>;
   /** Run slow AI jobs after the response is sent (ctx.waitUntil). Omit to wait for them. */
   defer?: (job: Promise<unknown>) => void;
 }
@@ -236,7 +239,7 @@ export async function tick(db: DB, settings: Settings, opts: TickOptions): Promi
       // Real AI job: take a short lease so two open tabs never run it twice.
       if (!opts.ai || !opts.files || !settings.ai.enabled) continue;
       if (!(await takeLease(db, t, now))) continue;
-      const job = runReal(db, t, settings, { ai: opts.ai, files: opts.files }, now);
+      const job = runReal(db, t, settings, { ai: opts.ai, files: opts.files, etsy: opts.etsy }, now);
       if (opts.defer) opts.defer(job);
       else await job;
       continue;
@@ -347,12 +350,12 @@ async function takeLease(db: DB, t: TaskRow, now: Date): Promise<boolean> {
 }
 
 /** Run one slice of a real AI job. Long jobs (like 4 images) report progress and continue next tick. */
-export async function runReal(db: DB, t: TaskRow, settings: Settings, svc: { ai: AiServices; files: R2Bucket }, now = new Date()) {
+export async function runReal(db: DB, t: TaskRow, settings: Settings, svc: { ai: AiServices; files: R2Bucket; etsy?: () => Promise<EtsyClient | null> }, now = new Date()) {
   const step = STEP_BY_KIND[t.kind];
   try {
     const product = await getProduct(db, t.productId);
     const ai = svc.ai.forTask?.({ id: t.id, productId: t.productId, title: t.title }) ?? svc.ai;
-    const res = await step.real!({ task: t, product, settings, rng: mulberry32(hashString(t.id) ^ product.seed), ai, files: svc.files });
+    const res = await step.real!({ task: t, product, settings, rng: mulberry32(hashString(t.id) ^ product.seed), ai, files: svc.files, etsy: svc.etsy });
     if ("partial" in res) {
       const p = res as PartialResult;
       await db

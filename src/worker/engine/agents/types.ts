@@ -2,6 +2,7 @@ import type { AgentId, RoomId } from "../../../shared/registry";
 import type { Settings } from "../../../shared/settings";
 import type { schema } from "../../db";
 import type { AiServices } from "../../providers/ai";
+import type { EtsyClient } from "../../providers/etsy";
 
 export type TaskRow = typeof schema.tasks.$inferSelect;
 export type ProductRow = typeof schema.products.$inferSelect;
@@ -18,6 +19,8 @@ export interface StepContext {
 export interface RealContext extends StepContext {
   ai: AiServices;
   files: R2Bucket;
+  /** Live Etsy search (official API), when the key is saved. Opened only when a step needs it. */
+  etsy?: () => Promise<EtsyClient | null>;
 }
 
 /** A long job (e.g. 4 images) can report progress and finish over several ticks. */

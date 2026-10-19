@@ -41,7 +41,7 @@ export interface ComplianceCheck {
   hard: boolean;
 }
 
-const AI_DISCLOSURE = /\b(ai|artificial intelligence)[- ](generated|assisted|created|made)|made (with|using) ai|created (with|using) ai/i;
+const AI_DISCLOSURE = /\b(ai|artificial intelligence)[- ](generated|assisted|created|made)|\b(made|created|designed|generated|produced) (with|using|by)( the help of)? (ai|artificial intelligence)\b/i;
 
 export function firstParagraph(text: string): string {
   return text.trim().split(/\n\s*\n/)[0] ?? "";

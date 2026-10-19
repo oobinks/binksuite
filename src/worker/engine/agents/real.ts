@@ -6,7 +6,8 @@ import { blockedTermsIn, ETSY_LIMITS, hasAiDisclosure } from "../../../shared/co
 import type { MarketReport, Verdict } from "./marketResearch";
 import type { PartialResult, ProductRow, RealContext, StepDef, StepResult, TaskRow } from "./types";
 import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../../shared/format";
-import { dataSheets, hasDashboard, normaliseSpec, SHEET_JSON_SCHEMA, SHEET_RULES, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
+import { hasDashboard, normaliseSpec, pageCount, SHEET_JSON_SCHEMA, SHEET_RULES, tabCount, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
+import { cleanPhrase, fitTitle, phrasesFromListings, seoCheck, type KeywordResearch } from "../../../shared/seo";
 import { SCENE_VARIANTS, sceneKey, scenesFor, type MockupView, type SceneDef } from "../../../shared/mockupScenes";
 
 export const IMAGES_PER_PRODUCT = 4;
@@ -584,45 +585,158 @@ async function styleMockups(ctx: RealContext): Promise<StepResult | PartialResul
   return { output: { mockups: done }, productData: { mockups: done }, log: `Staged ${done.length} photo mockups` };
 }
 
-// ───────────── Copywriter: title, tags, description ─────────────
+// ───────────── Copywriter: keyword research, title, tags, description ─────────────
 
 const DISCLOSURE = "This design was created with AI assistance and carefully checked by hand.";
 
+/** Last-resort tags, so every listing uses all 13 (best first). */
 const FORMAT_TAGS: Record<ProductFormat, string[]> = {
-  art: ["digital download", "printable", "instant download", "wall art", "gift idea"],
-  excel: ["excel template", "google sheets", "spreadsheet", "digital download", "instant download"],
-  pdf: ["printable", "digital download", "instant download", "printable planner", "pdf"],
+  art: ["printable wall art", "digital download", "instant download", "wall art print", "gift idea", "home decor print", "printable poster", "gallery wall art", "downloadable art", "art print"],
+  excel: ["excel template", "google sheets", "spreadsheet template", "digital download", "instant download", "excel spreadsheet", "sheets template", "editable template", "planner spreadsheet", "tracker spreadsheet"],
+  pdf: ["printable planner", "digital download", "instant download", "printable pdf", "printable tracker", "planner pages", "printable checklist", "a4 printable", "planner insert", "letter printable"],
 };
 
-const HOW_IT_WORKS: Record<ProductFormat, string> = {
-  art: "This is a digital download: no physical item will be shipped. Print at home, at a local print shop, or online.",
-  excel:
-    "This is a digital download: no physical item will be shipped. Open the .xlsx file in Microsoft Excel, or upload it to Google Sheets (File → Import) or Apple Numbers. Type in the white cells; the shaded cells and totals work themselves out. The PDF version can be printed at home.",
-  pdf: "This is a digital download: no physical item will be shipped. Print at home on A4 or US Letter paper, or at a local print shop, and fill it in by hand.",
+const HOW_STEPS: Record<ProductFormat, string[]> = {
+  art: ["Buy and download the files straight away (Purchases & Reviews on Etsy).", "Pick the size you want.", "Print at home, at a local print shop or online, and frame."],
+  excel: [
+    "Buy and download straight away (Purchases & Reviews on Etsy).",
+    "Open the .xlsx file in Microsoft Excel, or upload it to Google Sheets (File → Import) or Apple Numbers.",
+    "Type in the white cells. The shaded cells, totals and charts work themselves out.",
+  ],
+  pdf: ["Buy and download straight away (Purchases & Reviews on Etsy).", "Print at home on A4 or US Letter paper, or at a local print shop.", "Grab a pen and fill it in. Print a fresh copy whenever you like."],
 };
 
-export function tidyListing(raw: { title: string; tags: string[]; description: string }, blocklist: string[], format: ProductFormat = "art") {
-  let title = raw.title.replace(/\s+/g, " ").trim();
-  for (const t of blockedTermsIn(title, blocklist)) title = title.replace(new RegExp(t, "ig"), "").replace(/\s+/g, " ").trim();
-  title = title.slice(0, ETSY_LIMITS.titleMax).trim();
-  const tags = cleanKeywords([...raw.tags, ...FORMAT_TAGS[format]]).filter(
-    (t) => blockedTermsIn(t, blocklist).length === 0,
-  );
-  let description = raw.description.replace(/\r/g, "").trim();
-  if (!hasAiDisclosure(description)) description = `${DISCLOSURE}\n\n${description}`;
-  if (!/digital download/i.test(description)) description += `\n\nHOW IT WORKS\n${HOW_IT_WORKS[format]}`;
-  return { title, tags: tags.slice(0, ETSY_LIMITS.tagsMax), description, designedBy: "seller" as const };
+const PLEASE_NOTE: Record<ProductFormat, string[]> = {
+  art: ["This is a digital download. No physical item will be shipped.", "Frames and props in the photos aren't included.", "Colours can look slightly different on different screens and printers.", "For personal use only. Please don't share or resell the files."],
+  excel: [
+    "This is a digital download. No physical item will be shipped.",
+    "You'll need Microsoft Excel, a free Google account (Google Sheets) or Apple Numbers to use the spreadsheet.",
+    "It's a tool to organise your own numbers, not financial advice.",
+    "For personal use only. Please don't share or resell the files.",
+  ],
+  pdf: ["This is a digital download. No physical item will be shipped.", "Colours can look slightly different on different screens and printers.", "For personal use only. Please don't share or resell the files."],
+};
+
+const SIGN_OFF = "Thank you for visiting BinkSuite! If you have any questions, send a message and I'll be happy to help.";
+
+/** What's in the download, as description bullet points, from the real files. */
+export function includedBullets(format: ProductFormat, sheet?: SheetSpec | null, artCount = 0): string[] {
+  if (format === "art") return [`${artCount > 1 ? `${artCount} designs as h` : "H"}igh-resolution PDF files at 300 DPI`, `Sizes: ${PRINT_SIZES_REAL.join(", ")}`];
+  const sh = sheet ? normaliseSpec(sheet) : null;
+  if (format === "excel") {
+    const names = sh ? [hasDashboard(sh) ? "Dashboard" : null, sh.lists.length ? "Settings" : null, ...sh.tabs.map((t) => (t.repeat === "months" ? `${t.name} (Jan to Dec)` : t.name)), "How to use"].filter(Boolean) : [];
+    return [
+      sh ? `Excel spreadsheet (.xlsx) with ${tabCount(sh)} tabs: ${names.join(", ")}` : "Excel spreadsheet (.xlsx)",
+      "Works in Microsoft Excel, Google Sheets and Apple Numbers",
+      "Printable PDF version in A4 and US Letter",
+    ];
+  }
+  return [sh ? `${pageCount(sh)} printable pages: ${sh.tabs.map((t) => (t.repeat === "months" ? `${t.name} (one for every month)` : t.name)).join(", ")}` : "Printable PDF pages", "A4 and US Letter sizes"];
 }
 
-async function writeListing(ctx: RealContext): Promise<StepResult> {
+/** A tag Etsy will accept (or null): cleaned, never cut off mid-word. */
+function tagOf(raw: string): string | null {
+  const t = cleanPhrase(raw);
+  return t && t.length <= ETSY_LIMITS.tagCharsMax ? t : null;
+}
+
+export interface ListingRaw {
+  title: string;
+  tags: string[];
+  /** Older answers: one finished description. */
+  description?: string;
+  /** Newer answers: the opening and the feature bullets; the rest is built from the files. */
+  intro?: string;
+  features?: string[];
+}
+
+export function tidyListing(raw: ListingRaw, blocklist: string[], format: ProductFormat = "art", extra: { research?: KeywordResearch | null; included?: string[] } = {}) {
+  const ok = (t: string) => blockedTermsIn(t, blocklist).length === 0;
+  let title = raw.title.replace(/\p{Extended_Pictographic}/gu, "").replace(/\s+/g, " ").trim();
+  for (const t of blockedTermsIn(title, blocklist)) title = title.replace(new RegExp(t, "ig"), "").replace(/\s+/g, " ").trim();
+  title = fitTitle(title.replace(/(\s*\|\s*)+/g, " | ").replace(/^\|\s*|\s*\|$/g, ""));
+
+  // Tags: the Copywriter's, then the phrases buyers search, then the format's basics.
+  const tags: string[] = [];
+  const stem = (t: string) => t.replace(/(es|s)\b/g, "");
+  const add = (raw: string) => {
+    const t = tagOf(raw);
+    if (t && ok(t) && tags.length < ETSY_LIMITS.tagsMax && !tags.some((x) => stem(x) === stem(t))) tags.push(t);
+  };
+  raw.tags.forEach(add);
+  if (extra.research) add(extra.research.keyword);
+  (extra.research?.phrases ?? []).filter((p) => p.phrase.includes(" ")).forEach((p) => add(p.phrase));
+  FORMAT_TAGS[format].forEach(add);
+
+  let description: string;
+  if (raw.intro !== undefined || raw.features) {
+    const intro = (raw.intro ?? "").replace(/\r/g, "").trim();
+    const features = (raw.features ?? []).map((f) => f.replace(/^[\s•*✓✔-]+/, "").trim()).filter(Boolean).slice(0, 8);
+    description = [
+      intro,
+      features.length ? `✦ FEATURES\n${features.map((f) => `• ${f}`).join("\n")}` : null,
+      `✦ WHAT'S INCLUDED\n${(extra.included ?? includedBullets(format)).map((f) => `• ${f}`).join("\n")}`,
+      `✦ HOW IT WORKS\n${HOW_STEPS[format].map((x, i) => `${i + 1}. ${x}`).join("\n")}`,
+      `✦ PLEASE NOTE\n${PLEASE_NOTE[format].map((x) => `• ${x}`).join("\n")}`,
+      SIGN_OFF,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  } else {
+    description = (raw.description ?? "").replace(/\r/g, "").trim();
+    if (!/digital download/i.test(description)) description += `\n\nHOW IT WORKS\n${PLEASE_NOTE[format][0]} ${HOW_STEPS[format].slice(1).join(" ")}`;
+  }
+  if (!hasAiDisclosure(description)) description = `${DISCLOSURE}\n\n${description}`;
+  return { title, tags, description, designedBy: "seller" as const };
+}
+
+/** The phrase a product should rank for, worded for its format. */
+export function mainKeyword(product: ProductRow, format: ProductFormat): string {
+  const data = product.data as ProductData & { market?: LiveMarket };
+  const base = cleanPhrase(data.market?.keyword ?? data.report?.keywords?.[0] ?? product.niche).split(" ").slice(0, 4).join(" ");
+  if (format === "excel" && !/spreadsheet|excel|sheets?\b/.test(base)) return `${base} spreadsheet`;
+  if (format === "pdf" && !/printable|planner|tracker|checklist|pdf|journal|log\b/.test(base)) return `${base} printable`;
+  return base;
+}
+
+/** Copywriter's homework: what do buyers type, and what do the listings Etsy shows first use? */
+export async function researchKeywords(ctx: RealContext, format: ProductFormat): Promise<KeywordResearch> {
+  const keyword = mainKeyword(ctx.product, format);
+  const ok = (p: string) => blockedTermsIn(p, ctx.settings.blocklist).length === 0;
+  const scout = (d(ctx.product).report?.keywords ?? []).map((k) => ({ phrase: cleanPhrase(k), listings: 0, favs: 0 })).filter((p) => p.phrase && ok(p.phrase));
+  const etsy = await ctx.etsy?.().catch(() => null);
+  if (etsy) {
+    try {
+      const r = await etsy.search(keyword, "score", 100);
+      const live = phrasesFromListings(r.listings).filter((p) => ok(p.phrase));
+      const seen = new Set(live.map((p) => p.phrase));
+      return { keyword, source: "etsy", competing: r.total, phrases: [...live, ...scout.filter((p) => !seen.has(p.phrase))].slice(0, 30), checkedAt: new Date().toISOString() };
+    } catch {
+      /* fall back to Scout's keywords */
+    }
+  }
+  return { keyword, source: "scout", phrases: scout, checkedAt: new Date().toISOString() };
+}
+
+async function writeListing(ctx: RealContext): Promise<StepResult | PartialResult> {
   const data = d(ctx.product);
-  const brief = data.brief;
-  const keywords = [...(data.report?.keywords ?? []), ...cleanKeywords(ctx.product.niche.split(/\s+/))];
   const format = formatOf(ctx.product);
-  const sheet = data.sheet;
-  const sh = sheet ? normaliseSpec(sheet) : null;
+  // 1. Keyword research first (one Etsy search), kept on the task so the writing
+  //    request stays the same while it waits for an answer.
+  const seo = (ctx.task.output as { seo?: KeywordResearch } | null)?.seo;
+  if (!seo) {
+    const research = await researchKeywords(ctx, format);
+    return {
+      partial: { seo: research },
+      progress: 0.3,
+      log: research.source === "etsy" ? `Read the top ${research.phrases.length} search phrases for “${research.keyword}” on Etsy` : `Picked keywords for “${research.keyword}”`,
+    };
+  }
+  // 2. Write.
+  const brief = data.brief;
+  const sh = data.sheet ? normaliseSpec(data.sheet) : null;
   const sheetLine = sh
-    ? `${dataSheets(sh).length + 1 + (hasDashboard(sh) ? 1 : 0) + (sh.lists.length ? 1 : 0)} tabs in total.\nTabs: ${[
+    ? `${tabCount(sh)} tabs in total.\nTabs: ${[
         hasDashboard(sh) ? "Dashboard" : null,
         sh.lists.length ? `Settings (editable ${sh.lists.map((l) => l.name).join(", ")})` : null,
         ...sh.tabs.map((t) => `${t.name}${t.repeat === "months" ? " (12 monthly tabs, Jan to Dec)" : ""} (${t.columns.map((c) => c.header).join(", ")})`),
@@ -632,19 +746,44 @@ async function writeListing(ctx: RealContext): Promise<StepResult> {
         sh.breakdowns.length + sh.trends.length ? `Charts: ${[...sh.breakdowns.map((b) => `${b.title} (${b.chart})`), ...sh.trends.map((t) => `${t.title} (${t.chart})`)].join(", ")}.\n` : ""
       }`
     : "";
+  const included = includedBullets(format, sh, data.keptImages?.length ?? 0);
+  const phrases = seo.phrases.slice(0, 25);
+  const phraseLine = phrases.length
+    ? seo.source === "etsy"
+      ? `What buyers search for, read from the top ${seo.competing ? `of ${seo.competing.toLocaleString("en-GB")} ` : ""}Etsy results (most used first, with how many top listings use it):\n${phrases.map((p) => `- ${p.phrase} (${p.listings})`).join("\n")}\n`
+      : `Search phrases Scout suggested: ${phrases.map((p) => p.phrase).join(", ")}\n`
+    : "";
   const r = await ctx.ai.json({
-    system: `${SHOP_CONTEXT} You are Copywriter. Tone of voice: ${ctx.settings.toneOfVoice}`,
-    prompt: `Write an Etsy listing for a digital download.\n${formatLine(format)}\nProduct: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${brief ? `Audience: ${brief.audience}\nStyle: ${brief.style}\n` : ""}${sheetLine}${data.slogan && !isSheetFormat(format) ? `The print features the slogan: "${data.slogan}"\n` : ""}${(data.boosters ?? []).filter((b) => b.listingHint).map((b) => `Highlight: ${b.listingHint}\n`).join("")}Included: ${includedLine(format)}.\nUseful keywords: ${keywords.join(", ")}\nRules: title under 140 characters, front-load the main keyword, no brand or character names${format === "excel" ? ", say it works in Excel and Google Sheets" : ""}. Exactly 13 tags, each under 20 characters. Description: first sentence must say it was created with AI assistance; then what it is, what's included, how to use it, and a friendly note.${format === "excel" ? " Don't promise financial results or give financial advice." : ""} No emojis in the title.`,
-    schema: z.object({ title: z.string(), tags: z.array(z.string()), description: z.string() }),
+    system: `${SHOP_CONTEXT} You are Copywriter, an Etsy SEO specialist who writes listings like the best-selling template shops: clear, keyword-rich, honest and easy to skim. Tone of voice: ${ctx.settings.toneOfVoice}`,
+    prompt: `Write an Etsy listing for a digital download.\n${formatLine(format)}\nProduct: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${brief ? `Audience: ${brief.audience}\nStyle: ${brief.style}\n` : ""}${sheetLine}${data.slogan && !isSheetFormat(format) ? `The print features the slogan: "${data.slogan}"\n` : ""}${(data.boosters ?? [])
+      .filter((b) => b.listingHint)
+      .map((b) => `Highlight: ${b.listingHint}\n`)
+      .join("")}What's included: ${included.join("; ")}.\nMain search phrase: "${seo.keyword}"\n${phraseLine}
+Rules:
+- title: 100 to 140 characters. Start with the main search phrase (or a closer match from the list), then 3 to 5 more phrases buyers search for, separated by " | ". Cover what it is, what it does, and who it's for or the occasion.${format === "excel" ? ' Include "Excel" and "Google Sheets".' : format === "pdf" ? ' Include "Printable".' : ""} No word more than twice, normal case, no emojis, no brand or character names.
+- tags: exactly 13, all different. Each a 2 or 3 word phrase a buyer would type, at most 20 characters. Prefer the phrases from the list that truly describe this product, then add specific long-tail ones (who it's for, the occasion, the style). No single words and no plural / singular duplicates.
+- intro: 2 or 3 sentences. The first names the product using the main search phrase and says it was designed with AI assistance and checked by hand. Then say what problem it solves for the buyer.
+- features: 5 to 8 short, benefit-led bullet points (under 90 characters each, no emojis), specific to what's really in the file. Don't invent anything that isn't in it.${format === "excel" ? " Don't promise financial results or give financial advice." : ""}
+The "what's included", "how it works" and notes sections are added for you.`,
+    // Older answers (one finished description) are still accepted.
+    schema: z
+      .object({ title: z.string(), tags: z.array(z.string()), intro: z.string().optional(), features: z.array(z.string()).optional(), description: z.string().optional() })
+      .refine((x) => x.intro || x.description, "Write the intro."),
     jsonSchema: {
       type: "object",
-      properties: { title: { type: "string" }, tags: { type: "array", items: { type: "string" } }, description: { type: "string" } },
-      required: ["title", "tags", "description"],
+      properties: {
+        title: { type: "string" },
+        tags: { type: "array", items: { type: "string" } },
+        intro: { type: "string" },
+        features: { type: "array", items: { type: "string" } },
+      },
+      required: ["title", "tags", "intro", "features"],
     },
     maxTokens: 1400,
   });
-  const listing = tidyListing(r, ctx.settings.blocklist, format);
-  return { output: listing, productData: { listing }, log: `Wrote title, ${listing.tags.length} tags and description` };
+  const listing = tidyListing(r, ctx.settings.blocklist, format, { research: seo, included });
+  const check = seoCheck(listing, seo);
+  return { output: { ...listing, seo, seoScore: check.score }, productData: { listing, seo }, log: `Wrote title, ${listing.tags.length} tags and description (listing check ${check.score}%)` };
 }
 
 /** Real versions of the pipeline steps. Applied in index.ts. */
