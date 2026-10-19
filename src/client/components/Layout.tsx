@@ -89,6 +89,11 @@ export function Layout({ children }: { children: ReactNode }) {
                 ⚙️
               </span>
             </NavLink>
+            <button className="rounded-xl p-2 hover:bg-black/5 dark:hover:bg-white/5" onClick={() => window.location.reload()} aria-label="Reload the page" title="Reload the page">
+              <span className="text-xl" aria-hidden>
+                🔄
+              </span>
+            </button>
           </div>
         </div>
         <ClaudeBar provider={snap?.settings.ai.provider} />
