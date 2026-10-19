@@ -35,6 +35,15 @@ interface RawListing {
   url?: string;
   tags?: string[];
   shop_id: number;
+  /** "physical" | "download" | "both" */
+  listing_type?: string;
+}
+
+const DIGITAL_WORDS = /printable|digital|download|template|svg|png|pdf/i;
+
+/** We compete with digital downloads, so search for those rather than posters and framed prints. */
+export function digitalQuery(keywords: string): string {
+  return DIGITAL_WORDS.test(keywords) ? keywords : `${keywords} printable`;
 }
 
 export class EtsyError extends Error {
@@ -87,10 +96,11 @@ export function etsyClient(apiKey: string, usdToGbp: number, fetcher: typeof fet
     return (await res.json()) as T;
   };
   return {
-    /** Newest active listings for a keyword (newest first gives the "what's moving now" view). */
+    /** Newest active digital listings for a keyword (newest first gives the "what's moving now" view). Physical items are left out. */
     async search(keywords: string, sortOn: "created" | "score" = "created", limit = 100): Promise<EtsySearch> {
-      const r = await get<{ count: number; results: RawListing[] }>("/listings/active", { keywords, limit, sort_on: sortOn, sort_order: "desc" });
-      return { total: r.count, listings: r.results.map((x) => tidy(x, usdToGbp)).filter((x): x is EtsyListing => !!x) };
+      const r = await get<{ count: number; results: RawListing[] }>("/listings/active", { keywords: digitalQuery(keywords), limit, sort_on: sortOn, sort_order: "desc" });
+      const digital = r.results.filter((x) => x.listing_type !== "physical");
+      return { total: r.count, listings: digital.map((x) => tidy(x, usdToGbp)).filter((x): x is EtsyListing => !!x) };
     },
     async findShop(name: string): Promise<{ shopId: number; name: string } | null> {
       const r = await get<{ results: { shop_id: number; shop_name: string }[] }>("/shops", { shop_name: name, limit: 5 });

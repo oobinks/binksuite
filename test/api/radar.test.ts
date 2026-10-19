@@ -192,3 +192,19 @@ describe("radar API", () => {
     expect((await c.get("/api/radar")).data.niches.map((n: any) => n.keyword)).toEqual(["bee print"]);
   });
 });
+
+describe("Etsy search", () => {
+  it("looks for printables and leaves physical items out of the prices", async () => {
+    const calls: string[] = [];
+    const fetcher = (async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      const item = (id: number, type: string, amount: number) => ({ listing_id: id, title: "t", price: { amount, divisor: 100, currency_code: "GBP" }, listing_type: type, shop_id: 1 });
+      return Response.json({ count: 3, results: [item(1, "physical", 2500), item(2, "download", 350), item(3, "both", 400)] });
+    }) as typeof fetch;
+    const r = await etsyClient("k:s", 0.79, fetcher).search("frog print");
+    expect(new URL(calls[0]).searchParams.get("keywords")).toBe("frog print printable");
+    expect(r.listings.map((l) => l.pricePence)).toEqual([350, 400]);
+    await etsyClient("k:s", 0.79, fetcher).search("budget planner template");
+    expect(new URL(calls[1]).searchParams.get("keywords")).toBe("budget planner template");
+  });
+});
