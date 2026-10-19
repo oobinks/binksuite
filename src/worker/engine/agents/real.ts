@@ -9,6 +9,8 @@ import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../
 import { hasDashboard, normaliseSpec, pageCount, SHEET_JSON_SCHEMA, SHEET_RULES, tabCount, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
 import { cleanPhrase, fitTitle, phrasesFromListings, seoCheck, type KeywordResearch } from "../../../shared/seo";
 import { bundleKeyword, type BundleSpec } from "../../../shared/bundle";
+import { SIMILAR_MAX, type SimilarListing } from "../../../shared/pricing";
+import { priceProduct } from "./pricer";
 import { SCENE_VARIANTS, sceneKey, scenesFor, type MockupView, type SceneDef } from "../../../shared/mockupScenes";
 
 export const IMAGES_PER_PRODUCT = 4;
@@ -837,6 +839,43 @@ The "what's included", "how it works" and notes sections are added for you.`,
   return { output: { ...listing, seo, seoScore: check.score }, productData: { listing, seo }, log: `Wrote title, ${listing.tags.length} tags and description (listing check ${check.score}%)` };
 }
 
+// ───────────── Pricer: what similar products sell for right now ─────────────
+
+/** The most relevant similar listings: one per shop (so one seller can't skew it), sensible prices only. */
+export function pickSimilar(listings: { title: string; pricePence: number; favourites: number; url: string; shopId: number }[], max = SIMILAR_MAX): SimilarListing[] {
+  const shops = new Set<number>();
+  const out: SimilarListing[] = [];
+  for (const l of listings) {
+    if (l.pricePence < 50 || l.pricePence > 50_000 || shops.has(l.shopId)) continue;
+    shops.add(l.shopId);
+    out.push({ title: l.title.slice(0, 140), pricePence: l.pricePence, favourites: l.favourites, url: l.url });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** One Etsy search (official API) for products like this one, then the usual pricing maths. */
+async function priceWithSimilar(ctx: RealContext): Promise<StepResult> {
+  const data = ctx.product.data as ProductData & { seo?: KeywordResearch };
+  let product = ctx.product;
+  let found: { similar: SimilarListing[]; similarQuery: string } | null = null;
+  if (!data.bundle) {
+    const etsy = await ctx.etsy?.().catch(() => null);
+    if (etsy) {
+      const query = data.seo?.keyword ?? mainKeyword(ctx.product, formatOf(ctx.product));
+      try {
+        const r = await etsy.search(query, "score", 60);
+        found = { similar: pickSimilar(r.listings), similarQuery: query };
+        product = { ...product, data: { ...product.data, ...found } };
+      } catch {
+        /* no live prices this time: the other sources still work */
+      }
+    }
+  }
+  const res = priceProduct(product, ctx.settings, ctx.rng);
+  return { ...res, productData: { ...(res.productData ?? {}), ...(found ?? {}) } };
+}
+
 /** Real versions of the pipeline steps. Applied in index.ts. */
 export const REAL_STEPS: Record<string, Partial<StepDef>> = {
   niche_score: {
@@ -882,4 +921,5 @@ export const REAL_STEPS: Record<string, Partial<StepDef>> = {
   },
   mockups: { realSeconds: 25, real: styleMockups },
   copy: { realSeconds: 20, real: writeListing },
+  price: { realSeconds: 5, real: priceWithSimilar },
 };

@@ -44,3 +44,13 @@ export function friendlyPrice(pence: number): number {
 export function etsySearchUrl(query: string): string {
   return `https://www.etsy.com/uk/search?q=${encodeURIComponent(query.trim())}&ship_to=GB`;
 }
+
+/** A similar product on sale on Etsy right now (official API), for the Pricer and you. */
+export interface SimilarListing {
+  title: string;
+  pricePence: number;
+  favourites: number;
+  url: string;
+}
+
+export const SIMILAR_MAX = 10;
