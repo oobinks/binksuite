@@ -14,8 +14,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DIR = ".claude-jobs";
-const base = (process.env.BINKSUITE_URL ?? "").replace(/\/+$/, "");
-const key = process.env.BINKSUITE_AGENT_KEY ?? "";
+// Forgiving about how the address was typed: "binksuite.example.workers.dev/settings/" works too.
+const rawUrl = (process.env.BINKSUITE_URL ?? "").trim();
+const base = rawUrl ? (/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`).replace(/^(https?:\/\/[^/]+).*$/i, "$1") : "";
+// …and about stray quotes, spaces or a doubled "BINKSUITE_AGENT_KEY=" from pasting.
+const key = (process.env.BINKSUITE_AGENT_KEY ?? "").trim().replace(/^BINKSUITE_AGENT_KEY=/, "").replace(/^["']|["']$/g, "").trim();
 const [cmd, ...args] = process.argv.slice(2);
 const file = (id) => join(DIR, id.replace(/[^a-z0-9_-]+/gi, "_"));
 
