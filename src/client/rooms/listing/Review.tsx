@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReviewDef } from "../shared/types";
 import { calculateFees } from "../../../shared/fees";
-import { etsySearchUrl, percentVsAverage, priceStats, type CompetitorPrice } from "../../../shared/pricing";
+import { etsySearchUrl, percentVsAverage, priceStats, type CompetitorPrice, type SimilarListing } from "../../../shared/pricing";
 import { formatGBP, pounds, toPence } from "../../lib/format";
 import { api } from "../../lib/api";
 import { ErrorNote } from "../../components/ui";
@@ -17,6 +17,9 @@ interface Out {
   minProfitPence: number;
   marketRangePence?: [number, number] | null;
   searchQuery?: string;
+  marketSource?: string | null;
+  /** Similar products on Etsy right now (official API). */
+  similar?: SimilarListing[];
   /** 🎁 Bundles: what the products cost bought one by one. */
   separatePence?: number;
   items?: { title: string; pricePence: number }[];
@@ -103,6 +106,9 @@ export const listingReview: ReviewDef = {
             )}
           </div>
         ) : null}
+
+        {!o.separatePence && !!o.similar?.length && <Similar list={o.similar} yourPence={price} query={o.searchQuery ?? task.productTitle} onPick={(p) => setPriceText(pounds(p))} />}
+        {o.marketSource && <p className="text-xs text-cocoa dark:text-stone-400">Pricer's suggestion is based on {o.marketSource}, {Math.round(settings.radar.undercutPercent)}% under their middle price (never below your minimum profit).</p>}
 
         {!o.separatePence && task.productId && <Competitors productId={task.productId} yourPence={price} searchQuery={o.searchQuery ?? task.productTitle} fallbackRange={o.marketRangePence ?? null} onPick={(p) => setPriceText(pounds(p))} />}
 
@@ -255,6 +261,58 @@ function Competitors({
         </ul>
       )}
       <ErrorNote error={save.error} />
+    </div>
+  );
+}
+
+/** 🔎 What products like this sell for on Etsy right now, read by the Pricer (official API). */
+function Similar({ list, yourPence, query, onPick }: { list: SimilarListing[]; yourPence: number; query: string; onPick: (pence: number) => void }) {
+  const stats = priceStats(list.map((s) => s.pricePence))!;
+  const diff = percentVsAverage(yourPence, stats);
+  return (
+    <div className="space-y-2 rounded-2xl bg-sky-50 p-3 dark:bg-sky-900/20">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="font-black">🔎 Similar products on Etsy right now</h4>
+        <a className="btn-soft !py-1 text-xs" href={etsySearchUrl(query)} target="_blank" rel="noreferrer">
+          See the search on Etsy
+        </a>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5 text-center">
+        {(
+          [
+            ["Average", stats.averagePence],
+            ["Middle", stats.medianPence],
+            ["Lowest", stats.minPence],
+            ["Highest", stats.maxPence],
+          ] as const
+        ).map(([label, p]) => (
+          <button key={label} className="rounded-xl bg-white p-1.5 hover:ring-2 hover:ring-honey dark:bg-night-3" onClick={() => onPick(p)} title={`Use ${formatGBP(p)}`}>
+            <div className="text-[10px] font-bold uppercase text-cocoa dark:text-stone-400">{label}</div>
+            <div className="font-black tabular-nums">{formatGBP(p)}</div>
+          </button>
+        ))}
+      </div>
+      <p className="text-sm font-semibold">
+        Your {formatGBP(yourPence)} is {diff === 0 ? "right on the average" : <b>{Math.abs(diff)}% {diff < 0 ? "below" : "above"}</b>}
+        {diff === 0 ? "" : " the average"} of these {stats.count}.
+      </p>
+      <ol className="space-y-1 text-sm">
+        {list.map((s, i) => (
+          <li key={s.url + i} className="flex items-center gap-2 rounded-lg bg-white px-2 py-1 dark:bg-night-3">
+            <span className="w-5 shrink-0 text-xs text-cocoa dark:text-stone-400">{i + 1}.</span>
+            <a className="min-w-0 flex-1 truncate hover:underline" href={s.url} target="_blank" rel="noreferrer" title={s.title}>
+              {s.title}
+            </a>
+            <span className="shrink-0 text-xs text-cocoa dark:text-stone-400" title="Favourites">
+              ♥ {s.favourites.toLocaleString("en-GB")}
+            </span>
+            <button className="shrink-0 font-black tabular-nums hover:underline" onClick={() => onPick(s.pricePence)} title="Use this price">
+              {formatGBP(s.pricePence)}
+            </button>
+          </li>
+        ))}
+      </ol>
+      <p className="text-xs text-cocoa dark:text-stone-400">Tap a price to use it. Prices are converted to pounds; one listing per shop.</p>
     </div>
   );
 }

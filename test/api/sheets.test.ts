@@ -28,7 +28,8 @@ function recording(prompts: string[]): AiServices {
 
 /** A stand-in for Etsy's search: the top listings, with their tags (one with a brand in it). */
 function fakeEtsy(searches: string[]) {
-  const listing = (title: string, tags: string[], favourites: number) => ({ id: 1, title, tags, favourites, pricePence: 399, views: null, createdAt: "", url: "", shopId: 1 });
+  let shop = 0;
+  const listing = (title: string, tags: string[], favourites: number, pricePence = 399) => ({ id: ++shop, title, tags, favourites, pricePence, views: null, createdAt: "", url: `https://www.etsy.com/listing/${shop}`, shopId: shop });
   return {
     async search(keywords: string) {
       searches.push(keywords);
@@ -37,7 +38,8 @@ function fakeEtsy(searches: string[]) {
         listings: [
           listing("Christmas Gift Tracker | Excel Gift List | Holiday Budget", ["gift tracker", "christmas budget", "disney gift list", "gift list template"], 500),
           listing("Christmas Gift List Spreadsheet, Holiday Budget Planner", ["gift tracker", "christmas budget", "secret santa list"], 120),
-          listing("Gift Tracker for Google Sheets | Holiday Budget", ["gift tracker", "gift list template", "disney gift list"], 30),
+          listing("Gift Tracker for Google Sheets | Holiday Budget", ["gift tracker", "gift list template", "disney gift list"], 30, 499),
+          listing("Christmas Budget Planner Spreadsheet", ["christmas budget"], 12, 599),
         ],
       };
     },
@@ -101,8 +103,13 @@ describe("spreadsheet products", () => {
     const searches: string[] = [];
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "price"))?.state === "needs_approval", 30, fakeEtsy(searches));
     expect(await taskOf(p.id, "mockups")).toBeNull();
+    // The Pricer shows similar products (one per shop) and prices from their middle price.
+    const priced = JSON.parse((await taskOf(p.id, "price")).output);
+    expect(priced.similar.map((x: any) => x.pricePence)).toEqual([399, 399, 499, 599]);
+    expect(priced.similar[0].url).toMatch(/^https:\/\/www.etsy.com\/listing\/\d+$/);
+    expect(priced.marketSource).toBe("4 similar products on Etsy");
     // Copywriter read what buyers search first (one Etsy search), then wrote for it.
-    expect(searches).toHaveLength(1);
+    expect(searches).toHaveLength(2); // keyword research, then the Pricer's look at similar products
     expect(searches[0]).toMatch(/spreadsheet$/);
     expect(prompts.at(-1)).toMatch(/What buyers search for, read from the top of 4,210 Etsy results/);
     expect(prompts.at(-1)).toMatch(/- gift tracker \(3\)/);
