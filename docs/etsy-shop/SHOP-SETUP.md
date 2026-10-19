@@ -22,10 +22,10 @@ Cosy printable wall art, planners & digital gifts
 
 ## Step 2: Banner
 
-Etsy offers two banner sizes. Pick **Big banner** for the most cosy look:
+Shop Manager → **Sales channels** → pencil ✏️ next to your Etsy shop (or open your shop page → pencil on the banner area). Pick **Big banner** for the most cosy look:
 
 - Big banner: `2-banner-big.png` (3360 × 840 px)
-- Mini banner (if you prefer a slimmer header): `2-banner-mini.png` (1200 × 300 px)
+- Mini banner (if you prefer a slimmer header): `2-banner-mini.png` (1600 × 213 px)
 
 The coin and the name sit in the middle, so phones crop it nicely. Check Etsy's preview before saving.
 
