@@ -13,6 +13,7 @@ import { makeDailyIdeas, radarTick } from "../engine/trends";
 import { notify } from "../engine/game";
 import { formatOf } from "../../shared/format";
 import { etsyFor } from "./radar";
+import type { EtsyClient } from "../providers/etsy";
 
 const STALE_CLAIM_MS = 20 * 60_000;
 
@@ -52,7 +53,9 @@ async function tidyJobs(c: Ctx) {
 /** Let the pipeline move on after an answer: run the engine until it settles (or asks Claude for more). */
 async function settle(c: Ctx) {
   const ai = aiFor(c);
-  for (let i = 0; i < 6; i++) await tick(c.get("db"), c.get("settings"), { interactive: false, ai, files: c.env.FILES });
+  let etsy: Promise<EtsyClient | null> | null = null;
+  const openEtsy = () => (etsy ??= etsyFor(c));
+  for (let i = 0; i < 6; i++) await tick(c.get("db"), c.get("settings"), { interactive: false, ai, files: c.env.FILES, etsy: openEtsy });
 }
 
 export const agentRoutes = newApp()

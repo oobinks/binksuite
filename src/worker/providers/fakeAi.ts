@@ -106,7 +106,8 @@ export const fakeAi: AiServices = {
       out = {
         title: "Cottage Toadstool Print Set | Cottagecore Wall Art | Woodland Mushroom Poster | Printable",
         tags: ["toadstool print", "cottagecore art", "mushroom poster", "woodland decor", "autumn wall art"],
-        description: "Bring the woods indoors with this cosy toadstool set.\n\nWHAT'S INCLUDED\n• 5 sizes at 300 DPI",
+        intro: "(Local test) This cottage toadstool print set was designed with AI assistance and checked by hand. Bring the woods indoors with a cosy, earthy set.",
+        features: ["Soft watercolour toadstools in warm autumn colours", "Prints crisply up to A3", "Looks lovely as a gallery wall"],
       };
     return req.schema.parse(out);
   },

@@ -38,6 +38,14 @@ describe("real listing tidy-up", () => {
     expect(l.description).toMatch(/^This design was created with AI assistance/);
     expect(l.description).toMatch(/digital download/);
   });
+  it("builds the description in sections around the Copywriter's intro", () => {
+    const l = tidyListing({ title: "Gift Tracker", tags: [], intro: "This gift tracker spreadsheet was designed with AI assistance and checked by hand.", features: ["- Budget per person"] }, [], "excel", { included: ["One file"] });
+    expect(l.description.match(/AI assistance/g)).toHaveLength(1);
+    expect(l.description).toMatch(/^This gift tracker spreadsheet/);
+    expect(l.description).toMatch(/✦ FEATURES\n• Budget per person\n\n✦ WHAT'S INCLUDED\n• One file\n\n✦ HOW IT WORKS\n1\./);
+    expect(l.description).toMatch(/not financial advice/);
+    expect(l.tags).toHaveLength(10); // the format's own tags when there's nothing else
+  });
   it("keeps an existing disclosure", () => {
     const l = tidyListing({ title: "T", tags: ["a"], description: "Made with AI. Digital download." }, []);
     expect(l.description.startsWith("Made with AI")).toBe(true);

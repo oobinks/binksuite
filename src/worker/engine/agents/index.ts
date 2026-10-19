@@ -290,7 +290,7 @@ export const STEPS: StepDef[] = [
     run: ({ product }) => {
       const d = product.data as Record<string, unknown>;
       return {
-        output: { listing: d.listing, pricePence: product.pricePence, files: d.files, zip: d.zip, zipKey: d.zipKey, mockups: d.mockups, images: d.keptImages },
+        output: { listing: d.listing, seo: d.seo, pricePence: product.pricePence, files: d.files, zip: d.zip, zipKey: d.zipKey, mockups: d.mockups, images: d.keptImages },
         log: "Copy-paste pack ready for Etsy",
       };
     },

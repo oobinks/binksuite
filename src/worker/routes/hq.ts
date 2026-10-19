@@ -87,6 +87,7 @@ export const hqRoutes = newApp()
       interactive: true,
       ai: aiFor(c),
       files: c.env.FILES,
+      etsy: () => etsyFor(c),
       // Slow AI jobs finish after this response is sent, so the map never waits on them.
       defer: (job) => c.executionCtx.waitUntil(job),
     });

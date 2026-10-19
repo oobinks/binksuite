@@ -40,7 +40,7 @@ const fakeAi = (log: string[] = []): AiServices => ({
         ],
       };
     else if (keys.includes("ideas")) out = { ideas: [{ idea: "Frog teacher posters", why: "Back to school" }] };
-    else out = { title: "Cottage Mushroom Wall Art Printable Disney", tags: ["mushroom art", "cottagecore"], description: "A lovely set of prints." };
+    else out = { title: "Cottage Mushroom Wall Art Printable Disney", tags: ["mushroom art", "cottagecore"], intro: "A lovely set of mushroom prints.", features: ["Earthy colours", "• Prints up to A3"] };
     return req.schema.parse(out);
   },
   async image(prompt: string) {
@@ -136,7 +136,13 @@ describe("real AI pipeline (Workers AI)", () => {
     const listing = JSON.parse((await env.DB.prepare("SELECT data FROM products WHERE id = ?").bind(p.id).first<any>()).data).listing;
     expect(listing.title).not.toMatch(/disney/i);
     expect(listing.description).toMatch(/^This design was created with AI assistance/);
-    expect(listing.tags.length).toBeGreaterThan(2);
+    expect(listing.description).toMatch(/✦ FEATURES\n• Earthy colours\n• Prints up to A3/);
+    expect(listing.description).toMatch(/✦ WHAT'S INCLUDED\n• 2 designs as high-resolution PDF files/);
+    expect(listing.description).toMatch(/✦ HOW IT WORKS\n1\. /);
+    // No Etsy key here: Scout's keywords top up the tags to all 13.
+    expect(listing.tags).toHaveLength(13);
+    expect(listing.tags).toContain("cottagecore print");
+    expect(listing.tags).not.toContain("this keyword is far far too long for etsy".slice(0, 20));
   });
 
   it("never runs the same job twice (lease)", async () => {

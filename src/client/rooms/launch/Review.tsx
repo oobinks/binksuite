@@ -7,9 +7,11 @@ import type { MockupView } from "../../../shared/mockupScenes";
 import { formatGBP } from "../../lib/format";
 import { downloadImage, fileUrl } from "../../lib/files";
 import { ArtImage } from "../../components/ArtImage";
+import { seoCheck, type KeywordResearch } from "../../../shared/seo";
 
 interface Pack {
   listing?: { title: string; tags: string[]; description: string };
+  seo?: KeywordResearch;
   pricePence: number | null;
   files?: string[];
   zip?: string;
@@ -28,6 +30,7 @@ export const launchReview: ReviewDef = {
     return (
       <div className="space-y-4">
         <p className="rounded-xl bg-honey/20 p-2 text-sm font-semibold">Open Etsy → Shop Manager → Listings → Add a listing, then copy each piece across. Etsy API publishing arrives in Phase 4.</p>
+        <ListingCheck listing={l} research={p.seo} />
         <Field label={`Title (${l.title.length}/140)`} text={l.title} />
         <div>
           <div className="mb-1 flex items-center justify-between">
@@ -112,5 +115,47 @@ function Field({ label, text, multiline, display }: { label: string; text: strin
       </div>
       <div className={`rounded-xl bg-white p-2.5 text-sm ring-1 ring-black/10 dark:bg-night-3 dark:ring-white/10 ${multiline ? "max-h-48 overflow-y-auto whitespace-pre-wrap" : ""}`}>{display ?? text}</div>
     </div>
+  );
+}
+
+/** 🔎 How Etsy-ready the words are, and the searches they were written for. */
+function ListingCheck({ listing, research }: { listing: { title: string; tags: string[]; description: string }; research?: KeywordResearch }) {
+  const { score, checks } = seoCheck(listing, research);
+  const tagSet = new Set(listing.tags);
+  const colour = score >= 80 ? "bg-emerald-100 dark:bg-emerald-900/30" : score >= 60 ? "bg-amber-100 dark:bg-amber-900/30" : "bg-rose-100 dark:bg-rose-900/30";
+  return (
+    <details className={`rounded-2xl p-3 text-sm ${colour}`}>
+      <summary className="flex cursor-pointer items-center justify-between gap-2 font-black">
+        <span>🔎 Listing check: {score}%</span>
+        <span className="text-xs font-bold opacity-70">{checks.filter((c) => c.pass).length}/{checks.length} ✓ · tap for details</span>
+      </summary>
+      <ul className="mt-2 space-y-1">
+        {checks.map((c) => (
+          <li key={c.key}>
+            {c.pass ? "✅" : "💡"} <b>{c.label}</b>
+            {!c.pass && <div className="ml-6 text-xs text-cocoa dark:text-stone-300">{c.tip}</div>}
+          </li>
+        ))}
+      </ul>
+      {research && research.phrases.length > 0 && (
+        <div className="mt-3">
+          <div className="label">
+            {research.source === "etsy"
+              ? `What buyers search: “${research.keyword}”${research.competing ? ` (${research.competing.toLocaleString("en-GB")} listings)` : ""}`
+              : `Scout's keywords for “${research.keyword}”`}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {research.phrases.slice(0, 20).map((p) => (
+              <span key={p.phrase} className={`chip ${tagSet.has(p.phrase) ? "bg-emerald-200 dark:bg-emerald-800/60" : "bg-white/70 dark:bg-night-3"}`} title={p.listings ? `Used by ${p.listings} of the top listings` : undefined}>
+                {tagSet.has(p.phrase) ? "✓ " : ""}
+                {p.phrase}
+                {p.listings > 0 && <span className="opacity-50"> {p.listings}</span>}
+              </span>
+            ))}
+          </div>
+          {research.source === "etsy" && <p className="mt-1 text-xs opacity-70">From the listings Etsy shows first (official API). ✓ = in your tags. The number is how many top listings use it.</p>}
+        </div>
+      )}
+    </details>
   );
 }

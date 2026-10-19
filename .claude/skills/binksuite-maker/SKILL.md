@@ -71,8 +71,12 @@ types, nothing else, no code fences). Then make it excellent:
   Check every `{Column}` and `Tab[Column]` reference spelling against your own headers.
   Fill in `marketing` too: a short tagline, up to 4 punchy badges (e.g. "16 TABS") and up to 6
   features. They go on the listing photos, so keep them true to what's in the file.
-- **Listings (Copywriter):** front-load the main keyword, exactly 13 tags under 20 characters,
-  first sentence discloses AI assistance, and describe exactly what's in the download.
+- **Listings (Copywriter):** the prompt lists what buyers really search (read from the top
+  Etsy results). Start the title with the main search phrase, then 3–5 more buyer phrases
+  separated by " | " (100–140 characters, no word more than twice). Exactly 13 different 2–3 word
+  tags of at most 20 characters, picked from that list where they truly fit. The intro's first
+  sentence names the product and discloses AI assistance; features describe only what's really
+  in the file. BinkSuite adds the "what's included", "how it works" and notes sections itself.
 
 ## SVG jobs (`kind: "svg"`): vector artwork to be printed and sold
 

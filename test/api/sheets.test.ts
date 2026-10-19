@@ -7,6 +7,7 @@ import { approveTask, rejectTask, suggestIdea, tick } from "../../src/worker/eng
 import { fakeAi } from "../../src/worker/providers/fakeAi";
 import type { AiServices, JsonRequest } from "../../src/worker/providers/ai";
 import { setUpOwner } from "./helpers";
+import { hasAiDisclosure } from "../../src/shared/compliance";
 
 async function setup() {
   const owner = await setUpOwner();
@@ -25,10 +26,28 @@ function recording(prompts: string[]): AiServices {
   };
 }
 
-async function runUntil(db: any, settings: any, ai: AiServices, predicate: () => Promise<boolean>, max = 30) {
+/** A stand-in for Etsy's search: the top listings, with their tags (one with a brand in it). */
+function fakeEtsy(searches: string[]) {
+  const listing = (title: string, tags: string[], favourites: number) => ({ id: 1, title, tags, favourites, pricePence: 399, views: null, createdAt: "", url: "", shopId: 1 });
+  return {
+    async search(keywords: string) {
+      searches.push(keywords);
+      return {
+        total: 4210,
+        listings: [
+          listing("Christmas Gift Tracker | Excel Gift List | Holiday Budget", ["gift tracker", "christmas budget", "disney gift list", "gift list template"], 500),
+          listing("Christmas Gift List Spreadsheet, Holiday Budget Planner", ["gift tracker", "christmas budget", "secret santa list"], 120),
+          listing("Gift Tracker for Google Sheets | Holiday Budget", ["gift tracker", "gift list template", "disney gift list"], 30),
+        ],
+      };
+    },
+  } as any;
+}
+
+async function runUntil(db: any, settings: any, ai: AiServices, predicate: () => Promise<boolean>, max = 30, etsy?: any) {
   for (let i = 0; i < max; i++) {
     await env.DB.prepare("UPDATE tasks SET started_at = '2000-01-01T00:00:00.000Z' WHERE state = 'working'").run();
-    await tick(db, settings, { interactive: false, ai, files: env.FILES });
+    await tick(db, settings, { interactive: false, ai, files: env.FILES, etsy: async () => etsy ?? null });
     if (await predicate()) return;
   }
   throw new Error("pipeline didn't reach the expected state");
@@ -82,12 +101,26 @@ describe("spreadsheet products", () => {
     expect(mock[0]).toMatchObject({ imageKey: `products/${p.id}/p1.jpg`, slogan: null });
     expect(mock[0].bgKey).toMatch(/^products\/_scenes\/desk-1-/); // painted by the AI and kept in the scene library
     await approveTask(db, (await taskOf(p.id, "mockups")).id, settings);
-    await runUntil(db, settings, ai, async () => (await taskOf(p.id, "price"))?.state === "needs_approval");
-    expect(prompts.at(-1)).toMatch(/Excel spreadsheet \(\.xlsx\)/);
+    const searches: string[] = [];
+    await runUntil(db, settings, ai, async () => (await taskOf(p.id, "price"))?.state === "needs_approval", 30, fakeEtsy(searches));
+    // Copywriter read what buyers search first (one Etsy search), then wrote for it.
+    expect(searches).toHaveLength(1);
+    expect(searches[0]).toMatch(/spreadsheet$/);
+    expect(prompts.at(-1)).toMatch(/What buyers search for, read from the top of 4,210 Etsy results/);
+    expect(prompts.at(-1)).toMatch(/- gift tracker \(3\)/);
+    expect(prompts.at(-1)).not.toMatch(/disney/); // brands never make it in
+    expect(prompts.at(-1)).toMatch(/Excel spreadsheet \(\.xlsx\) with \d+ tabs/);
     expect(prompts.at(-1)).toMatch(/Tabs: Dashboard; Gifts/);
     const listing = (await dataOf(p.id)).listing;
     expect(listing.tags).toEqual(expect.arrayContaining(["excel template", "google sheets"]));
-    expect(listing.description).toMatch(/^This design was created with AI assistance/);
+    expect(hasAiDisclosure(listing.description)).toBe(true);
+    expect(listing.description.match(/AI assistance/g)).toHaveLength(1);
+    expect(listing.description).toMatch(/✦ WHAT'S INCLUDED\n• Excel spreadsheet \(\.xlsx\) with \d+ tabs/);
+    expect(listing.tags).toHaveLength(13);
+    expect(listing.tags).toEqual(expect.arrayContaining(["gift tracker", "christmas budget", "gift list template"]));
+    const data = await dataOf(p.id);
+    expect(data.seo).toMatchObject({ source: "etsy", competing: 4210 });
+    expect(data.seo.keyword).toBe(searches[0]);
   });
 
   it("a PDF product skips the art too, and Redesign passes your note to the Analyst", async () => {
