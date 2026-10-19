@@ -55,7 +55,7 @@ export const sheetReview: ReviewDef = {
           </details>
         )}
         <p className="text-sm">
-          Printer builds {o.format === "excel" ? <b>the Excel file, a printable PDF</b> : <b>the printable PDF</b>} (A4 and US Letter) and <b>{o.format === "excel" ? 5 : 4} listing photos</b> on your device. It's
+          Printer builds {o.format === "excel" ? <b>the Excel file, a printable PDF</b> : <b>the printable PDF</b>} (A4 and US Letter) and <b>a full set of {o.format === "excel" ? 8 : 7} listing photos</b> on your device. It's
           free and takes a few seconds.
         </p>
         {step && !pack && (

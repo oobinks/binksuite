@@ -7,6 +7,7 @@ import { etsySearchUrl, percentVsAverage, priceStats, type CompetitorPrice } fro
 import { formatGBP, pounds, toPence } from "../../lib/format";
 import { api } from "../../lib/api";
 import { ErrorNote } from "../../components/ui";
+import { savingPercent } from "../../../shared/bundle";
 
 interface Out {
   pricePence: number;
@@ -16,6 +17,9 @@ interface Out {
   minProfitPence: number;
   marketRangePence?: [number, number] | null;
   searchQuery?: string;
+  /** 🎁 Bundles: what the products cost bought one by one. */
+  separatePence?: number;
+  items?: { title: string; pricePence: number }[];
 }
 
 interface ProductInfo {
@@ -79,7 +83,28 @@ export const listingReview: ReviewDef = {
           </p>
         )}
 
-        {task.productId && <Competitors productId={task.productId} yourPence={price} searchQuery={o.searchQuery ?? task.productTitle} fallbackRange={o.marketRangePence ?? null} onPick={(p) => setPriceText(pounds(p))} />}
+        {o.separatePence ? (
+          <div className={`rounded-xl p-3 text-sm ${price < o.separatePence ? "bg-honey/20" : "bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200"}`}>
+            <div className="font-black">🎁 Bundle of {o.items?.length ?? 0}</div>
+            <ul className="my-1 text-xs">
+              {o.items?.map((i) => (
+                <li key={i.title} className="flex justify-between">
+                  <span className="truncate">{i.title}</span>
+                  <span className="tabular-nums">{formatGBP(i.pricePence)}</span>
+                </li>
+              ))}
+            </ul>
+            {price < o.separatePence ? (
+              <p>
+                Separately {formatGBP(o.separatePence)} → bundle {formatGBP(price)}: buyers save <b>{savingPercent(o.separatePence, price)}%</b>. The listing will say so, worked out from the final price.
+              </p>
+            ) : (
+              <p className="font-semibold">⚠️ A bundle has to cost less than {formatGBP(o.separatePence)} (the products bought separately).</p>
+            )}
+          </div>
+        ) : null}
+
+        {!o.separatePence && task.productId && <Competitors productId={task.productId} yourPence={price} searchQuery={o.searchQuery ?? task.productTitle} fallbackRange={o.marketRangePence ?? null} onPick={(p) => setPriceText(pounds(p))} />}
 
         <details className="text-sm">
           <summary className="cursor-pointer font-bold">Fee breakdown</summary>

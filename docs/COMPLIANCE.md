@@ -130,3 +130,9 @@ Checked against the code on 19 Oct 2026. ✅ = handled by the app · 🟡 = part
 | About section, shop policies, digital items policy | 👤 | Fill these in on Etsy. |
 | 14-day withdrawal and digital download consent | 👤 | Set this in your Etsy shop policies. The listing text could mention instant download. Not built yet. |
 | Fast replies and the 48h problem window | 👤 | Check Etsy Messages daily. |
+
+## Bundles and "save X%" (added v0.13.0)
+
+- A bundle's saving is worked out from the prices its products are **really on sale for separately**, at the moment the Launch Pad pack is made, never from an invented "was" price.
+- BinkSuite won't let a bundle cost the same as, or more than, its products bought separately.
+- **Keep the separate listings live at those prices** while the bundle is on sale. If you change or remove one, update the bundle's "Better value" line too, so the claim stays true (UK consumer law on price comparisons).

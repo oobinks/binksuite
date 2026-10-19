@@ -7,7 +7,7 @@
 import ExcelJS from "exceljs";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import JSZip from "jszip";
-import { fileUrl } from "./files";
+import { uploadProductFile } from "./files";
 import type { ProductFormat } from "../../shared/format";
 import { addCharts, type ChartSpec } from "./xlsxCharts";
 import { buildListingPhotos } from "./listingPhotos";
@@ -493,14 +493,6 @@ export interface SheetPack {
   bytes: number;
 }
 
-async function upload(productId: string, name: string, body: Blob, type: string): Promise<string> {
-  const res = await fetch(fileUrl(`products/${productId}/${name}`), { method: "PUT", credentials: "same-origin", headers: { "content-type": type }, body });
-  if (!res.ok) {
-    const msg = await res.json().catch(() => null);
-    throw new Error(msg?.error ?? `Upload failed (${res.status})`);
-  }
-  return ((await res.json()) as { key: string }).key;
-}
 
 export async function buildSheetPack(productId: string, raw: SheetSpec, format: ProductFormat, onProgress: (step: string, fraction: number) => void): Promise<SheetPack> {
   const spec = normaliseSpec(raw);
@@ -530,12 +522,12 @@ export async function buildSheetPack(productId: string, raw: SheetSpec, format: 
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   onProgress("Uploading…", 0.82);
   const stamp = Date.now().toString(36);
-  const zipKey = await upload(productId, `${base}-pack-${stamp}.zip`, blob, "application/zip");
+  const zipKey = await uploadProductFile(productId, `${base}-pack-${stamp}.zip`, blob, "application/zip");
   const previews: string[] = [];
-  for (const [i, p] of pictures.listing.entries()) previews.push(await upload(productId, `${base}-listing-${i + 1}-${stamp}.jpg`, p, "image/jpeg"));
+  for (const [i, p] of pictures.listing.entries()) previews.push(await uploadProductFile(productId, `${base}-listing-${i + 1}-${stamp}.jpg`, p, "image/jpeg"));
   onProgress("Saving the mockup screens…", 0.94);
   const screens: SheetPack["screens"] = {};
-  for (const [k, b] of Object.entries(pictures.screens)) if (b) screens[k as keyof SheetPack["screens"]] = await upload(productId, `${base}-screen-${k}-${stamp}.jpg`, b, "image/jpeg");
+  for (const [k, b] of Object.entries(pictures.screens)) if (b) screens[k as keyof SheetPack["screens"]] = await uploadProductFile(productId, `${base}-screen-${k}-${stamp}.jpg`, b, "image/jpeg");
   onProgress("Done!", 1);
   return { zipKey, files, previews, screens, bytes: blob.size };
 }

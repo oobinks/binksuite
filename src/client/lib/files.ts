@@ -24,3 +24,13 @@ export async function downloadImage(key: string, name: string) {
   a.download = name;
   a.click();
 }
+
+/** Save a file you made on this device to the product's storage. Returns its key. */
+export async function uploadProductFile(productId: string, name: string, body: Blob, type: string): Promise<string> {
+  const res = await fetch(fileUrl(`products/${productId}/${name}`), { method: "PUT", credentials: "same-origin", headers: { "content-type": type }, body });
+  if (!res.ok) {
+    const msg = await res.json().catch(() => null);
+    throw new Error(msg?.error ?? `Upload failed (${res.status})`);
+  }
+  return ((await res.json()) as { key: string }).key;
+}
