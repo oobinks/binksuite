@@ -187,3 +187,17 @@ describe("full-size designs", () => {
 });
 
 const SUMMARY_ROWS_AFTER = (l: { items: Map<string, string> }) => Math.max(...[...l.items.values()].map((c) => Number(c.match(/\d+$/)![0])));
+
+describe("sheet names Excel won't accept", () => {
+  it("turns a tab called History into a History Log sheet, formulas included", async () => {
+    const { dataSheets, excelSheetName } = await import("../../src/shared/sheetSpec");
+    const { spec } = tidySheetSpec(
+      { title: "Savings", subtitle: "", howTo: [], inputs: [], summary: [{ label: "Saved", type: "money", formula: "SUM(History[Amount])" }], tabs: [{ name: "History", columns: [{ header: "Amount", type: "money" }], exampleRows: [[5]] }] },
+      "x",
+    );
+    expect(spec.tabs[0].name).toBe("History");
+    expect(dataSheets(spec).map((s) => s.name)).toEqual(["History Log"]);
+    expect(summaryFormula(spec.summary[0].formula, spec, 0)).toMatch(/'History Log'!\$A\$/);
+    expect(excelSheetName("Debts")).toBe("Debts");
+  });
+});
