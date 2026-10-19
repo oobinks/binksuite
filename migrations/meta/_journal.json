@@ -29,6 +29,13 @@
       "when": 1792405002773,
       "tag": "0003_min_profit_150",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792405853623,
+      "tag": "0004_rescan_digital_only",
+      "breakpoints": true
     }
   ]
 }
