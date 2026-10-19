@@ -13,6 +13,7 @@ import { BUILD_INFO } from "../lib/buildInfo";
 import type { AiStatus } from "../../shared/api";
 import { useClaude } from "../components/ClaudeBar";
 import { CopyButton } from "../rooms/shared/CopyButton";
+import { FORMAT_INFO, FORMATS } from "../../shared/format";
 
 export function SettingsPage() {
   const { data: snap } = useSnapshot();
@@ -22,6 +23,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-black">⚙️ Settings</h1>
       <div className="grid gap-4 lg:grid-cols-2">
         <General s={snap.settings} />
+        <ProductKinds s={snap.settings} />
         <ClaudeCode s={snap.settings} />
         <EtsyRadar s={snap.settings} />
         <AiEngine s={snap.settings} />
@@ -45,6 +47,45 @@ function useSaved() {
     ...save,
     saveNow: (patch: Record<string, unknown>) => save.mutate(patch, { onSuccess: () => toast({ icon: "💾", title: "Saved" }) }),
   };
+}
+
+/** 🎨 / 📊 / 📄: which kinds of product the agents research, suggest and make. */
+function ProductKinds({ s }: { s: Settings }) {
+  const save = useSaved();
+  const on = s.formats;
+  const count = FORMATS.filter((f) => on[f]).length;
+  const blurb: Record<(typeof FORMATS)[number], string> = {
+    art: "Printable wall art prints",
+    excel: "Ready-made spreadsheets (Excel + Google Sheets), with a printable PDF copy",
+    pdf: "Printable planners, trackers and checklists",
+  };
+  return (
+    <Section title="Products we make" icon="🧺">
+      <p className="text-sm">Switch off a kind of product and Trend Radar, today's ideas and the Suggestion box stop offering it. Products already being made carry on.</p>
+      <ul className="mt-3 space-y-2">
+        {FORMATS.map((f) => (
+          <li key={f} className={`flex items-center justify-between gap-3 rounded-xl p-2 ring-1 ring-black/5 dark:ring-white/10 ${on[f] ? "" : "opacity-60"}`}>
+            <span className="min-w-0">
+              <span className={`chip !px-1.5 !py-0 text-[10px] font-black ${FORMAT_INFO[f].chip}`}>
+                {FORMAT_INFO[f].icon} {FORMAT_INFO[f].label}
+              </span>{" "}
+              <span className="text-sm">{blurb[f]}</span>
+            </span>
+            <Toggle
+              checked={on[f]}
+              onChange={(v) => {
+                if (!v && count === 1) return;
+                save.saveNow({ formats: { ...on, [f]: v } });
+              }}
+              label={`Make ${FORMAT_INFO[f].label} products`}
+            />
+          </li>
+        ))}
+      </ul>
+      {count === 1 && <p className="mt-2 text-xs text-cocoa dark:text-stone-400">At least one kind stays on.</p>}
+      <ErrorNote error={save.error} />
+    </Section>
+  );
 }
 
 function General({ s }: { s: Settings }) {

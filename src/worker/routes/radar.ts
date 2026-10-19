@@ -8,7 +8,7 @@ import { vaultSecret } from "../lib/vault";
 import { etsyClient } from "../providers/etsy";
 import { isAiLimit } from "../providers/ai";
 import { isClaudePending } from "../providers/claudeCode";
-import { liveOnly, makeDailyIdeas, marketOf, nicheFormat, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
+import { liveOnly, makeDailyIdeas, marketOf, nicheFormat, nicheWanted, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
 import { priceWatchTick } from "../engine/priceWatch";
 import { listSuggestions, suggestIdea } from "../engine/queue";
 
@@ -24,7 +24,7 @@ export const radarRoutes = newApp()
     const day = new Date().toISOString().slice(0, 10);
     const live = await liveOnly(db);
     const [niches, daily, error, etsy, suggestions] = await Promise.all([
-      db.select().from(trendNiches).where(and(sql`${trendNiches.score} > 0`, live)).orderBy(desc(trendNiches.score)).limit(20).all(),
+      db.select().from(trendNiches).where(and(sql`${trendNiches.score} > 0`, live)).orderBy(desc(trendNiches.score)).limit(60).all(),
       kvGet<DailyIdeas>(db, `daily:${day}`),
       kvGet<{ at: string; message: string } | null>(db, "radarError"),
       etsyFor(c),
@@ -39,7 +39,8 @@ export const radarRoutes = newApp()
       error,
       watching: watched?.n ?? 0,
       scannedLive: scanned?.n ?? 0,
-      niches: niches.map((n) => ({ ...n, format: nicheFormat(n.keyword, n.category) })),
+      // Only the kinds of product you're making (Settings → Products we make).
+      niches: niches.filter((n) => nicheWanted(n, c.get("settings").formats)).slice(0, 20).map((n) => ({ ...n, format: nicheFormat(n.keyword, n.category) })),
       daily: daily
         ? { ...daily, items: daily.items.map((i) => ({ ...i, stage: stages.get(i.productId)?.stage ?? "research", verdict: stages.get(i.productId)?.verdict ?? null, overall: stages.get(i.productId)?.overall ?? null })) }
         : null,

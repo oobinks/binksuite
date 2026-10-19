@@ -15,7 +15,7 @@ import type { Settings } from "../../shared/settings";
 import { newId } from "../lib/crypto";
 import { invalidateStats, kvGet, kvSet, nowIso, sum, visible } from "../lib/store";
 import { STEP_BY_KIND, FIRST_STEP, stepNeedsApproval } from "./agents";
-import { formatOf, guessFormat, type ProductFormat } from "../../shared/format";
+import { formatOf, guessFormat, pickFormat, type ProductFormat } from "../../shared/format";
 import type { PartialResult, ProductRow, StepDef, StepResult, TaskRow } from "./agents/types";
 import { AiLimitError, aiUsageToday, isAiLimit, MAX_CALL_NEURONS, type AiServices } from "../providers/ai";
 import { DEMO_NICHES } from "./agents/demoContent";
@@ -121,7 +121,8 @@ export async function suggestIdea(
       ...(extra.market ? { market: extra.market } : {}),
       ...(extra.trendKeyword ? { trendKeyword: extra.trendKeyword } : {}),
       // 🎨 ART / 📊 EXCEL / 📄 PDF: what you picked, or a guess from the idea. Demo products are always art.
-      format: demo ? "art" : (extra.format ?? guessFormat(clean)),
+      // (Only kinds switched on in Settings → Products we make.)
+      format: demo ? "art" : pickFormat(extra.format ?? guessFormat(clean), settings.formats),
     },
     // With real AI your idea is a real product. Without it, in demo mode, it's simulated.
     demo,

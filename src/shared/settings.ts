@@ -45,6 +45,10 @@ export const settingsSchema = z.object({
     /** Stop for the day at this many estimated "neurons" (free allowance is 10,000/day). */
     dailyNeuronCap: z.number().int().min(0).max(1_000_000),
   }),
+  /** Which kinds of product to research, suggest and make (at least one stays on). */
+  formats: z
+    .object({ art: z.boolean(), excel: z.boolean(), pdf: z.boolean() })
+    .refine((f) => f.art || f.excel || f.pdf, "Keep at least one kind of product switched on."),
   /** Trend Radar, Daily ideas, undercut pricing and Price Watch. */
   radar: z.object({
     /** Automatically research the day's best ideas every morning. */
@@ -82,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
     imageModel: "@cf/black-forest-labs/flux-1-schnell",
     dailyNeuronCap: 9000,
   },
+  formats: { art: true, excel: true, pdf: true },
   radar: {
     autoDaily: true,
     dailyIdeas: 5,
@@ -100,6 +105,7 @@ export function withDefaults(stored: Partial<Settings> | null | undefined): Sett
     fees: { ...DEFAULT_SETTINGS.fees, ...(s.fees ?? {}) },
     agentsEnabled: { ...DEFAULT_SETTINGS.agentsEnabled, ...(s.agentsEnabled ?? {}) },
     ai: { ...DEFAULT_SETTINGS.ai, ...(s.ai ?? {}) },
+    formats: { ...DEFAULT_SETTINGS.formats, ...(s.formats ?? {}) },
     radar: { ...DEFAULT_SETTINGS.radar, ...(s.radar ?? {}) },
   };
 }

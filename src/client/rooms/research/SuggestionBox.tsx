@@ -6,7 +6,8 @@ import { useUi } from "../../lib/store";
 import { timeAgo } from "../../lib/format";
 import { ErrorNote, Section } from "../../components/ui";
 import type { TaskView } from "../../../shared/api";
-import { FORMAT_INFO, FORMATS, guessFormat, type ProductFormat } from "../../../shared/format";
+import { ALL_FORMATS_ON, enabledFormats, FORMAT_INFO, guessFormat, pickFormat, type ProductFormat } from "../../../shared/format";
+import { useSnapshot } from "../../lib/hooks";
 import { FormatBadge } from "../../components/FormatBadge";
 
 interface Suggestion {
@@ -34,7 +35,9 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
   const [showNotes, setShowNotes] = useState(false);
   // null = let the app guess from the wording.
   const [format, setFormat] = useState<ProductFormat | null>(null);
-  const guessed = guessFormat(idea);
+  // Only the kinds of product switched on in Settings → Products we make.
+  const switches = useSnapshot().data?.settings.formats ?? ALL_FORMATS_ON;
+  const guessed = pickFormat(guessFormat(idea), switches);
   const { data } = useQuery({
     queryKey: ["suggestions"],
     queryFn: () => api.get<{ suggestions: Suggestion[] }>("/research/suggestions"),
@@ -92,7 +95,7 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
         </label>
         <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="What should we make?">
           <span className="text-xs font-bold">Make it as:</span>
-          {FORMATS.map((f) => {
+          {enabledFormats(switches).map((f) => {
             const on = (format ?? guessed) === f;
             return (
               <button
@@ -152,7 +155,7 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
                   className="w-full rounded-lg p-1.5 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
                   onClick={() => (setIdea(i.idea), setFormat(null))}
                 >
-                  <FormatBadge format={guessFormat(i.idea)} /> <b>{i.idea}</b> <span className="text-cocoa dark:text-stone-400">· {i.why}</span>
+                  <FormatBadge format={pickFormat(guessFormat(i.idea), switches)} /> <b>{i.idea}</b> <span className="text-cocoa dark:text-stone-400">· {i.why}</span>
                 </button>
               </li>
             ))}

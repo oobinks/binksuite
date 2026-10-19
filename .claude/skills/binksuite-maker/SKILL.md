@@ -12,6 +12,19 @@ to a standard that sells, send each answer back, and stop when the list stays em
 Everything goes through `node scripts/claude-jobs.mjs` (it reads `BINKSUITE_URL` and
 `BINKSUITE_AGENT_KEY` from the environment; never print or echo the key).
 
+## Quality first
+
+Everything you make is sold to paying customers, and the owner wants the **first version to be a
+10/10**: something people want to buy for how it looks and how well it works. Speed doesn't
+matter; there's no rush and no limit on how long a job takes. For every job:
+
+1. Draft it.
+2. Critique it honestly as a demanding buyer comparing it with the best-selling Etsy listings.
+3. Revise it, at least once.
+4. Only then answer.
+
+If a job is borderline, make it better rather than sending it.
+
 ## Rules
 
 - Only work on the to-do list. Don't edit, commit or push anything in this repository, and don't
@@ -69,8 +82,23 @@ types, nothing else, no code fences). Then make it excellent:
   - choice columns where they save typing.
 
   Check every `{Column}` and `Tab[Column]` reference spelling against your own headers.
+
+  **Before answering any design**, save it to a file and run
+  `node scripts/claude-jobs.mjs lint-sheet <file>`. It shows exactly what BinkSuite will build:
+  - anything it would drop;
+  - the headline numbers your example rows produce;
+  - where the design falls short of the premium bar.
+
+  Fix every point and run it again until it reports no problems. Then read the numbers as the
+  buyer would: are they believable?
   Fill in `marketing` too: a short tagline, up to 4 punchy badges (e.g. "16 TABS") and up to 6
   features. They go on the listing photos, so keep them true to what's in the file.
+- **Design reviews (`scores`, `fixes`, `sheet`):** you are the senior designer checking a design
+  before it's built.
+  - Score honestly; a 10 means nothing left to improve.
+  - List concrete fixes, then return the **complete** improved design with every fix applied.
+  - Never return a smaller, simpler design.
+  - Run `lint-sheet` on your answer first.
 - **Listings (Copywriter):** the prompt lists what buyers really search (read from the top
   Etsy results). Start the title with the main search phrase, then 3–5 more buyer phrases
   separated by " | " (100–140 characters, no word more than twice). Exactly 13 different 2–3 word

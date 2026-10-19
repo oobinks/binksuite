@@ -11,7 +11,15 @@ export const fakeAi: AiServices = {
   async json<T>(req: JsonRequest<T>): Promise<T> {
     const keys = Object.keys((req.jsonSchema as { properties: Record<string, unknown> }).properties);
     let out: unknown;
-    if (keys.includes("scores"))
+    if (keys.includes("fixes")) {
+      // The senior designer's review: hand the design back unchanged, with a score and a fix.
+      const current = /Current design \(JSON\):\n(.+)\n/.exec(req.prompt)?.[1];
+      out = {
+        scores: { depth: 8, dashboard: 9, clarity: 9, examples: 8, formulas: 9, polish: 8, value: 9 },
+        fixes: ["(Local test) Add two more example rows so every feature shows"],
+        sheet: current ? JSON.parse(current) : {},
+      };
+    } else if (keys.includes("scores"))
       out = {
         scores: { demand: 8, competition: 5, aiFit: 9, pricePotential: 7 },
         summary: "(Local test) Looks worth making, with steady autumn demand.",
