@@ -14,6 +14,7 @@ import type { Settings } from "../../shared/settings";
 import { newId } from "../lib/crypto";
 import { invalidateStats, kvGet, kvSet, nowIso, sum, visible } from "../lib/store";
 import { STEP_BY_KIND, FIRST_STEP, stepNeedsApproval } from "./agents";
+import { formatOf, guessFormat, type ProductFormat } from "../../shared/format";
 import type { PartialResult, ProductRow, StepDef, StepResult, TaskRow } from "./agents/types";
 import { AiLimitError, aiUsageToday, isAiLimit, MAX_CALL_NEURONS, type AiServices } from "../providers/ai";
 import { DEMO_NICHES } from "./agents/demoContent";
@@ -101,10 +102,11 @@ export async function suggestIdea(
   idea: string,
   notes?: string,
   realAi = false,
-  extra: { market?: Record<string, unknown> | null; trendKeyword?: string; origin?: "you" | "daily" | "radar" } = {},
+  extra: { market?: Record<string, unknown> | null; trendKeyword?: string; origin?: "you" | "daily" | "radar"; format?: ProductFormat } = {},
 ): Promise<ProductRow> {
   const now = nowIso();
   const clean = idea.trim().replace(/\s+/g, " ");
+  const demo = !realAi && settings.demoMode;
   const product: ProductRow = {
     id: newId("p_"),
     title: clean,
@@ -116,9 +118,11 @@ export async function suggestIdea(
       suggestion: { idea: clean, notes: notes?.trim() || undefined, origin: extra.origin ?? "you" },
       ...(extra.market ? { market: extra.market } : {}),
       ...(extra.trendKeyword ? { trendKeyword: extra.trendKeyword } : {}),
+      // 🎨 ART / 📊 EXCEL / 📄 PDF: what you picked, or a guess from the idea. Demo products are always art.
+      format: demo ? "art" : (extra.format ?? guessFormat(clean)),
     },
     // With real AI your idea is a real product. Without it, in demo mode, it's simulated.
-    demo: !realAi && settings.demoMode,
+    demo,
     createdAt: now,
     updatedAt: now,
   };
@@ -141,6 +145,7 @@ export async function listSuggestions(db: DB, demoMode: boolean) {
     const d = p.data as { suggestion: { idea: string; notes?: string; origin?: string }; report?: { verdict: string; overall: number }; dropped?: boolean };
     return {
       productId: p.id,
+      format: formatOf(p),
       idea: d.suggestion.idea,
       notes: d.suggestion.notes ?? null,
       origin: d.suggestion.origin ?? "you",
@@ -412,7 +417,7 @@ async function applyResult(db: DB, t: TaskRow, product: ProductRow, res: StepRes
 /** Create the next step's task and send the parcel on its way. */
 async function handOff(db: DB, t: TaskRow, product: ProductRow, now: Date, kindOverride?: string, input?: Record<string, unknown>) {
   const step = STEP_BY_KIND[t.kind];
-  const nextKind = kindOverride ?? step.next;
+  const nextKind = kindOverride ?? (step.nextFor ? step.nextFor(product) : step.next);
   if (!nextKind) {
     await db.update(products).set({ stage: "live", updatedAt: nowIso(now) }).where(eq(products.id, product.id));
     return;

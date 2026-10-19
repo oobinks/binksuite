@@ -7,7 +7,7 @@ import { kvGet } from "../lib/store";
 import { vaultSecret } from "../lib/vault";
 import { etsyClient } from "../providers/etsy";
 import { isAiLimit } from "../providers/ai";
-import { liveOnly, makeDailyIdeas, marketOf, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
+import { liveOnly, makeDailyIdeas, marketOf, nicheFormat, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
 import { priceWatchTick } from "../engine/priceWatch";
 import { listSuggestions, suggestIdea } from "../engine/queue";
 
@@ -38,7 +38,7 @@ export const radarRoutes = newApp()
       error,
       watching: watched?.n ?? 0,
       scannedLive: scanned?.n ?? 0,
-      niches,
+      niches: niches.map((n) => ({ ...n, format: nicheFormat(n.keyword, n.category) })),
       daily: daily
         ? { ...daily, items: daily.items.map((i) => ({ ...i, stage: stages.get(i.productId)?.stage ?? "research", verdict: stages.get(i.productId)?.verdict ?? null, overall: stages.get(i.productId)?.overall ?? null })) }
         : null,
@@ -85,6 +85,7 @@ export const radarRoutes = newApp()
       market: n.source === "etsy" ? marketOf(n) : null,
       trendKeyword: n.keyword,
       origin: "radar",
+      format: nicheFormat(n.keyword, n.category),
     });
     await db.update(trendNiches).set({ lastSuggested: new Date().toISOString() }).where(eq(trendNiches.keyword, n.keyword));
     return c.json({ ok: true, productId: p.id });

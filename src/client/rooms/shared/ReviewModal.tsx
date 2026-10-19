@@ -7,6 +7,7 @@ import { ROOM_BY_ID } from "../../../shared/registry";
 import type { TaskView } from "../../../shared/api";
 import type { Settings } from "../../../shared/settings";
 import { KIND_REVIEWS, REVIEWS } from "./reviews";
+import { FormatBadge } from "../../components/FormatBadge";
 
 export function ReviewModal({ task, settings, onClose }: { task: TaskView | null; settings: Settings; onClose: () => void }) {
   return (
@@ -43,6 +44,11 @@ function ReviewInner({ task, settings, onClose }: { task: TaskView; settings: Se
   return (
     <div className="space-y-4">
       {task.demo && <p className="chip bg-honey/25 text-amber-800 dark:text-amber-200">🎮 Demo product: pretend output. Your own ideas get real AI.</p>}
+      {task.productId && (
+        <div className="flex items-center gap-2 text-xs text-cocoa dark:text-stone-400">
+          <FormatBadge format={task.productFormat} /> {task.productTitle}
+        </div>
+      )}
       <Body task={task} settings={settings} setReady={setReady} setData={setData} />
       <div>
         <label className="label" htmlFor="review-note">

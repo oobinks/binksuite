@@ -1,3 +1,4 @@
+import type { ProductFormat } from "./format";
 // Shapes returned by the API, shared with the React app.
 import type { AgentId, RoomId } from "./registry";
 import type { Settings } from "./settings";
@@ -70,6 +71,8 @@ export interface TaskView {
   id: string;
   productId: string | null;
   productTitle: string;
+  /** 🎨 art, 📊 excel or 📄 pdf. */
+  productFormat: ProductFormat;
   room: RoomId;
   agent: AgentId | null;
   kind: string;

@@ -10,6 +10,8 @@ import { etsySearchUrl } from "../../../shared/pricing";
 import { undercutPrice } from "../../../shared/market";
 import { minimumPriceFor } from "../../../shared/fees";
 import type { Settings } from "../../../shared/settings";
+import type { ProductFormat } from "../../../shared/format";
+import { FormatBadge } from "../../components/FormatBadge";
 
 interface Niche {
   keyword: string;
@@ -25,6 +27,7 @@ interface Niche {
   score: number;
   note: string | null;
   lastSuggested: string | null;
+  format: ProductFormat;
 }
 
 interface RadarResp {
@@ -34,7 +37,7 @@ interface RadarResp {
   watching: number;
   scannedLive: number;
   niches: Niche[];
-  daily: { date: string; at: string; items: { productId: string; keyword: string; idea: string; angle: string; stage: string; verdict: string | null; overall: number | null }[] } | null;
+  daily: { date: string; at: string; items: { productId: string; keyword: string; idea: string; angle: string; format?: ProductFormat; stage: string; verdict: string | null; overall: number | null }[] } | null;
   settings: Settings["radar"];
 }
 
@@ -99,7 +102,7 @@ export function TrendRadar({ settings }: { settings: Settings }) {
               <li key={i.productId} className="flex items-start gap-2 rounded-xl bg-white p-2 text-sm dark:bg-night-3">
                 <span className="text-lg">{i.verdict ? VERDICT[i.verdict] : "🔎"}</span>
                 <span className="min-w-0 flex-1">
-                  <b>{i.idea}</b>
+                  <FormatBadge format={i.format ?? "art"} /> <b>{i.idea}</b>
                   <span className="block text-xs text-cocoa dark:text-stone-400">
                     📡 {i.keyword} · {i.angle}
                   </span>
@@ -142,7 +145,8 @@ export function TrendRadar({ settings }: { settings: Settings }) {
                   <td className="px-1 py-1.5">
                     <a href={etsySearchUrl(n.keyword)} target="_blank" rel="noreferrer" className="font-bold hover:underline">
                       {n.keyword}
-                    </a>
+                    </a>{" "}
+                    <FormatBadge format={n.format} />
                     <span className="block text-[11px] text-cocoa dark:text-stone-400">
                       {n.source === "ai" ? "🤖 AI estimate" : `🟢 ${n.lastScanned ? timeAgo(n.lastScanned) : ""}`}
                       {n.origin === "you" ? " · yours" : ""}
