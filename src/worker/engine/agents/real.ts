@@ -7,6 +7,7 @@ import type { MarketReport, Verdict } from "./marketResearch";
 import type { PartialResult, ProductRow, RealContext, StepDef, StepResult, TaskRow } from "./types";
 import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../../shared/format";
 import { SHEET_JSON_SCHEMA, SHEET_RULES, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
+import { SCENE_VARIANTS, sceneKey, scenesFor, type MockupView, type SceneDef } from "../../../shared/mockupScenes";
 
 export const IMAGES_PER_PRODUCT = 4;
 export const PRINT_SIZES_REAL = ["A5", "A4", "A3", "US Letter", "8x10"] as const;
@@ -47,6 +48,8 @@ interface ProductData {
   keptImages?: string[];
   listing?: { title: string; tags: string[]; description: string; designedBy: "seller" };
   sheet?: SheetSpec;
+  /** Spreadsheet pictures for mockup screens: the table, the dashboard and a printed page. */
+  screens?: { table?: string; dash?: string; page?: string };
   zipKey?: string;
   files?: string[];
 }
@@ -508,18 +511,60 @@ function acceptSheetFiles(_task: TaskRow, product: ProductRow, data: Record<stri
   const previews = Array.isArray(data?.previews)
     ? (data!.previews as unknown[]).filter((k): k is string => typeof k === "string" && k.startsWith(`products/${product.id}/`)).slice(0, 10)
     : [];
-  return { productData: { zipKey, files, zip: zipKey.split("/").pop()!, keptImages: previews } };
+  const own = (k: unknown) => (typeof k === "string" && k.startsWith(`products/${product.id}/`) ? k : undefined);
+  const raw = (data?.screens ?? {}) as Record<string, unknown>;
+  const screens = { table: own(raw.table), dash: own(raw.dash), page: own(raw.page) };
+  return { productData: { zipKey, files, zip: zipKey.split("/").pop()!, keptImages: previews, screens } };
 }
 
 // ───────────── Stylist: mockups from your kept art ─────────────
 
-async function styleMockups(ctx: RealContext): Promise<StepResult> {
-  const kept = d(ctx.product).keptImages ?? [];
+/** A painted background for this scene: reuse one from the library, or paint a new one (one AI picture). */
+async function sceneBackground(ctx: RealContext, scene: SceneDef): Promise<{ key: string | null; painted: boolean }> {
+  const listed = await ctx.files.list({ prefix: `products/_scenes/${scene.id}-` });
+  const keys = listed.objects.map((o) => o.key).sort();
+  const want = ctx.product.seed % SCENE_VARIANTS;
+  if (keys.length > want) return { key: keys[want], painted: false };
+  try {
+    const b64 = await ctx.ai.image(scene.prompt);
+    const key = sceneKey(scene.id, keys.length);
+    await ctx.files.put(key, b64, { httpMetadata: { contentType: "text/plain" }, customMetadata: { kind: "scene", mime: "image/jpeg" } });
+    return { key, painted: true };
+  } catch {
+    // Out of free AI for today (or a hiccup): use a library picture, or a plain styled backdrop.
+    return { key: keys[0] ?? null, painted: false };
+  }
+}
+
+/** What to show in each scene: your kept art, or the spreadsheet / printable pictures. */
+function sceneContent(data: ProductData, scene: SceneDef, i: number): string | null {
+  const kept = data.keptImages ?? [];
+  const screens = data.screens;
+  if (screens && (screens.table || screens.page)) {
+    if (scene.kind === "paper") return screens.page ?? screens.table ?? null;
+    if (scene.kind === "tablet") return screens.dash ?? screens.page ?? screens.table ?? null;
+    return screens.table ?? screens.page ?? null;
+  }
+  return kept[i % Math.max(1, kept.length)] ?? null;
+}
+
+async function styleMockups(ctx: RealContext): Promise<StepResult | PartialResult> {
+  const data = d(ctx.product);
   const format = formatOf(ctx.product);
-  const scenes = format === "excel" ? ["laptop", "tablet", "printed"] : format === "pdf" ? ["printed", "tablet", "laptop"] : ["frame", "desk", "tablet", "gallery"];
-  const slogan = isSheetFormat(format) ? null : (d(ctx.product).slogan ?? null);
-  const mockups = scenes.map((scene, i) => ({ scene, imageKey: kept[i % Math.max(1, kept.length)] ?? null, seed: ctx.product.seed * 10 + i, slogan }));
-  return { output: { mockups }, productData: { mockups }, log: `Staged ${mockups.length} mockups with your art` };
+  const scenes = scenesFor(format);
+  const slogan = isSheetFormat(format) ? null : (data.slogan ?? null);
+  const done = ((ctx.task.output as { mockups?: MockupView[] } | null)?.mockups ?? []).slice();
+  // Fill scenes in order; stop after painting one new background so each tick stays small.
+  while (done.length < scenes.length) {
+    const i = done.length;
+    const scene = scenes[i];
+    const bg = await sceneBackground(ctx, scene);
+    done.push({ scene: scene.id, seed: ctx.product.seed * 10 + i, bgKey: bg.key, imageKey: sceneContent(data, scene, i), slogan });
+    if (bg.painted && done.length < scenes.length) {
+      return { partial: { mockups: done }, progress: done.length / scenes.length, log: `Painted the ${scene.label.toLowerCase()} scene` };
+    }
+  }
+  return { output: { mockups: done }, productData: { mockups: done }, log: `Staged ${done.length} photo mockups` };
 }
 
 // ───────────── Copywriter: title, tags, description ─────────────
@@ -608,6 +653,6 @@ export const REAL_STEPS: Record<string, Partial<StepDef>> = {
     needsApproval: true,
     onApprove: (t, p, data) => acceptSheetFiles(t, p, data),
   },
-  mockups: { realSeconds: 1, real: styleMockups },
+  mockups: { realSeconds: 25, real: styleMockups },
   copy: { realSeconds: 20, real: writeListing },
 };

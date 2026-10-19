@@ -2,6 +2,8 @@
 import type { ReviewDef } from "../shared/types";
 import { CopyButton } from "../shared/CopyButton";
 import { Mockup } from "../../components/DemoArt";
+import { PhotoMockup } from "../../components/PhotoMockup";
+import type { MockupView } from "../../../shared/mockupScenes";
 import { formatGBP } from "../../lib/format";
 import { downloadImage, fileUrl } from "../../lib/files";
 import { ArtImage } from "../../components/ArtImage";
@@ -13,7 +15,7 @@ interface Pack {
   zip?: string;
   zipKey?: string;
   images?: string[];
-  mockups?: { scene: string; seed: number; imageKey?: string | null; slogan?: string | null }[];
+  mockups?: MockupView[];
 }
 
 export const launchReview: ReviewDef = {
@@ -67,9 +69,13 @@ export const launchReview: ReviewDef = {
           <div>
             <div className="label">Listing photos</div>
             <div className="grid grid-cols-2 gap-2">
-              {p.mockups.map((m) => (
-                <Mockup key={m.scene} scene={m.scene} seed={m.seed} imageKey={m.imageKey} slogan={m.slogan} />
-              ))}
+              {p.mockups.map((m, i) =>
+                "bgKey" in m ? (
+                  <PhotoMockup key={m.scene} view={m} save={`listing-photo-${i + 1}.jpg`} />
+                ) : (
+                  <Mockup key={m.scene} scene={m.scene} seed={m.seed} imageKey={m.imageKey} slogan={m.slogan} />
+                ),
+              )}
             </div>
           </div>
         )}
