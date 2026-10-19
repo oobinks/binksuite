@@ -17,7 +17,7 @@ interface Out {
 }
 
 export const sheetReview: ReviewDef = {
-  approveLabel: "👍 Files look good → Mockups",
+  approveLabel: "👍 Files look good → Listing",
   rejectLabel: "🔁 Redesign (say what to change in the note)",
   Body: ({ task, setReady, setData }) => {
     const o = task.output as unknown as Out;
@@ -87,7 +87,7 @@ export const sheetReview: ReviewDef = {
         {pack ? (
           <div className="space-y-2 rounded-xl bg-emerald-50 p-3 text-sm dark:bg-emerald-900/25">
             <div>
-              ✅ Built {pack.files.length} files ({(pack.bytes / 1024).toFixed(0)} KB) and saved them. Approve to send the product to Mockups.
+              ✅ Built {pack.files.length} files ({(pack.bytes / 1024).toFixed(0)} KB) and saved them. Approve to send it to the Listing Office. These are your listing photos.
             </div>
             <ul className="text-xs">
               {pack.files.map((f) => (

@@ -94,18 +94,13 @@ describe("spreadsheet products", () => {
       files: ["tracker.xlsx", "tracker-printable-A4.pdf"],
       previews: [`products/${p.id}/p1.jpg`, `products/${p.id}/p2.jpg`, "products/someone-else/x.jpg"],
     });
-    // (No screens sent here, so the mockups fall back to the listing photos.)
+    // The build's photo set is the listing photos (yours only).
     expect((await dataOf(p.id)).keptImages).toEqual([`products/${p.id}/p1.jpg`, `products/${p.id}/p2.jpg`]);
 
-    // Mockups use the preview pictures on a laptop; the listing talks about Excel.
-    await runUntil(db, settings, ai, async () => (await taskOf(p.id, "mockups"))?.state === "needs_approval");
-    const mock = JSON.parse((await taskOf(p.id, "mockups")).output).mockups;
-    expect(mock.map((m: any) => m.scene)).toEqual(["desk", "flatlay", "table"]);
-    expect(mock[0]).toMatchObject({ imageKey: `products/${p.id}/p1.jpg`, slogan: null });
-    expect(mock[0].bgKey).toMatch(/^products\/_scenes\/desk-1-/); // painted by the AI and kept in the scene library
-    await approveTask(db, (await taskOf(p.id, "mockups")).id, settings);
+    // No room mockups for spreadsheets: straight to the Copywriter, and the listing talks about Excel.
     const searches: string[] = [];
     await runUntil(db, settings, ai, async () => (await taskOf(p.id, "price"))?.state === "needs_approval", 30, fakeEtsy(searches));
+    expect(await taskOf(p.id, "mockups")).toBeNull();
     // Copywriter read what buyers search first (one Etsy search), then wrote for it.
     expect(searches).toHaveLength(1);
     expect(searches[0]).toMatch(/spreadsheet$/);
