@@ -6,7 +6,7 @@ import { blockedTermsIn, ETSY_LIMITS, hasAiDisclosure } from "../../../shared/co
 import type { MarketReport, Verdict } from "./marketResearch";
 import type { PartialResult, ProductRow, RealContext, StepDef, StepResult, TaskRow } from "./types";
 import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../../shared/format";
-import { SHEET_JSON_SCHEMA, SHEET_RULES, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
+import { dataSheets, hasDashboard, normaliseSpec, SHEET_JSON_SCHEMA, SHEET_RULES, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
 import { SCENE_VARIANTS, sceneKey, scenesFor, type MockupView, type SceneDef } from "../../../shared/mockupScenes";
 
 export const IMAGES_PER_PRODUCT = 4;
@@ -620,8 +620,17 @@ async function writeListing(ctx: RealContext): Promise<StepResult> {
   const keywords = [...(data.report?.keywords ?? []), ...cleanKeywords(ctx.product.niche.split(/\s+/))];
   const format = formatOf(ctx.product);
   const sheet = data.sheet;
-  const sheetLine = sheet
-    ? `Tabs: ${["Summary", ...sheet.tabs.map((t) => `${t.name} (${t.columns.map((c) => c.header).join(", ")})`)].join("; ")}.\nSummary shows: ${sheet.summary.map((x) => x.label).join(", ") || "totals"}.\n`
+  const sh = sheet ? normaliseSpec(sheet) : null;
+  const sheetLine = sh
+    ? `${dataSheets(sh).length + 1 + (hasDashboard(sh) ? 1 : 0) + (sh.lists.length ? 1 : 0)} tabs in total.\nTabs: ${[
+        hasDashboard(sh) ? "Dashboard" : null,
+        sh.lists.length ? `Settings (editable ${sh.lists.map((l) => l.name).join(", ")})` : null,
+        ...sh.tabs.map((t) => `${t.name}${t.repeat === "months" ? " (12 monthly tabs, Jan to Dec)" : ""} (${t.columns.map((c) => c.header).join(", ")})`),
+      ]
+        .filter(Boolean)
+        .join("; ")}.\nDashboard shows: ${[...sh.summary.map((x) => x.label), ...sh.goals.map((g) => `${g.label} progress bar`)].join(", ") || "totals"}.\n${
+        sh.breakdowns.length + sh.trends.length ? `Charts: ${[...sh.breakdowns.map((b) => `${b.title} (${b.chart})`), ...sh.trends.map((t) => `${t.title} (${t.chart})`)].join(", ")}.\n` : ""
+      }`
     : "";
   const r = await ctx.ai.json({
     system: `${SHOP_CONTEXT} You are Copywriter. Tone of voice: ${ctx.settings.toneOfVoice}`,

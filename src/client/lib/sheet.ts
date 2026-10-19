@@ -10,8 +10,20 @@ import JSZip from "jszip";
 import { fileUrl } from "./files";
 import { loadSloganFont } from "./print";
 import type { ProductFormat } from "../../shared/format";
+import { addCharts, type ChartSpec } from "./xlsxCharts";
 import {
+  normaliseSpec,
   columnFormula,
+  columnRanges,
+  dashboardLayout,
+  dataSheets,
+  hasDashboard,
+  listPlace,
+  LIST_HEADER_ROW,
+  MONTHS,
+  monthExampleRows,
+  SETTINGS_TAB,
+  summaryCells,
   formatValue,
   guardDivide,
   HOW_TO_TAB,
@@ -51,6 +63,13 @@ function numFmt(type: ColumnType | ValueType, currency: string): string | undefi
 
 // ───────────── Excel ─────────────
 
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** Chart colours: the product's accent first, then a warm, distinct palette. */
+export function chartPalette(accent: string) {
+  return [accent, "#e9a96b", "#7c9cf5", "#9cb59a", "#e0607e", "#c7a27c", "#6d5bd0", "#f2b35b", "#4f9da6", "#b5838d", "#8a9a5b", "#d4a5a5"];
+}
+
 export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "BinkSuite";
@@ -62,6 +81,13 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
   const thin = { style: "thin" as const, color: { argb: argb(tint(accent, 0.6)) } };
   const box = { top: thin, left: thin, bottom: thin, right: thin };
   const fill = (hex: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: argb(hex) } });
+  const headerCell = (c: ExcelJS.Cell, text: string) => {
+    c.value = text;
+    c.fill = fill(accent);
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    c.border = box;
+  };
   const titleRow = (ws: ExcelJS.Worksheet, lastCol: number, title: string, subtitle?: string) => {
     ws.mergeCells(1, 1, 1, Math.max(2, lastCol));
     const t = ws.getCell(1, 1);
@@ -75,9 +101,16 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
       s.font = { italic: true, color: { argb: argb("#7a5c4d") } };
     }
   };
+  const charts: ChartSpec[] = [];
+  const palette = chartPalette(accent);
+  let sheetCount = 0;
+  const addSheet = (name: string, opts?: Partial<ExcelJS.AddWorksheetOptions>) => {
+    sheetCount++;
+    return wb.addWorksheet(name, opts);
+  };
 
   // How to use (first, so it's what buyers see when they open the file).
-  const how = wb.addWorksheet(HOW_TO_TAB, { properties: { tabColor: { argb: argb(accent) } } });
+  const how = addSheet(HOW_TO_TAB, { properties: { tabColor: { argb: argb(accent) } } });
   how.getColumn(1).width = 4;
   how.getColumn(2).width = 90;
   titleRow(how, 2, spec.title, spec.subtitle);
@@ -90,10 +123,20 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
     c.alignment = { wrapText: true, vertical: "top" };
   });
   r++;
+  const sheets = dataSheets(spec);
+  const inside = [
+    hasDashboard(spec) ? `${SUMMARY_TAB}: your totals${spec.breakdowns.length + spec.trends.length ? " and charts" : ""}, updated as you type.` : null,
+    spec.lists.length ? `${SETTINGS_TAB}: edit your ${spec.lists.map((l) => l.name.toLowerCase()).join(" and ")}; the dropdowns and dashboard follow.` : null,
+    ...spec.tabs.map((t) => (t.repeat === "months" ? `Jan to Dec: a ${t.name.toLowerCase()} tab for every month.` : `${t.name}: ${t.columns.map((c) => c.header).join(", ")}.`)),
+  ].filter(Boolean) as string[];
+  how.getCell(r++, 2).value = `What's inside (${sheets.length + 1 + (hasDashboard(spec) ? 1 : 0) + (spec.lists.length ? 1 : 0)} tabs)`;
+  how.getCell(r - 1, 2).font = { bold: true, size: 13 };
+  for (const line of inside) how.getCell(r++, 2).value = `• ${line}`;
+  r++;
   for (const tip of [
     "White cells are for typing. Shaded cells work themselves out, so there's no need to touch them.",
+    "Example entries show how it works. Overwrite or delete them whenever you're ready.",
     "Works in Microsoft Excel, Google Sheets (File → Import) and Apple Numbers.",
-    "Delete the example rows whenever you're ready. Totals update as you type.",
   ]) {
     const c = how.getCell(r++, 2);
     c.value = `• ${tip}`;
@@ -101,14 +144,18 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
     c.font = { color: { argb: argb("#7a5c4d") } };
   }
 
-  // Summary dashboard: inputs you type once, then the totals.
-  if (spec.inputs.length || spec.summary.length) {
-    const ws = wb.addWorksheet(SUMMARY_TAB, { properties: { tabColor: { argb: argb(accent) } } });
+  // Dashboard: inputs, totals and goals on the left; breakdowns and trends with charts on the right.
+  const layout = dashboardLayout(spec);
+  if (hasDashboard(spec)) {
+    const ws = addSheet(SUMMARY_TAB, { properties: { tabColor: { argb: argb(accent) } }, views: [{ showGridLines: false }] });
+    const dashIndex = sheetCount;
     ws.getColumn(1).width = 3;
-    ws.getColumn(2).width = 34;
-    ws.getColumn(3).width = 18;
-    ws.getColumn(4).width = 26;
-    titleRow(ws, 4, spec.title, spec.subtitle);
+    ws.getColumn(2).width = 30;
+    ws.getColumn(3).width = 16;
+    ws.getColumn(4).width = 4;
+    ws.getColumn(5).width = 22;
+    for (let c = 6; c <= 9; c++) ws.getColumn(c).width = 14;
+    titleRow(ws, 12, spec.title, spec.subtitle);
     let row = SUMMARY_FIRST_ROW;
     for (const input of spec.inputs) {
       ws.getCell(row, 2).value = input.label;
@@ -116,9 +163,8 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
       const c = ws.getCell(row, 3);
       c.value = input.example;
       c.numFmt = numFmt(input.type, spec.currency) ?? "General";
-      c.border = { top: { style: "medium", color: { argb: argb(accent) } }, left: { style: "medium", color: { argb: argb(accent) } }, bottom: { style: "medium", color: { argb: argb(accent) } }, right: { style: "medium", color: { argb: argb(accent) } } };
-      ws.getCell(row, 4).value = "← type yours here";
-      ws.getCell(row, 4).font = { italic: true, color: { argb: argb("#7a5c4d") } };
+      const edge = { style: "medium" as const, color: { argb: argb(accent) } };
+      c.border = { top: edge, left: edge, bottom: edge, right: edge };
       row++;
     }
     if (spec.inputs.length) row++;
@@ -134,50 +180,175 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
       c.border = box;
       row++;
     });
+    // Goals: % of target, with a progress bar.
+    const cells = summaryCells(spec);
+    for (const g of layout.goals) {
+      ws.getCell(g.row, 2).value = g.label;
+      ws.getCell(g.row, 2).font = { bold: true };
+      const cur = cells.items.get(g.current.toLowerCase());
+      const tgt = cells.inputs.get(g.target.toLowerCase());
+      const c = ws.getCell(g.row, 3);
+      c.value = cur && tgt ? { formula: `IFERROR(MIN(100,${cur}/${tgt}*100),0)` } : 0;
+      c.numFmt = '0"%"';
+      c.font = { bold: true };
+      c.border = box;
+      ws.addConditionalFormatting({
+        ref: `C${g.row}`,
+        rules: [{ type: "dataBar", priority: 3, minLength: 0, maxLength: 100, cfvo: [{ type: "num", value: 0 }, { type: "num", value: 100 }], color: { argb: argb(accent) } } as unknown as ExcelJS.ConditionalFormattingRule],
+      });
+    }
+    // Breakdowns and trends.
+    for (const b of layout.blocks) {
+      const title = ws.getCell(b.titleRow, 5);
+      if (b.kind === "breakdown") {
+        const bd = spec.breakdowns[b.index];
+        const place = listPlace(spec, bd.list)!;
+        const sumCol = spec.tabs.find((t) => t.name === bd.tab)!.columns.find((c) => c.header === bd.sum)!;
+        title.value = bd.title;
+        title.font = { bold: true, size: 13, color: { argb: argb(accent) } };
+        headerCell(ws.getCell(b.headerRow, 5), bd.list);
+        headerCell(ws.getCell(b.headerRow, 6), bd.sum);
+        const by = columnRanges(spec, bd.tab, bd.by)!;
+        const sums = columnRanges(spec, bd.tab, bd.sum)!;
+        for (let k = 0; k < b.rows; k++) {
+          const rr = b.firstRow + k;
+          const src = `'${SETTINGS_TAB}'!$${place.col}$${place.first + k}`;
+          const label = ws.getCell(rr, 5);
+          label.value = { formula: `IF(${src}="","",${src})` };
+          label.border = box;
+          const v = ws.getCell(rr, 6);
+          v.value = { formula: `IF(E${rr}="","",${by.map((rg, i) => `SUMIF(${rg},E${rr},${sums[i]})`).join("+")})` };
+          v.numFmt = numFmt(sumCol.type, spec.currency) ?? "General";
+          v.border = box;
+          if (k % 2) [label, v].forEach((x) => (x.fill = fill(band)));
+        }
+        const total = b.firstRow + b.rows;
+        ws.getCell(total, 5).value = "Total";
+        ws.getCell(total, 6).value = { formula: `SUM(F${b.firstRow}:F${total - 1})` };
+        ws.getCell(total, 6).numFmt = numFmt(sumCol.type, spec.currency) ?? "General";
+        [5, 6].forEach((c) => {
+          ws.getCell(total, c).font = { bold: true };
+          ws.getCell(total, c).fill = fill(soft);
+        });
+        if (b.chart && bd.chart !== "none")
+          charts.push({
+            sheetIndex: dashIndex,
+            kind: bd.chart === "line" ? "line" : bd.chart,
+            title: bd.title,
+            categories: `'${SUMMARY_TAB}'!$E$${b.firstRow}:$E$${b.firstRow + place.list.items.length - 1}`,
+            series: [{ name: bd.sum, ref: `'${SUMMARY_TAB}'!$F$${b.firstRow}:$F$${b.firstRow + place.list.items.length - 1}`, colour: accent }],
+            pointColours: place.list.items.map((_, i) => palette[i % palette.length]),
+            numberFormat: numFmt(sumCol.type, spec.currency) ?? "General",
+            from: { col: b.chart.fromCol, row: b.chart.fromRow },
+            to: { col: b.chart.toCol, row: b.chart.toRow },
+          });
+      } else {
+        const tr = spec.trends[b.index];
+        const tab = spec.tabs.find((t) => t.name === tr.tab)!;
+        title.value = tr.title;
+        title.font = { bold: true, size: 13, color: { argb: argb(accent) } };
+        headerCell(ws.getCell(b.headerRow, 5), "Month");
+        tr.series.forEach((col, j) => headerCell(ws.getCell(b.headerRow, 6 + j), col));
+        const ranges = tr.series.map((col) => columnRanges(spec, tr.tab, col)!);
+        const type = tab.columns.find((c) => c.header === tr.series[0])!.type;
+        for (let m = 0; m < 12; m++) {
+          const rr = b.firstRow + m;
+          ws.getCell(rr, 5).value = MONTHS[m];
+          ws.getCell(rr, 5).border = box;
+          tr.series.forEach((_, j) => {
+            const c = ws.getCell(rr, 6 + j);
+            c.value = { formula: `SUM(${ranges[j][m]})` };
+            c.numFmt = numFmt(type, spec.currency) ?? "General";
+            c.border = box;
+            if (m % 2) c.fill = fill(band);
+          });
+          if (m % 2) ws.getCell(rr, 5).fill = fill(band);
+        }
+        const total = b.firstRow + 12;
+        ws.getCell(total, 5).value = "Year";
+        ws.getCell(total, 5).font = { bold: true };
+        tr.series.forEach((_, j) => {
+          const c = ws.getCell(total, 6 + j);
+          const L = colLetter(5 + j);
+          c.value = { formula: `SUM(${L}${b.firstRow}:${L}${total - 1})` };
+          c.numFmt = numFmt(type, spec.currency) ?? "General";
+          c.font = { bold: true };
+          c.fill = fill(soft);
+        });
+        if (b.chart && tr.chart !== "none")
+          charts.push({
+            sheetIndex: dashIndex,
+            kind: tr.chart === "doughnut" ? "bar" : tr.chart,
+            title: tr.title,
+            categories: `'${SUMMARY_TAB}'!$E$${b.firstRow}:$E$${b.firstRow + 11}`,
+            series: tr.series.map((col, j) => ({ name: col, ref: `'${SUMMARY_TAB}'!$${colLetter(5 + j)}$${b.firstRow}:$${colLetter(5 + j)}$${b.firstRow + 11}`, colour: palette[j] })),
+            numberFormat: numFmt(type, spec.currency) ?? "General",
+            from: { col: b.chart.fromCol, row: b.chart.fromRow },
+            to: { col: b.chart.toCol, row: b.chart.toRow },
+          });
+      }
+    }
   }
 
-  // The tabs people fill in.
-  for (const tab of spec.tabs) {
-    const ws = wb.addWorksheet(tab.name, { views: [{ state: "frozen", ySplit: TAB_HEADER_ROW }] });
+  // Settings: the lists buyers can edit.
+  if (spec.lists.length) {
+    const ws = addSheet(SETTINGS_TAB, { properties: { tabColor: { argb: argb(tint(accent, 0.4)) } } });
+    titleRow(ws, spec.lists.length * 2, `${SETTINGS_TAB}`, "Rename, add or remove items. Dropdowns and the dashboard update to match.");
+    spec.lists.forEach((list, i) => {
+      const place = listPlace(spec, list.name)!;
+      const col = 2 + i * 2;
+      ws.getColumn(col).width = 24;
+      ws.getColumn(col - 1).width = i === 0 ? 3 : 4;
+      headerCell(ws.getCell(LIST_HEADER_ROW, col), list.name);
+      for (let k = 0; k < place.slots; k++) {
+        const c = ws.getCell(place.first + k, col);
+        c.value = list.items[k] ?? null;
+        c.border = box;
+        if (k >= list.items.length) c.fill = fill(band);
+      }
+    });
+  }
+
+  // The tabs people fill in (a monthly tab becomes Jan … Dec).
+  for (const { name, tab, month } of sheets) {
+    const ws = addSheet(name, { views: [{ state: "frozen", ySplit: TAB_HEADER_ROW }], properties: { tabColor: month !== null ? { argb: argb(month % 2 ? tint(accent, 0.45) : tint(accent, 0.25)) } : undefined } });
     const n = tab.columns.length;
-    titleRow(ws, n, tab.name === spec.tabs[0].name ? spec.title : tab.name, tab.name === spec.tabs[0].name ? spec.subtitle : undefined);
+    const first = sheets[0].name === name;
+    titleRow(ws, n, month !== null ? `${MONTH_NAMES[month]}: ${tab.name}` : first ? spec.title : tab.name, first && month === null ? spec.subtitle : month !== null ? spec.title : undefined);
     const header = ws.getRow(TAB_HEADER_ROW);
     header.height = 24;
     tab.columns.forEach((col, i) => {
       ws.getColumn(i + 1).width = col.width;
-      const h = header.getCell(i + 1);
-      h.value = col.header;
-      h.fill = fill(accent);
-      h.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      h.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      h.border = box;
+      headerCell(header.getCell(i + 1), col.header);
     });
+    const examples = monthExampleRows(tab, month);
     const rows = tabRowCount(tab);
     for (let k = 0; k < rows; k++) {
       const rowNo = TAB_FIRST_ROW + k;
-      const example = tab.exampleRows[k];
+      const example = examples[k];
       tab.columns.forEach((col, i) => {
         const c = ws.getCell(rowNo, i + 1);
         if (col.formula) {
           const f = columnFormula(col.formula, tab, rowNo, spec);
           // Keep empty rows clean: only calculate once the row has something in it.
-          const first = colLetter(tab.columns.findIndex((x) => !x.formula));
-          c.value = f ? { formula: `IF(${first}${rowNo}="","",${guardDivide(f)})` } : null;
+          const firstTyped = colLetter(tab.columns.findIndex((x) => !x.formula));
+          c.value = f ? { formula: `IF(${firstTyped}${rowNo}="","",${guardDivide(f)})` } : null;
           c.fill = fill(soft);
         } else {
-          if (example && example[i] !== null && example[i] !== undefined) c.value = example[i];
+          if (example && example[i] !== null && example[i] !== undefined && example[i] !== "") c.value = example[i];
           if (k % 2 === 1) c.fill = fill(band);
         }
         const fmt = numFmt(col.type, spec.currency);
         if (fmt) c.numFmt = fmt;
         c.border = box;
         if (col.type === "checkbox" || col.type === "choice") {
-          c.dataValidation = { type: "list", allowBlank: true, formulae: [`"${(col.options ?? ["Yes", "No"]).join(",")}"`] };
+          const place = col.optionsFrom ? listPlace(spec, col.optionsFrom) : null;
+          c.dataValidation = { type: "list", allowBlank: true, formulae: [place ? place.range : `"${(col.options ?? ["Yes", "No"]).join(",")}"`] };
           c.alignment = { horizontal: "center" };
         }
       });
     }
-    // Colour rules: ticked rows go green, negative money goes red, percentages get a bar.
+    // Colour rules: ticked rows go green, percentages get a bar.
     const last = TAB_FIRST_ROW + rows - 1;
     tab.columns.forEach((col, i) => {
       const L = colLetter(i);
@@ -190,7 +361,6 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
           rules: [{ type: "dataBar", priority: 2, minLength: 0, maxLength: 100, cfvo: [{ type: "num", value: 0 }, { type: "num", value: 100 }], color: { argb: argb(accent) } } as unknown as ExcelJS.ConditionalFormattingRule],
         });
     });
-    // Totals row.
     if (tab.totals && tab.columns.some((c) => c.type === "money" || c.type === "number")) {
       const tr = last + 1;
       ws.getCell(tr, 1).value = "Total";
@@ -207,7 +377,7 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
     }
     ws.pageSetup = { orientation: n > 5 ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
   }
-  return (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  return addCharts((await wb.xlsx.writeBuffer()) as ArrayBuffer, charts);
 }
 
 // ───────────── Printable PDF ─────────────
@@ -282,11 +452,12 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
   }
 
   // One page per tab: a ruled table to fill in by hand.
-  for (const tab of spec.tabs) {
+  for (const { tab, month } of dataSheets(spec)) {
     const landscape = tab.columns.length > 5;
     const [w, h] = landscape ? [size.h, size.w] : [size.w, size.h];
     const page = pdf.addPage([w, h]);
-    let y = heading(page, tab.name === spec.tabs[0].name ? spec.title : tab.name, tab.name === spec.tabs[0].name ? spec.subtitle : undefined);
+    const first = tab.name === spec.tabs[0].name && (month === null || month === 0);
+    let y = heading(page, month !== null ? `${MONTH_NAMES[month]}: ${tab.name}` : first ? spec.title : tab.name, first ? spec.subtitle : month !== null ? spec.title : undefined);
     const total = tab.columns.reduce((a, c) => a + c.width, 0);
     const widths = tab.columns.map((c) => ((w - M * 2) * c.width) / total);
     const rowH = 22;
@@ -512,17 +683,68 @@ function bubble(ctx: CanvasRenderingContext2D, text: string, x: number, y: numbe
   return { w, h };
 }
 
-/** The bar chart on the dashboard: first money column by the first text column (the example rows). */
-function chartData(spec: SheetSpec, rows: (string | number | null)[][]) {
+type Values = ReturnType<typeof previewValues>;
+type ChartPic = { kind: "doughnut" | "bars"; title: string; type: ColumnType; items: { label: string; value: number }[] };
+
+/** The chart on the dashboard picture: the first breakdown (doughnut), else the first trend, else the first tab's examples. */
+function chartData(spec: SheetSpec, values: Values): ChartPic | null {
+  const typeOf = (tab: string, col: string) => spec.tabs.find((t) => t.name === tab)?.columns.find((c) => c.header === col)?.type ?? "money";
+  const b = values.breakdowns[0];
+  const slices = b?.items.filter((i) => i.value > 0) ?? [];
+  if (b && slices.length >= 2) return { kind: "doughnut", title: b.title, type: typeOf(b.tab, b.sum), items: slices };
+  const t = values.trends[0];
+  if (t) return { kind: "bars", title: `${t.title} (${t.series[0]})`, type: typeOf(t.tab, t.series[0]), items: t.months.map((m) => ({ label: m.month, value: m.values[0] })) };
+  const rows = values.tabs[0].rows;
   const tab = spec.tabs[0];
   const label = tab.columns.findIndex((c) => c.type === "text");
   const money = tab.columns.findIndex((c) => (c.type === "money" || c.type === "number") && rows.some((r) => typeof r[tab.columns.indexOf(c)] === "number"));
   if (label < 0 || money < 0) return null;
   const items = rows.filter((r) => r[label] && typeof r[money] === "number").map((r) => ({ label: String(r[label]), value: Number(r[money]) }));
-  return items.length >= 2 ? { title: tab.columns[money].header, type: tab.columns[money].type, items: items.slice(0, 6) } : null;
+  return items.length >= 2 ? { kind: "bars", title: tab.columns[money].header, type: tab.columns[money].type, items: items.slice(0, 6) } : null;
 }
 
-function drawBars(ctx: CanvasRenderingContext2D, spec: SheetSpec, data: NonNullable<ReturnType<typeof chartData>>, x: number, y: number, w: number, h: number) {
+/** A doughnut with a legend, like the Excel chart. */
+function drawDoughnut(ctx: CanvasRenderingContext2D, spec: SheetSpec, data: ChartPic, x: number, y: number, w: number, h: number) {
+  const total = data.items.reduce((a, i) => a + i.value, 0) || 1;
+  const colours = chartPalette(spec.accent);
+  const r = Math.min(w * 0.3, h * 0.45);
+  const cx = x + r + 20;
+  const cy = y + h / 2;
+  let a = -Math.PI / 2;
+  data.items.forEach((item, i) => {
+    const sweep = (item.value / total) * Math.PI * 2;
+    ctx.fillStyle = colours[i % colours.length];
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, a, a + sweep);
+    ctx.closePath();
+    ctx.fill();
+    a += sweep;
+  });
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.58, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = INK;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `900 ${Math.round(r * 0.22)}px Nunito, sans-serif`;
+  ctx.fillText(formatValue(total, data.type, spec.currency), cx, cy);
+  const lx = cx + r + 50;
+  const rowH = Math.min(52, (h - 20) / data.items.length);
+  data.items.slice(0, 12).forEach((item, i) => {
+    const ly = y + 20 + i * rowH;
+    ctx.fillStyle = colours[i % colours.length];
+    roundRect(ctx, lx, ly, 26, 26, 6);
+    ctx.fill();
+    ctx.fillStyle = INK;
+    ctx.textAlign = "left";
+    ctx.font = `700 ${Math.round(rowH * 0.55)}px Nunito, sans-serif`;
+    ctx.fillText(clip(ctx, `${item.label} · ${Math.round((item.value / total) * 100)}%`, x + w - lx - 40), lx + 40, ly + 14);
+  });
+}
+
+function drawBars(ctx: CanvasRenderingContext2D, spec: SheetSpec, data: ChartPic, x: number, y: number, w: number, h: number) {
   const max = Math.max(...data.items.map((i) => Math.abs(i.value)), 1);
   const rowH = Math.min(110, h / data.items.length);
   const labelW = w * 0.28;
@@ -571,7 +793,7 @@ function drawScreen(spec: SheetSpec, rows: (string | number | null)[][], format:
   ctx.fillStyle = "#f3f3f3";
   ctx.fillRect(0, H - 70, W, 70);
   let tx = 30;
-  const names = [HOW_TO_TAB, ...(spec.inputs.length || spec.summary.length ? [SUMMARY_TAB] : []), ...spec.tabs.map((t) => t.name)];
+  const names = [HOW_TO_TAB, ...(hasDashboard(spec) ? [SUMMARY_TAB] : []), ...(spec.lists.length ? [SETTINGS_TAB] : []), ...dataSheets(spec).map((d) => d.name)];
   names.forEach((n, i) => {
     ctx.font = "800 26px Nunito, sans-serif";
     const w = ctx.measureText(n).width + 40;
@@ -619,15 +841,17 @@ function drawDashScreen(spec: SheetSpec, values: ReturnType<typeof previewValues
     ctx.font = "900 62px Nunito, sans-serif";
     ctx.fillText(clip(ctx, it.value, 480), x + 40, y + 145);
   });
-  const chart = chartData(spec, values.tabs[0].rows);
+  const chart = chartData(spec, values);
   if (chart) {
     const top = 240 + Math.ceil(items.length / 2) * 210 + 30;
     card(ctx, 50, top, W - 100, H - top - 60, 24);
     ctx.fillStyle = INK;
     ctx.font = "900 40px Nunito, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(chart.title, 90, top + 70);
-    drawBars(ctx, spec, chart, 80, top + 110, W - 160, H - top - 220);
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(clip(ctx, chart.title, W - 180), 90, top + 70);
+    if (chart.kind === "doughnut") drawDoughnut(ctx, spec, chart, 80, top + 100, W - 160, H - top - 200);
+    else drawBars(ctx, spec, chart, 80, top + 110, W - 160, H - top - 220);
   }
   return c;
 }
@@ -786,7 +1010,7 @@ export async function buildPreviews(spec: SheetSpec, format: ProductFormat): Pro
     const notes = [
       spec.inputs.length ? `Type your ${spec.inputs[0].label.toLowerCase()} once` : "Fill in your rows",
       `${spec.summary.length} totals worked out for you`,
-      chartData(spec, rows) ? "See where it all goes" : "Colour-coded as you go",
+      chartData(spec, values) ? "See where it all goes" : "Colour-coded as you go",
       "Works in Excel & Google Sheets",
     ];
     notes.forEach((n, i) => {
@@ -815,7 +1039,7 @@ export async function buildPreviews(spec: SheetSpec, format: ProductFormat): Pro
     const parts = [
       ...(excel ? [{ name: HOW_TO_TAB, note: `${spec.howTo.length} simple steps` }] : []),
       ...(spec.inputs.length || spec.summary.length ? [{ name: excel ? SUMMARY_TAB : "Overview page", note: `${spec.inputs.length + spec.summary.length} boxes` }] : []),
-      ...spec.tabs.map((t) => ({ name: t.name, note: t.columns.map((col) => col.header).slice(0, 4).join(" · ") })),
+      ...spec.tabs.map((t) => ({ name: t.name, note: t.repeat === "months" ? "12 monthly tabs, Jan to Dec" : t.columns.map((col) => col.header).slice(0, 4).join(" · ") })),
       ...(excel ? [{ name: "Printable PDF", note: "A4 + US Letter" }] : [{ name: "Two paper sizes", note: "A4 + US Letter" }]),
     ].slice(0, 6);
     const cols = parts.length > 4 ? 3 : 2;
@@ -907,7 +1131,8 @@ async function upload(productId: string, name: string, body: Blob, type: string)
   return ((await res.json()) as { key: string }).key;
 }
 
-export async function buildSheetPack(productId: string, spec: SheetSpec, format: ProductFormat, onProgress: (step: string, fraction: number) => void): Promise<SheetPack> {
+export async function buildSheetPack(productId: string, raw: SheetSpec, format: ProductFormat, onProgress: (step: string, fraction: number) => void): Promise<SheetPack> {
+  const spec = normaliseSpec(raw);
   const base = slug(spec.title);
   const zip = new JSZip();
   const files: string[] = [];
