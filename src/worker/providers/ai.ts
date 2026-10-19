@@ -24,6 +24,10 @@ export interface JsonRequest<T> {
   /** Plain JSON Schema handed to the model's JSON mode. */
   jsonSchema: Record<string, unknown>;
   maxTokens?: number;
+  /** Claude Code: a stable name for this request (otherwise it's worked out from the prompt). */
+  key?: string;
+  /** Claude Code: a short human label for Claude's to-do list. */
+  label?: string;
 }
 
 export interface AiServices {
@@ -31,6 +35,10 @@ export interface AiServices {
   json<T>(req: JsonRequest<T>): Promise<T>;
   /** Generate one image; returns base64-encoded JPEG. */
   image(prompt: string): Promise<string>;
+  /** Claude Code only: a vector artwork as SVG text. When present, art is drawn instead of painted. */
+  svg?(prompt: string): Promise<string>;
+  /** Claude Code only: the same services, with requests linked to a task. */
+  forTask?(task: { id: string; productId: string | null; title: string }): AiServices;
 }
 
 export interface AiUsage {

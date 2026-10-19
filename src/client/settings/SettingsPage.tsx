@@ -11,6 +11,8 @@ import { ErrorNote, ProgressBar, Section, Toggle } from "../components/ui";
 import { Avatar } from "../agents/Avatar";
 import { BUILD_INFO } from "../lib/buildInfo";
 import type { AiStatus } from "../../shared/api";
+import { useClaude } from "../components/ClaudeBar";
+import { CopyButton } from "../rooms/shared/CopyButton";
 
 export function SettingsPage() {
   const { data: snap } = useSnapshot();
@@ -20,6 +22,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-black">⚙️ Settings</h1>
       <div className="grid gap-4 lg:grid-cols-2">
         <General s={snap.settings} />
+        <ClaudeCode s={snap.settings} />
         <EtsyRadar s={snap.settings} />
         <AiEngine s={snap.settings} />
         <Demo s={snap.settings} />
@@ -388,6 +391,130 @@ function About() {
   );
 }
 
+function ClaudeCode({ s }: { s: Settings }) {
+  const save = useSaved();
+  const qc = useQueryClient();
+  const { data } = useClaude();
+  const [key, setKey] = useState<string | null>(null);
+  const [url, setUrl] = useState("");
+  const [token, setToken] = useState("");
+  const makeKey = useMutation({ mutationFn: () => api.post<{ key: string }>("/claude/key"), onSuccess: (r) => (setKey(r.key), qc.invalidateQueries({ queryKey: ["claude"] })) });
+  const saveRoutine = useMutation({
+    mutationFn: () => api.put("/claude/routine", { url, token }),
+    onSuccess: () => (setUrl(""), setToken(""), qc.invalidateQueries()),
+  });
+  const claude = s.ai.provider === "claude-code";
+  return (
+    <Section
+      title="Claude Code"
+      icon="✨"
+      right={<span className={`chip ${data?.connected ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-honey/25"}`}>{data?.connected ? "🟢 connected" : "🟡 not connected"}</span>}
+    >
+      <p className="text-sm">
+        Let <b>Claude</b> do the thinking on <b>your Claude plan</b>: research, spreadsheet designs, vector artwork and listings. While you're on the site, BinkSuite starts a
+        Claude Code session that works through the jobs and sends the results back here for you to approve.
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="AI engine">
+        {(
+          [
+            ["claude-code", "✨ Claude Code", "Your Claude plan"],
+            ["workers", "☁️ Free Cloudflare AI", "Free, lower quality"],
+          ] as const
+        ).map(([id, label, sub]) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={s.ai.provider === id}
+            onClick={() => save.saveNow({ ai: { provider: id } })}
+            className={`rounded-xl p-2 text-left ring-2 ${s.ai.provider === id ? "bg-violet-100 ring-violet-500 dark:bg-violet-900/40" : "ring-black/10 dark:ring-white/10"}`}
+          >
+            <b className="block">{label}</b>
+            <span className="text-xs text-cocoa dark:text-stone-400">{sub}</span>
+          </button>
+        ))}
+      </div>
+      {claude && (
+        <label className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
+          Start Claude automatically while I'm on the site
+          <Toggle checked={s.ai.claudeAutoStart} onChange={(v) => save.saveNow({ ai: { claudeAutoStart: v } })} label="Start Claude automatically" />
+        </label>
+      )}
+
+      <ol className="mt-4 space-y-3 text-sm">
+        <li>
+          <b>1. Connection key</b> {data?.keySet && <span className="chip">key made</span>}
+          <p className="text-xs text-cocoa dark:text-stone-400">Claude's sessions use this to fetch jobs and send results. Shown once.</p>
+          {key ? (
+            <div className="mt-1 space-y-1 rounded-xl bg-black/5 p-2 text-xs dark:bg-white/5">
+              <div>
+                Add these two <b>environment variables</b> to your Claude Code environment:
+              </div>
+              <code className="block break-all">BINKSUITE_URL={window.location.origin}</code>
+              <code className="block break-all">BINKSUITE_AGENT_KEY={key}</code>
+              <CopyButton text={`BINKSUITE_URL=${window.location.origin}\nBINKSUITE_AGENT_KEY=${key}`} label="Copy both" />
+            </div>
+          ) : (
+            <button className="btn-soft mt-1 !py-1 text-xs" onClick={() => makeKey.mutate()} disabled={makeKey.isPending}>
+              {data?.keySet ? "Make a new key (the old one stops working)" : "Make a connection key"}
+            </button>
+          )}
+        </li>
+        <li>
+          <b>2. Routine link</b> {data?.routine && <span className="chip">token ••••{data.routine.last4}</span>}
+          <p className="text-xs text-cocoa dark:text-stone-400">From your routine's page on claude.ai/code/routines → API trigger.</p>
+          <form
+            className="mt-1 space-y-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveRoutine.mutate();
+            }}
+          >
+            <input className="input font-mono text-xs" placeholder="https://api.anthropic.com/v1/claude_code/routines/…/fire" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Routine API link" />
+            <input className="input font-mono text-xs" type="password" autoComplete="off" placeholder="Routine token (sk-ant-…)" value={token} onChange={(e) => setToken(e.target.value)} aria-label="Routine token" />
+            <button className="btn-primary !py-1 text-xs" disabled={!url || token.length < 20 || saveRoutine.isPending}>
+              Save and switch to Claude
+            </button>
+          </form>
+          <ErrorNote error={saveRoutine.error ?? makeKey.error} />
+        </li>
+      </ol>
+
+      {data && data.jobs.length > 0 && (
+        <div className="mt-4">
+          <div className="label">Claude's to-do list</div>
+          <ul className="space-y-1 text-xs">
+            {data.jobs.map((j) => (
+              <li key={j.id} className="flex items-start gap-2 rounded-lg bg-black/5 p-1.5 dark:bg-white/5">
+                <span>{j.kind === "svg" ? "🖋️" : "🧠"}</span>
+                <span className="min-w-0 flex-1">
+                  <b>{j.title}</b> <span className="opacity-60">· {j.status === "working" ? "Claude's on it" : "waiting"}</span>
+                  {j.error && <span className="block text-amber-700 dark:text-amber-300">↩ sent back: {j.error}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {data?.run && (
+        <p className="mt-2 text-xs text-cocoa dark:text-stone-400">
+          Last session: {timeAgo(data.run.at)}
+          {data.run.finishedAt ? ` · finished, made ${data.run.answered ?? 0}` : data.running ? " · working" : ""}
+          {data.run.error ? ` · ⚠️ ${data.run.error}` : ""}
+          {data.run.sessionUrl && (
+            <>
+              {" "}
+              ·{" "}
+              <a className="underline" href={data.run.sessionUrl} target="_blank" rel="noreferrer">
+                open session
+              </a>
+            </>
+          )}
+        </p>
+      )}
+    </Section>
+  );
+}
+
 function AiEngine({ s }: { s: Settings }) {
   const save = useSaved();
   const { data } = useQuery({ queryKey: ["ai-status"], queryFn: () => api.get<AiStatus>("/ai/status"), refetchInterval: 15_000 });
@@ -395,8 +522,16 @@ function AiEngine({ s }: { s: Settings }) {
     <Section title="AI engine" icon="🤖" right={<span className="chip bg-mint/25">Free</span>}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm">
-          Your agents use <b>Cloudflare Workers AI</b>, which comes free with your Cloudflare account. No keys and no card. Real work happens for ideas you suggest; demo
-          products stay pretend.
+          {s.ai.provider === "claude-code" ? (
+            <>
+              Claude does the thinking now. <b>Cloudflare Workers AI</b> (free) only paints the empty rooms and desks behind your mockups.
+            </>
+          ) : (
+            <>
+              Your agents use <b>Cloudflare Workers AI</b>, which comes free with your Cloudflare account. No keys and no card. Real work happens for ideas you suggest; demo
+              products stay pretend.
+            </>
+          )}
         </p>
         <Toggle checked={s.ai.enabled} onChange={(v) => save.saveNow({ ai: { enabled: v } })} label="Real AI on" />
       </div>

@@ -50,7 +50,10 @@ export function TrendRadar({ settings }: { settings: Settings }) {
   const [newNiche, setNewNiche] = useState("");
   const refresh = () => qc.invalidateQueries();
   const scan = useMutation({ mutationFn: () => api.post<{ scanned: number; error: string | null }>("/radar/scan"), onSuccess: (r) => (toast({ icon: "📡", title: `Scanned ${r.scanned} niches`, body: r.error }), refresh()) });
-  const daily = useMutation({ mutationFn: () => api.post<{ items: unknown[] }>("/radar/daily"), onSuccess: (r) => (toast({ icon: "🎯", title: `${r.items.length} new ideas sent to Scout` }), refresh()) });
+  const daily = useMutation({
+    mutationFn: () => api.post<{ items: unknown[]; pending?: boolean }>("/radar/daily"),
+    onSuccess: (r) => (toast(r.pending ? { icon: "✨", title: "Added to Claude's to-do list", body: "Today's ideas arrive when Claude's session finishes." } : { icon: "🎯", title: `${r.items.length} new ideas sent to Scout` }), refresh()),
+  });
   const research = useMutation({ mutationFn: (keyword: string) => api.post("/radar/research", { keyword }), onSuccess: () => (toast({ icon: "🔬", title: "Sent to Scout" }), refresh()) });
   const watch = useMutation({ mutationFn: () => api.post("/radar/niches", { keyword: newNiche }), onSuccess: () => (setNewNiche(""), refresh()) });
 

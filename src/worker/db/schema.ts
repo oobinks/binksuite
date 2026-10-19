@@ -206,3 +206,34 @@ export const trendNiches = sqliteTable(
   },
   (t) => [index("trend_score_idx").on(t.score)],
 );
+
+/**
+ * ✨ Claude's to-do list. When the AI engine is "Claude Code", every AI request
+ * (research, a spreadsheet design, a vector artwork, listing copy…) waits here
+ * until a Claude Code session on your subscription picks it up and answers.
+ */
+export const claudeJobs = sqliteTable(
+  "claude_jobs",
+  {
+    /** Stable key: the same request always maps to the same job. */
+    id: text("id").primaryKey(),
+    taskId: text("task_id"),
+    productId: text("product_id"),
+    /** json = an answer matching a schema; svg = a vector artwork */
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    system: text("system").notNull(),
+    prompt: text("prompt").notNull(),
+    jsonSchema: text("json_schema", { mode: "json" }).$type<Record<string, unknown> | null>(),
+    /** waiting | working | answered */
+    status: text("status").notNull(),
+    answer: text("answer"),
+    /** Why the last answer was sent back (so the next one can fix it). */
+    error: text("error"),
+    attempts: integer("attempts").notNull().default(0),
+    claimedAt: text("claimed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("claude_jobs_status_idx").on(t.status), index("claude_jobs_task_idx").on(t.taskId)],
+);

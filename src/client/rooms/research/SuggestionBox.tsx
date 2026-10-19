@@ -42,7 +42,7 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
   });
   const [theme, setTheme] = useState("");
   const brainstorm = useMutation({
-    mutationFn: () => api.post<{ real: boolean; ideas: { idea: string; why: string }[] }>("/research/ideas", { theme: theme || undefined }),
+    mutationFn: () => api.post<{ real: boolean; pending?: boolean; ideas: { idea: string; why: string }[] }>("/research/ideas", { theme: theme || undefined }),
   });
   const send = useMutation({
     mutationFn: () => api.post("/research/suggestions", { idea, notes: notes || undefined, format: format ?? guessed }),
@@ -140,7 +140,10 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
           </button>
         </div>
         <ErrorNote error={brainstorm.error} />
-        {brainstorm.data && (
+        {brainstorm.data?.pending && (
+          <p className="mt-2 text-sm">✨ Added to Claude's to-do list. Tap the button again once Claude's session has finished to see the ideas.</p>
+        )}
+        {brainstorm.data && !brainstorm.data.pending && (
           <ul className="mt-2 space-y-1">
             {brainstorm.data.ideas.map((i) => (
               <li key={i.idea}>

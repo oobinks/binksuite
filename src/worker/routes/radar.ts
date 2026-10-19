@@ -7,6 +7,7 @@ import { kvGet } from "../lib/store";
 import { vaultSecret } from "../lib/vault";
 import { etsyClient } from "../providers/etsy";
 import { isAiLimit } from "../providers/ai";
+import { isClaudePending } from "../providers/claudeCode";
 import { liveOnly, makeDailyIdeas, marketOf, nicheFormat, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
 import { priceWatchTick } from "../engine/priceWatch";
 import { listSuggestions, suggestIdea } from "../engine/queue";
@@ -60,6 +61,7 @@ export const radarRoutes = newApp()
       return c.json({ ok: true, items });
     } catch (e) {
       if (e instanceof HttpError) throw e;
+      if (isClaudePending(e)) return c.json({ ok: true, pending: true, items: [] }, 202);
       throw new HttpError(isAiLimit(e) ? 429 : 502, e instanceof Error ? e.message : "Couldn't make ideas just now.");
     }
   })

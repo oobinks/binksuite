@@ -5,6 +5,7 @@ import { getDb, type DB } from "./db";
 import type { Settings } from "../shared/settings";
 import { workersAi } from "./providers/ai";
 import { fakeAi } from "./providers/fakeAi";
+import { claudeCodeAi } from "./providers/claudeCode";
 
 export type AppEnv = { Bindings: Env; Variables: { db: DB; settings: Settings } };
 export type Ctx = Context<AppEnv>;
@@ -39,10 +40,20 @@ export function dbFor(env: Env) {
   return getDb(env.DB);
 }
 
+/** The free Cloudflare painter (also paints mockup rooms when Claude does the rest). */
+function workersFor(env: Env, db: DB, settings: Settings) {
+  if (env.FAKE_AI === "1") return fakeAi;
+  return env.AI ? workersAi(env.AI, db, settings) : null;
+}
+
+/** The AI engine in use: Claude Code (your subscription) or free Workers AI. Null when it's off or unavailable. */
+export function aiServices(env: Env, db: DB, settings: Settings) {
+  if (!settings.ai.enabled) return null;
+  if (settings.ai.provider === "claude-code") return claudeCodeAi(db, workersFor(env, db, settings));
+  return workersFor(env, db, settings);
+}
+
 /** Real AI for this request, or null when it's off or unavailable. */
 export function aiFor(c: Ctx) {
-  const settings = c.get("settings");
-  if (!settings.ai.enabled) return null;
-  if (c.env.FAKE_AI === "1") return fakeAi;
-  return c.env.AI ? workersAi(c.env.AI, c.get("db"), settings) : null;
+  return aiServices(c.env, c.get("db"), c.get("settings"));
 }

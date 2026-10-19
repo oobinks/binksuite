@@ -71,8 +71,9 @@ export const printReview: ReviewDef = {
           })}
         </ul>
         <p className="text-xs text-cocoa dark:text-stone-400">
-          The free AI makes 1024-pixel images, so big sizes are enlarged and look a little soft up close. That's fine for painterly styles; for crisp line art, pick a paid image
-          maker later.
+          {keys.every((k) => k.endsWith(".svg"))
+            ? "✨ Claude's vector art is drawn fresh at every size, so it's razor-sharp from A5 to A3."
+            : "The free AI makes 1024-pixel images, so big sizes are enlarged and look a little soft up close. That's fine for painterly styles; Claude's vector art (Settings → Claude Code) prints crisp at every size."}
         </p>
         {step && !pack && (
           <div>

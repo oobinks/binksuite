@@ -36,6 +36,10 @@ export const settingsSchema = z.object({
   /** Real AI via Cloudflare Workers AI (free daily allowance). */
   ai: z.object({
     enabled: z.boolean(),
+    /** Who does the thinking: free Cloudflare Workers AI, or Claude Code on your Claude subscription. */
+    provider: z.enum(["workers", "claude-code"]),
+    /** Claude Code: start a session automatically while you have the site open and Claude has work. */
+    claudeAutoStart: z.boolean(),
     textModel: z.string().min(3).max(100),
     imageModel: z.string().min(3).max(100),
     /** Stop for the day at this many estimated "neurons" (free allowance is 10,000/day). */
@@ -72,6 +76,8 @@ export const DEFAULT_SETTINGS: Settings = {
   providerLicenceOk: false,
   ai: {
     enabled: true,
+    provider: "workers",
+    claudeAutoStart: true,
     textModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     imageModel: "@cf/black-forest-labs/flux-1-schnell",
     dailyNeuronCap: 9000,
