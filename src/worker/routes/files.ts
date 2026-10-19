@@ -1,4 +1,4 @@
-// Your files in R2: generated art, print-file ZIPs. Login required for everything.
+// Your files in R2: generated art, print-file ZIPs, spreadsheet previews. Login required for everything.
 import { newApp, HttpError } from "../app";
 import { products } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -22,7 +22,9 @@ export const fileRoutes = newApp()
   })
   .put("/files/products/:productId/:name", async (c) => {
     const { productId, name } = c.req.param();
-    if (!SAFE_NAME.test(name) || !name.endsWith(".zip")) throw new HttpError(400, "Only .zip print packs can be uploaded.");
+    // Print packs (.zip) and spreadsheet preview pictures (.jpg).
+    const type = name.endsWith(".zip") ? "application/zip" : name.endsWith(".jpg") ? "image/jpeg" : null;
+    if (!SAFE_NAME.test(name) || !type) throw new HttpError(400, "Only .zip packs and .jpg previews can be uploaded.");
     const product = await c.get("db").select({ id: products.id }).from(products).where(eq(products.id, productId)).get();
     if (!product) throw new HttpError(404, "No such product");
     const size = Number(c.req.header("content-length") ?? 0);
@@ -31,6 +33,6 @@ export const fileRoutes = newApp()
     // R2 needs to know the length up front when streaming.
     const { readable, writable } = new FixedLengthStream(size);
     c.req.raw.body?.pipeTo(writable);
-    await c.env.FILES.put(key, readable, { httpMetadata: { contentType: "application/zip" } });
+    await c.env.FILES.put(key, readable, { httpMetadata: { contentType: type } });
     return c.json({ ok: true, key });
   });

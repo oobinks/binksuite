@@ -6,9 +6,12 @@ import { useUi } from "../../lib/store";
 import { timeAgo } from "../../lib/format";
 import { ErrorNote, Section } from "../../components/ui";
 import type { TaskView } from "../../../shared/api";
+import { FORMAT_INFO, FORMATS, guessFormat, type ProductFormat } from "../../../shared/format";
+import { FormatBadge } from "../../components/FormatBadge";
 
 interface Suggestion {
   productId: string;
+  format: ProductFormat;
   idea: string;
   notes: string | null;
   stage: string;
@@ -29,6 +32,9 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
   const [idea, setIdea] = useState("");
   const [notes, setNotes] = useState("");
   const [showNotes, setShowNotes] = useState(false);
+  // null = let the app guess from the wording.
+  const [format, setFormat] = useState<ProductFormat | null>(null);
+  const guessed = guessFormat(idea);
   const { data } = useQuery({
     queryKey: ["suggestions"],
     queryFn: () => api.get<{ suggestions: Suggestion[] }>("/research/suggestions"),
@@ -39,11 +45,12 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
     mutationFn: () => api.post<{ real: boolean; ideas: { idea: string; why: string }[] }>("/research/ideas", { theme: theme || undefined }),
   });
   const send = useMutation({
-    mutationFn: () => api.post("/research/suggestions", { idea, notes: notes || undefined }),
+    mutationFn: () => api.post("/research/suggestions", { idea, notes: notes || undefined, format: format ?? guessed }),
     onSuccess: () => {
       toast({ icon: "💡", title: "Idea sent to Scout", body: idea });
       setIdea("");
       setNotes("");
+      setFormat(null);
       setShowNotes(false);
       qc.invalidateQueries();
     },
@@ -83,6 +90,26 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
             </button>
           </div>
         </label>
+        <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="What should we make?">
+          <span className="text-xs font-bold">Make it as:</span>
+          {FORMATS.map((f) => {
+            const on = (format ?? guessed) === f;
+            return (
+              <button
+                key={f}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setFormat(f)}
+                className={`chip py-1 font-black ${on ? FORMAT_INFO[f].chip + " ring-2 ring-current" : "opacity-60"}`}
+                title={FORMAT_INFO[f].long}
+              >
+                {FORMAT_INFO[f].icon} {FORMAT_INFO[f].label}
+              </button>
+            );
+          })}
+          <span className="text-[11px] text-cocoa dark:text-stone-400">{format ? FORMAT_INFO[format].long : idea.trim() ? `Guessed from your idea · ${FORMAT_INFO[guessed].long}` : "Picked from your idea"}</span>
+        </div>
         {showNotes ? (
           <textarea
             className="input min-h-16"
@@ -117,8 +144,12 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
           <ul className="mt-2 space-y-1">
             {brainstorm.data.ideas.map((i) => (
               <li key={i.idea}>
-                <button type="button" className="w-full rounded-lg p-1.5 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5" onClick={() => setIdea(i.idea)}>
-                  <b>💡 {i.idea}</b> <span className="text-cocoa dark:text-stone-400">· {i.why}</span>
+                <button
+                  type="button"
+                  className="w-full rounded-lg p-1.5 text-left text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                  onClick={() => (setIdea(i.idea), setFormat(null))}
+                >
+                  <FormatBadge format={guessFormat(i.idea)} /> <b>{i.idea}</b> <span className="text-cocoa dark:text-stone-400">· {i.why}</span>
                 </button>
               </li>
             ))}
@@ -127,7 +158,8 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
         )}
       </div>
       <p className="mt-2 text-xs text-cocoa dark:text-stone-400">
-        Scout checks demand, competition, how well AI can make it, price range, seasonality and trademark risks, then gives a ✅ go, 🤔 maybe or ⛔ skip. Your ideas jump the
+        🎨 ART = wall art prints · 📊 EXCEL = a ready-made spreadsheet with formulas (plus a printable PDF) · 📄 PDF = a printable planner or tracker. Scout checks demand,
+        competition, how well we can make it, price range, seasonality and trademark risks, then gives a ✅ go, 🤔 maybe or ⛔ skip. Your ideas jump the
         queue.{" "}
         {aiReady
           ? "🤖 Scout uses free Cloudflare AI. It can't browse the web, so treat scores as an informed estimate."
@@ -139,6 +171,7 @@ export function SuggestionBox({ tasks, onOpen, aiReady }: { tasks: TaskView[]; o
             const st = status(s);
             return (
               <li key={s.productId} className="flex items-center gap-2 rounded-xl p-2 ring-1 ring-black/5 dark:ring-white/10">
+                <FormatBadge format={s.format} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-bold">{s.idea}</span>
                   <span className="text-xs text-cocoa dark:text-stone-400">

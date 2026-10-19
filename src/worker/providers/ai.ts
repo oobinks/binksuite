@@ -85,7 +85,8 @@ export function workersAi(ai: Ai, db: DB, settings: Settings): AiServices {
   const run = ai.run.bind(ai) as (model: string, input: Record<string, unknown>) => Promise<Record<string, unknown>>;
   return {
     async json(req) {
-      await guard(MAX_CALL_NEURONS);
+      // Big answers (e.g. a spreadsheet design) cost more, so check there's room for the largest possible reply.
+      await guard(Math.max(MAX_CALL_NEURONS, (req.maxTokens ?? 1200) * TEXT_OUT + 1500 * TEXT_IN));
       const res = await run(settings.ai.textModel, {
         messages: [
           { role: "system", content: req.system },

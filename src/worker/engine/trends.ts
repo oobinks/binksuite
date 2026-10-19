@@ -21,6 +21,7 @@ import { isAiLimit } from "../providers/ai";
 import { EtsyError, type EtsyClient } from "../providers/etsy";
 import { suggestIdea, logActivity } from "./queue";
 import { notify } from "./game";
+import { FORMATS, guessFormat, isFormat, type ProductFormat } from "../../shared/format";
 import { minimumPriceFor } from "../../shared/fees";
 
 /** Starting watchlist: evergreen and seasonal digital-printable niches. You can add your own. */
@@ -49,12 +50,33 @@ export const SEED_NICHES: [string, string][] = [
     "colouring pages adults", "kids colouring pages", "sticker sheet printable", "printable stickers", "bookmarks printable",
     "gift tags printable", "pantry labels", "classroom decor", "nursery name sign", "custom pet portrait",
   ].map((k): [string, string] => [k, "other printables"]),
+  // 📊 Spreadsheets (Excel / Google Sheets)
+  ...[
+    "budget spreadsheet", "monthly budget spreadsheet", "christmas budget spreadsheet", "christmas gift tracker spreadsheet",
+    "wedding budget spreadsheet", "debt payoff spreadsheet", "savings tracker spreadsheet", "bill tracker spreadsheet",
+    "expense tracker spreadsheet", "sinking funds spreadsheet", "small business spreadsheet", "etsy seller spreadsheet",
+    "meal planner spreadsheet", "habit tracker spreadsheet", "travel budget spreadsheet", "renovation budget spreadsheet",
+    "cleaning schedule spreadsheet", "reading log spreadsheet", "fitness tracker spreadsheet", "baby feeding spreadsheet",
+  ].map((k): [string, string] => [k, "spreadsheets"]),
+  // 📄 Printable trackers and planners (PDF)
+  ...[
+    "christmas gift list printable", "christmas planner printable", "christmas card list", "monthly budget planner printable",
+    "bill tracker printable", "savings challenge printable", "debt tracker printable", "packing list printable",
+    "weekly meal planner printable", "daily planner printable", "to do list printable", "goal planner printable",
+  ].map((k): [string, string] => [k, "printable trackers"]),
 ];
+
+/** What a radar niche would be made as: spreadsheet niches → Excel, tracker/planner niches → PDF. */
+export function nicheFormat(keyword: string, category?: string | null): ProductFormat {
+  if (category === "spreadsheets" || /spreadsheet|excel|google sheets/i.test(keyword)) return "excel";
+  if (category === "printable trackers") return "pdf";
+  return guessFormat(keyword);
+}
 
 const SCAN_EVERY_MS = 20 * 3600_000;
 const SUGGEST_COOLDOWN_MS = 14 * 86_400_000;
 
-const SEEDS_VERSION = 1;
+const SEEDS_VERSION = 2;
 
 /** Load the starter watchlist once (bump SEEDS_VERSION to add new seeds later). */
 export async function ensureSeeds(db: DB) {
@@ -216,11 +238,11 @@ export async function radarTick(db: DB, settings: Settings, deps: RadarDeps): Pr
 export interface DailyIdeas {
   date: string;
   at: string;
-  items: { productId: string; keyword: string; idea: string; angle: string }[];
+  items: { productId: string; keyword: string; idea: string; angle: string; format?: ProductFormat }[];
 }
 
 const ideasSchema = z.object({
-  ideas: z.array(z.object({ keyword: z.string(), idea: z.string(), angle: z.string(), why: z.string() })),
+  ideas: z.array(z.object({ keyword: z.string(), idea: z.string(), angle: z.string(), why: z.string(), format: z.string().optional() })),
 });
 
 /** Turn the top niches into fresh, competitive product ideas and send them to Scout. */
@@ -240,12 +262,12 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
   if (!top.length) return [];
   const lines = top.map(
     (n) =>
-      `- ${n.keyword}: ${n.source === "etsy" ? `${n.totalListings?.toLocaleString()} competing listings, new listings getting ${n.favsPerDay} favourites/day, median price £${((n.medianPricePence ?? 0) / 100).toFixed(2)}` : `AI estimate${n.note ? `: ${n.note}` : ""}`}`,
+      `- ${n.keyword}: [${nicheFormat(n.keyword, n.category)}] ${n.source === "etsy" ? `${n.totalListings?.toLocaleString()} competing listings, new listings getting ${n.favsPerDay} favourites/day, median price £${((n.medianPricePence ?? 0) / 100).toFixed(2)}` : `AI estimate${n.note ? `: ${n.note}` : ""}`}`,
   );
   const r = await ai.json({
     system:
       "You are Scout, the creative lead of a UK Etsy shop selling AI-assisted digital printables. Your job: beat competitors with fresh, specific, sellable ideas: a clear twist, not a copy. No brands, characters, celebrities or song lyrics.",
-    prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital printable product that could outsell what's already there. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence).`,
+    prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital download that could outsell what's already there. Formats: "art" (printable wall art), "excel" (a ready-made spreadsheet with formulas, also works in Google Sheets), "pdf" (a printable planner/tracker/checklist). The format in [brackets] is the usual one for that niche; pick another if it would sell better. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence), format.`,
     schema: ideasSchema,
     jsonSchema: {
       type: "object",
@@ -254,8 +276,8 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
           type: "array",
           items: {
             type: "object",
-            properties: { keyword: { type: "string" }, idea: { type: "string" }, angle: { type: "string" }, why: { type: "string" } },
-            required: ["keyword", "idea", "angle", "why"],
+            properties: { keyword: { type: "string" }, idea: { type: "string" }, angle: { type: "string" }, why: { type: "string" }, format: { type: "string", enum: [...FORMATS] } },
+            required: ["keyword", "idea", "angle", "why", "format"],
           },
         },
       },
@@ -271,9 +293,10 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     if (!idea) continue;
     const market = niche.source === "etsy" ? marketOf(niche) : null;
     const notes = `Today's idea from Trend Radar (${niche.keyword}). Twist: ${idea.angle} Why: ${idea.why}`;
-    const p = await suggestIdea(db, settings, idea.idea.slice(0, 120), notes.slice(0, 1000), true, { market, trendKeyword: niche.keyword, origin: "daily" });
+    const format = isFormat(idea.format) ? idea.format : nicheFormat(niche.keyword, niche.category);
+    const p = await suggestIdea(db, settings, idea.idea.slice(0, 120), notes.slice(0, 1000), true, { market, trendKeyword: niche.keyword, origin: "daily", format });
     await db.update(trendNiches).set({ lastSuggested: nowIso(now) }).where(eq(trendNiches.keyword, niche.keyword));
-    items.push({ productId: p.id, keyword: niche.keyword, idea: idea.idea.slice(0, 120), angle: idea.angle.slice(0, 300) });
+    items.push({ productId: p.id, keyword: niche.keyword, idea: idea.idea.slice(0, 120), angle: idea.angle.slice(0, 300), format });
   }
   // "More ideas now" adds to today's list rather than replacing it.
   const date = now.toISOString().slice(0, 10);

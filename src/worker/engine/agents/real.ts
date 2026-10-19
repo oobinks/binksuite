@@ -5,6 +5,8 @@ import { z } from "zod";
 import { blockedTermsIn, ETSY_LIMITS, hasAiDisclosure } from "../../../shared/compliance";
 import type { MarketReport, Verdict } from "./marketResearch";
 import type { PartialResult, ProductRow, RealContext, StepDef, StepResult, TaskRow } from "./types";
+import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../../shared/format";
+import { SHEET_JSON_SCHEMA, SHEET_RULES, tidySheetSpec, type RawSpec, type SheetSpec } from "../../../shared/sheetSpec";
 
 export const IMAGES_PER_PRODUCT = 4;
 export const PRINT_SIZES_REAL = ["A5", "A4", "A3", "US Letter", "8x10"] as const;
@@ -14,10 +16,10 @@ const AI_NOTE = "AI estimate from general knowledge. The free Cloudflare AI can'
 /** An Analyst idea to make the product stronger, which you can switch on. */
 export interface Booster {
   id: string;
-  kind: "slogan" | "art" | "bundle" | "listing";
+  kind: "slogan" | "art" | "bundle" | "listing" | "feature";
   title: string;
   why: string;
-  /** How the art should change if chosen. */
+  /** How the art (or, for spreadsheets, the design) should change if chosen. */
   artHint?: string;
   /** What the listing should mention if chosen. */
   listingHint?: string;
@@ -44,6 +46,7 @@ interface ProductData {
   images?: ArtImage[];
   keptImages?: string[];
   listing?: { title: string; tags: string[]; description: string; designedBy: "seller" };
+  sheet?: SheetSpec;
   zipKey?: string;
   files?: string[];
 }
@@ -91,7 +94,25 @@ const reportJsonSchema = {
 };
 
 const SHOP_CONTEXT =
-  "You work for a small UK Etsy shop that sells AI-assisted digital printables (wall art, planners, cards, labels). Buyers download and print them. Use British spelling. Be honest and practical; never invent statistics or name real competitor shops.";
+  "You work for a small UK Etsy shop that sells AI-assisted digital downloads: wall art prints, printable planners and trackers (PDF), and ready-made spreadsheets (Excel, which also open in Google Sheets). Use British spelling. Be honest and practical; never invent statistics or name real competitor shops.";
+
+/** What the product is, in words the AI understands. */
+export function formatLine(f: ProductFormat): string {
+  return f === "excel"
+    ? "Product type: a ready-made Excel spreadsheet (.xlsx, also opens in Google Sheets and Apple Numbers) with working formulas, plus a printable PDF version."
+    : f === "pdf"
+      ? "Product type: a printable PDF planner / tracker / checklist that buyers print and fill in by hand."
+      : "Product type: printable wall art (high-resolution PDF prints).";
+}
+
+/** What's in the download, for listings and briefs. */
+export function includedLine(f: ProductFormat): string {
+  return f === "excel"
+    ? "Excel spreadsheet (.xlsx) that also opens in Google Sheets and Apple Numbers, plus a printable PDF in A4 and US Letter"
+    : f === "pdf"
+      ? "Printable PDF in A4 and US Letter"
+      : `High-resolution PDFs at 300 DPI in ${PRINT_SIZES_REAL.join(", ")}`;
+}
 
 export function verdictFrom(overall: number, blocked: boolean): Verdict {
   if (blocked) return "skip";
@@ -123,9 +144,10 @@ export async function researchIdeaWithAi(ctx: RealContext, idea: string, notes?:
   const marketLine = market
     ? `Live Etsy data for "${market.keyword}": ${market.totalListings} active competing listings; new listings are getting ${market.favsPerDay} favourites per day; ${market.newListings30d} of the newest 100 were listed in the last 30 days; median price £${(market.medianPricePence / 100).toFixed(2)}, cheaper quarter at £${(market.lowPricePence / 100).toFixed(2)}. Base demand and competition scores on this.\n`
     : "";
+  const format = formatOf(ctx.product);
   const r = await ctx.ai.json({
-    system: `${SHOP_CONTEXT} You are Scout, a market researcher. Score each 1-10. For competition, 10 means extremely crowded.`,
-    prompt: `Assess this product idea for the shop.\nIdea: ${idea}\n${notes ? `Owner's notes: ${notes}\n` : ""}${marketLine}Give: scores, a 1-2 sentence summary, exactly 3 reasons, risks (trademarks, seasonality, hard-to-make details), 3 specific angles to stand out, 8 Etsy search keywords (each under 20 characters), a typical price range in GBP for similar digital downloads, and when it sells best.`,
+    system: `${SHOP_CONTEXT} You are Scout, a market researcher. Score each 1-10. For competition, 10 means extremely crowded. "aiFit" means how well this shop's tools can make it well.`,
+    prompt: `Assess this product idea for the shop.\nIdea: ${idea}\n${formatLine(format)}\n${notes ? `Owner's notes: ${notes}\n` : ""}${marketLine}Give: scores, a 1-2 sentence summary, exactly 3 reasons, risks (trademarks, seasonality, hard-to-make details), 3 specific angles to stand out, 8 Etsy search keywords (each under 20 characters), a typical price range in GBP for similar digital downloads of this type, and when it sells best.`,
     schema: reportSchema,
     jsonSchema: reportJsonSchema,
   });
@@ -167,7 +189,7 @@ const ideasSchema = z.object({ ideas: z.array(z.object({ idea: z.string(), why: 
 export async function brainstormIdeas(ai: RealContext["ai"], theme: string | undefined, avoid: string[]) {
   const r = await ai.json({
     system: `${SHOP_CONTEXT} You are Scout. Suggest specific, sellable niches, not generic categories.`,
-    prompt: `Suggest 5 digital printable product ideas${theme ? ` around: ${theme}` : " that suit the coming season"}. Avoid brands, characters and celebrities.${avoid.length ? ` Don't repeat: ${avoid.slice(0, 20).join("; ")}.` : ""} Each idea under 60 characters with a one-sentence reason.`,
+    prompt: `Suggest 5 digital download product ideas (a mix of wall art, printable planners/trackers and ready-made spreadsheets)${theme ? ` around: ${theme}` : " that suit the coming season"}. Avoid brands, characters and celebrities.${avoid.length ? ` Don't repeat: ${avoid.slice(0, 20).join("; ")}.` : ""} Each idea under 60 characters with a one-sentence reason.`,
     schema: ideasSchema,
     jsonSchema: {
       type: "object",
@@ -209,13 +231,15 @@ const briefSchema = z.object({
     .default([]),
 });
 
-const BOOSTER_KINDS = ["slogan", "art", "bundle", "listing"] as const;
+const BOOSTER_KINDS = ["slogan", "art", "bundle", "listing", "feature"] as const;
 
-/** Tidy the Analyst's booster ideas; always offer a slogan option. */
-export function tidyBoosters(raw: z.infer<typeof briefSchema>["boosters"], idea: string): Booster[] {
+/** Tidy the Analyst's booster ideas. Art always gets a slogan option; spreadsheets don't need one. */
+export function tidyBoosters(raw: z.infer<typeof briefSchema>["boosters"], idea: string, format: ProductFormat = "art"): Booster[] {
   const out: Booster[] = [];
   for (const b of raw.slice(0, 6)) {
-    const kind = (BOOSTER_KINDS as readonly string[]).includes(b.kind) ? (b.kind as Booster["kind"]) : "art";
+    let kind = (BOOSTER_KINDS as readonly string[]).includes(b.kind) ? (b.kind as Booster["kind"]) : "art";
+    if (isSheetFormat(format) && (kind === "art" || kind === "slogan")) kind = "feature";
+    if (!isSheetFormat(format) && kind === "feature") kind = "art";
     const slogans = (b.slogans ?? []).map((x) => x.replace(/^["“']|["”']$/g, "").trim()).filter((x) => x && x.length <= 60).slice(0, 4);
     if (kind === "slogan" && !slogans.length) continue;
     out.push({
@@ -228,7 +252,7 @@ export function tidyBoosters(raw: z.infer<typeof briefSchema>["boosters"], idea:
       slogans: kind === "slogan" ? slogans : undefined,
     });
   }
-  if (!out.some((b) => b.kind === "slogan")) {
+  if (!isSheetFormat(format) && !out.some((b) => b.kind === "slogan")) {
     out.unshift({
       id: "b0",
       kind: "slogan",
@@ -241,6 +265,7 @@ export function tidyBoosters(raw: z.infer<typeof briefSchema>["boosters"], idea:
 }
 
 async function writeBrief(ctx: RealContext): Promise<StepResult> {
+  if (isSheetFormat(formatOf(ctx.product))) return writeSheetBrief(ctx);
   const data = d(ctx.product);
   const idea = data.suggestion?.idea ?? ctx.product.niche;
   const report = data.report;
@@ -295,7 +320,7 @@ async function writeBrief(ctx: RealContext): Promise<StepResult> {
 }
 
 /** You approve the brief with the boosters you like (and any idea of your own). */
-function chooseBoosters(task: TaskRow, _product: ProductRow, data: Record<string, unknown> | undefined) {
+function chooseBoosters(task: TaskRow, product: ProductRow, data: Record<string, unknown> | undefined) {
   const offered = ((task.output as { boosters?: Booster[] } | null)?.boosters ?? []) as Booster[];
   const picks = Array.isArray(data?.chosen) ? (data!.chosen as { id?: unknown; slogan?: unknown }[]) : [];
   const chosen: ChosenBooster[] = [];
@@ -307,7 +332,7 @@ function chooseBoosters(task: TaskRow, _product: ProductRow, data: Record<string
     chosen.push({ id: b.id, kind: b.kind, title: b.title, artHint: b.artHint, listingHint: b.listingHint, slogan });
   }
   const custom = typeof data?.custom === "string" ? data.custom.trim().slice(0, 300) : "";
-  if (custom) chosen.push({ id: "own", kind: "art", title: "Your idea", artHint: custom, listingHint: custom });
+  if (custom) chosen.push({ id: "own", kind: isSheetFormat(formatOf(product)) ? "feature" : "art", title: "Your idea", artHint: custom, listingHint: custom });
   const slogan = chosen.find((c) => c.kind === "slogan")?.slogan;
   return { productData: { boosters: chosen, slogan: slogan ?? null } };
 }
@@ -376,12 +401,123 @@ function acceptPrintFiles(_task: TaskRow, product: ProductRow, data: Record<stri
   return { productData: { zipKey, files, zip } };
 }
 
+
+// ───────────── Analyst: spreadsheet / printable tracker design ─────────────
+
+const sheetBriefSchema = z.object({
+  productTitle: z.string(),
+  audience: z.string(),
+  style: z.string(),
+  palette: z.array(z.string()),
+  sheet: z.record(z.string(), z.unknown()),
+  boosters: briefSchema.shape.boosters,
+});
+
+const BOOSTER_JSON = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      kind: { type: "string", enum: ["feature", "bundle", "listing"] },
+      title: { type: "string" },
+      why: { type: "string" },
+      artHint: { type: "string" },
+      listingHint: { type: "string" },
+    },
+    required: ["kind", "title", "why"],
+  },
+};
+
+function sheetPrompt(f: ProductFormat) {
+  return f === "excel"
+    ? "Design a ready-made spreadsheet that does the maths for the buyer: inputs they type once, tabs they fill in, and a Summary dashboard of totals."
+    : "Design a printable tracker the buyer prints and fills in by hand: clear columns, plenty of empty rows, checkboxes where useful. Keep summary lines simple (they're printed as boxes to fill in).";
+}
+
+async function writeSheetBrief(ctx: RealContext): Promise<StepResult> {
+  const data = d(ctx.product);
+  const format = formatOf(ctx.product);
+  const idea = data.suggestion?.idea ?? ctx.product.niche;
+  const report = data.report;
+  const b = await ctx.ai.json({
+    system: `${SHOP_CONTEXT} You are Analyst, an expert at designing beautiful, easy-to-use spreadsheets and printable trackers that sell on Etsy.`,
+    prompt: `Idea: ${idea}\n${formatLine(format)}\n${data.suggestion?.notes ? `Owner's notes: ${data.suggestion.notes}\n` : ""}${report ? `Scout's angles: ${report.angles.join("; ")}\n` : ""}${sheetPrompt(format)}\nWrite: a short product title (under 50 characters), the target audience, the look and feel, a palette of 5 hex colours (the first is the header colour), and "sheet": the design (title, subtitle, currency symbol, accent hex colour, howTo: 3-6 short steps for the buyer, inputs, summary, tabs).\n${SHEET_RULES}\nThen think like a shop owner who wants this to outsell competitors: suggest 3-5 "boosters" the owner can switch on: kind "feature" (an extra tab, column or dashboard line, with artHint describing exactly what to add), "bundle" (e.g. both Excel and PDF, a matching set, with listingHint) or "listing" (e.g. gift angle, with listingHint). Each with a one-sentence why.`,
+    schema: sheetBriefSchema,
+    jsonSchema: {
+      type: "object",
+      properties: {
+        productTitle: { type: "string" },
+        audience: { type: "string" },
+        style: { type: "string" },
+        palette: { type: "array", items: { type: "string" } },
+        sheet: SHEET_JSON_SCHEMA,
+        boosters: BOOSTER_JSON,
+      },
+      required: ["productTitle", "audience", "style", "palette", "sheet", "boosters"],
+    },
+    maxTokens: 2200,
+  });
+  const palette = b.palette.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 5);
+  const productTitle = b.productTitle.trim().slice(0, 60) || idea;
+  const { spec, dropped } = tidySheetSpec({ ...(b.sheet as RawSpec), accent: (b.sheet as RawSpec).accent ?? palette[0] }, productTitle);
+  const boosters = tidyBoosters(b.boosters, idea, format);
+  const brief: Brief = { productTitle, audience: b.audience.trim(), style: b.style.trim(), palette, imagePrompts: [] };
+  return {
+    output: { productType: FORMAT_INFO[format].long, format, ...brief, sheet: spec, checks: dropped, included: includedLine(format), boosters },
+    productData: { brief, palette, audience: brief.audience, sheet: spec },
+    productTitle,
+    log: `Designed “${productTitle}”: ${spec.tabs.length} tab${spec.tabs.length === 1 ? "" : "s"}, ${spec.summary.length} summary lines, with ${boosters.length} ideas to make it stronger`,
+  };
+}
+
+// ───────────── Printer: plan the spreadsheet; your device builds the files ─────────────
+
+/** Weave your chosen "feature" boosters into the design (one extra AI pass), then hand it to your device to build. */
+async function planSheet(ctx: RealContext): Promise<StepResult> {
+  const data = d(ctx.product);
+  const format = formatOf(ctx.product);
+  let spec = data.sheet;
+  if (!spec) throw new Error("No design yet. The Analyst needs to finish the brief first.");
+  const features = (data.boosters ?? []).filter((b) => b.kind === "feature" && b.artHint);
+  // "Redesign" sends the step back with your note.
+  const fix = ctx.task.note?.trim() || undefined;
+  let notes: string[] = [];
+  if (features.length || fix) {
+    const r = await ctx.ai.json({
+      system: `${SHOP_CONTEXT} You are Analyst. Update a spreadsheet design, keeping everything that already works.`,
+      prompt: `Current design (JSON):\n${JSON.stringify(spec)}\n${formatLine(format)}\nChanges to make:\n${features.map((f) => `- ${f.title}: ${f.artHint}`).join("\n")}${fix ? `\n- Owner's feedback: ${fix}` : ""}\nReturn the full updated design.\n${SHEET_RULES}`,
+      schema: z.record(z.string(), z.unknown()),
+      jsonSchema: SHEET_JSON_SCHEMA,
+      maxTokens: 2200,
+    });
+    const tidy = tidySheetSpec(r as RawSpec, spec.title);
+    spec = { ...tidy.spec, accent: spec.accent };
+    notes = tidy.dropped;
+  }
+  return {
+    output: { format, sheet: spec, checks: notes, buildInBrowser: true, included: includedLine(format) },
+    productData: { sheet: spec },
+    log: `Design ready: ${spec.tabs.map((t) => t.name).join(", ")}. Tap to build the ${format === "excel" ? "spreadsheet and PDF" : "PDF"} on your device`,
+  };
+}
+
+function acceptSheetFiles(_task: TaskRow, product: ProductRow, data: Record<string, unknown> | undefined) {
+  const zipKey = typeof data?.zipKey === "string" ? data.zipKey : "";
+  if (!zipKey.startsWith(`products/${product.id}/`)) return { error: "Build the files first (tap “Build files”)." };
+  const files = Array.isArray(data?.files) ? (data!.files as unknown[]).filter((f): f is string => typeof f === "string").slice(0, 50) : [];
+  const previews = Array.isArray(data?.previews)
+    ? (data!.previews as unknown[]).filter((k): k is string => typeof k === "string" && k.startsWith(`products/${product.id}/`)).slice(0, 10)
+    : [];
+  return { productData: { zipKey, files, zip: zipKey.split("/").pop()!, keptImages: previews } };
+}
+
 // ───────────── Stylist: mockups from your kept art ─────────────
 
 async function styleMockups(ctx: RealContext): Promise<StepResult> {
   const kept = d(ctx.product).keptImages ?? [];
-  const scenes = ["frame", "desk", "tablet", "gallery"];
-  const slogan = d(ctx.product).slogan ?? null;
+  const format = formatOf(ctx.product);
+  const scenes = format === "excel" ? ["laptop", "tablet", "printed"] : format === "pdf" ? ["printed", "tablet", "laptop"] : ["frame", "desk", "tablet", "gallery"];
+  const slogan = isSheetFormat(format) ? null : (d(ctx.product).slogan ?? null);
   const mockups = scenes.map((scene, i) => ({ scene, imageKey: kept[i % Math.max(1, kept.length)] ?? null, seed: ctx.product.seed * 10 + i, slogan }));
   return { output: { mockups }, productData: { mockups }, log: `Staged ${mockups.length} mockups with your art` };
 }
@@ -390,18 +526,29 @@ async function styleMockups(ctx: RealContext): Promise<StepResult> {
 
 const DISCLOSURE = "This design was created with AI assistance and carefully checked by hand.";
 
-export function tidyListing(raw: { title: string; tags: string[]; description: string }, blocklist: string[]) {
+const FORMAT_TAGS: Record<ProductFormat, string[]> = {
+  art: ["digital download", "printable", "instant download", "wall art", "gift idea"],
+  excel: ["excel template", "google sheets", "spreadsheet", "digital download", "instant download"],
+  pdf: ["printable", "digital download", "instant download", "printable planner", "pdf"],
+};
+
+const HOW_IT_WORKS: Record<ProductFormat, string> = {
+  art: "This is a digital download: no physical item will be shipped. Print at home, at a local print shop, or online.",
+  excel:
+    "This is a digital download: no physical item will be shipped. Open the .xlsx file in Microsoft Excel, or upload it to Google Sheets (File → Import) or Apple Numbers. Type in the white cells; the shaded cells and totals work themselves out. The PDF version can be printed at home.",
+  pdf: "This is a digital download: no physical item will be shipped. Print at home on A4 or US Letter paper, or at a local print shop, and fill it in by hand.",
+};
+
+export function tidyListing(raw: { title: string; tags: string[]; description: string }, blocklist: string[], format: ProductFormat = "art") {
   let title = raw.title.replace(/\s+/g, " ").trim();
   for (const t of blockedTermsIn(title, blocklist)) title = title.replace(new RegExp(t, "ig"), "").replace(/\s+/g, " ").trim();
   title = title.slice(0, ETSY_LIMITS.titleMax).trim();
-  const tags = cleanKeywords([...raw.tags, "digital download", "printable", "instant download", "wall art", "gift idea"]).filter(
+  const tags = cleanKeywords([...raw.tags, ...FORMAT_TAGS[format]]).filter(
     (t) => blockedTermsIn(t, blocklist).length === 0,
   );
   let description = raw.description.replace(/\r/g, "").trim();
   if (!hasAiDisclosure(description)) description = `${DISCLOSURE}\n\n${description}`;
-  if (!/digital download/i.test(description)) {
-    description += "\n\nHOW IT WORKS\nThis is a digital download: no physical item will be shipped. Print at home, at a local print shop, or online.";
-  }
+  if (!/digital download/i.test(description)) description += `\n\nHOW IT WORKS\n${HOW_IT_WORKS[format]}`;
   return { title, tags: tags.slice(0, ETSY_LIMITS.tagsMax), description, designedBy: "seller" as const };
 }
 
@@ -409,9 +556,14 @@ async function writeListing(ctx: RealContext): Promise<StepResult> {
   const data = d(ctx.product);
   const brief = data.brief;
   const keywords = [...(data.report?.keywords ?? []), ...cleanKeywords(ctx.product.niche.split(/\s+/))];
+  const format = formatOf(ctx.product);
+  const sheet = data.sheet;
+  const sheetLine = sheet
+    ? `Tabs: ${["Summary", ...sheet.tabs.map((t) => `${t.name} (${t.columns.map((c) => c.header).join(", ")})`)].join("; ")}.\nSummary shows: ${sheet.summary.map((x) => x.label).join(", ") || "totals"}.\n`
+    : "";
   const r = await ctx.ai.json({
     system: `${SHOP_CONTEXT} You are Copywriter. Tone of voice: ${ctx.settings.toneOfVoice}`,
-    prompt: `Write an Etsy listing for a digital printable.\nProduct: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${brief ? `Audience: ${brief.audience}\nStyle: ${brief.style}\n` : ""}${data.slogan ? `The print features the slogan: "${data.slogan}"\n` : ""}${(data.boosters ?? []).filter((b) => b.listingHint).map((b) => `Highlight: ${b.listingHint}\n`).join("")}Sizes included: ${PRINT_SIZES_REAL.join(", ")} at 300 DPI (PDF).\nUseful keywords: ${keywords.join(", ")}\nRules: title under 140 characters, front-load the main keyword, no brand or character names. Exactly 13 tags, each under 20 characters. Description: first sentence must say it was created with AI assistance; then what it is, what's included, how to print, and a friendly note. No emojis in the title.`,
+    prompt: `Write an Etsy listing for a digital download.\n${formatLine(format)}\nProduct: ${ctx.product.title}\nIdea: ${ctx.product.niche}\n${brief ? `Audience: ${brief.audience}\nStyle: ${brief.style}\n` : ""}${sheetLine}${data.slogan && !isSheetFormat(format) ? `The print features the slogan: "${data.slogan}"\n` : ""}${(data.boosters ?? []).filter((b) => b.listingHint).map((b) => `Highlight: ${b.listingHint}\n`).join("")}Included: ${includedLine(format)}.\nUseful keywords: ${keywords.join(", ")}\nRules: title under 140 characters, front-load the main keyword, no brand or character names${format === "excel" ? ", say it works in Excel and Google Sheets" : ""}. Exactly 13 tags, each under 20 characters. Description: first sentence must say it was created with AI assistance; then what it is, what's included, how to use it, and a friendly note.${format === "excel" ? " Don't promise financial results or give financial advice." : ""} No emojis in the title.`,
     schema: z.object({ title: z.string(), tags: z.array(z.string()), description: z.string() }),
     jsonSchema: {
       type: "object",
@@ -420,7 +572,7 @@ async function writeListing(ctx: RealContext): Promise<StepResult> {
     },
     maxTokens: 1400,
   });
-  const listing = tidyListing(r, ctx.settings.blocklist);
+  const listing = tidyListing(r, ctx.settings.blocklist, format);
   return { output: listing, productData: { listing }, log: `Wrote title, ${listing.tags.length} tags and description` };
 }
 
@@ -448,6 +600,13 @@ export const REAL_STEPS: Record<string, Partial<StepDef>> = {
     // Real print files are built in your browser, so you approve this step by building them.
     needsApproval: (p) => !p.demo,
     onApprove: (t, p, data) => (p.demo ? {} : acceptPrintFiles(t, p, data)),
+  },
+  sheet_build: {
+    realSeconds: 15,
+    real: planSheet,
+    // The files are built in your browser, so you approve this step by building them.
+    needsApproval: true,
+    onApprove: (t, p, data) => acceptSheetFiles(t, p, data),
   },
   mockups: { realSeconds: 1, real: styleMockups },
   copy: { realSeconds: 20, real: writeListing },

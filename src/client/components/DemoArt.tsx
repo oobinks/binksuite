@@ -63,10 +63,28 @@ export function DemoArt({ seed, palette, className = "", label }: { seed: number
 export function Mockup({ scene, seed, palette, imageKey, slogan }: { scene: string; seed: number; palette?: string[]; imageKey?: string | null; slogan?: string | null }) {
   const Art = ({ s, className }: { s: number; className: string }) =>
     imageKey ? <ArtImage imageKey={imageKey} className={className} /> : <DemoArt seed={s} palette={palette} className={className} />;
-  const wall = scene === "desk" ? "#efe6da" : scene === "tablet" ? "#d9e2ec" : scene === "gallery" ? "#f4efe9" : "#e9e1d6";
+  const wall =
+    scene === "desk" ? "#efe6da" : scene === "tablet" ? "#d9e2ec" : scene === "gallery" ? "#f4efe9" : scene === "laptop" ? "#e3ebe4" : scene === "printed" ? "#d8c3a5" : "#e9e1d6";
   return (
     <div className="relative aspect-[4/3] overflow-hidden rounded-xl" style={{ background: wall }}>
-      {scene === "tablet" ? (
+      {scene === "laptop" ? (
+        // 💻 A laptop showing the spreadsheet.
+        <div className="absolute inset-[10%_12%_16%]">
+          <div className="h-[88%] rounded-t-[10px] bg-stone-800 p-[1.5%] shadow-xl">
+            <Art s={seed} className="h-full w-full rounded-[4px] object-cover object-top" />
+          </div>
+          <div className="mx-[-6%] h-[6%] rounded-b-[12px] bg-stone-400 shadow-md" />
+        </div>
+      ) : scene === "printed" ? (
+        // 📄 A printed page on a wooden desk, with a pencil.
+        <>
+          <div className="absolute inset-[8%_24%_8%] rotate-[-3deg] bg-white p-[2%] shadow-xl">
+            <Art s={seed} className="h-full w-full object-cover object-top" />
+          </div>
+          <span className="absolute bottom-[10%] right-[12%] rotate-12 text-3xl">✏️</span>
+          <span className="absolute left-[8%] top-[12%] text-2xl">☕</span>
+        </>
+      ) : scene === "tablet" ? (
         <div className="absolute inset-[14%_22%] rounded-[10px] bg-stone-800 p-1.5 shadow-lg">
           <Art s={seed} className="h-full w-full rounded-md object-cover" />
         </div>

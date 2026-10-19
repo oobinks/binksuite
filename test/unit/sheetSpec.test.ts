@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+import { colLetter, columnFormula, summaryCells, summaryFormula, tidySheetSpec, TAB_FIRST_ROW } from "../../src/shared/sheetSpec";
+import { formatOf, guessFormat } from "../../src/shared/format";
+
+const christmas = {
+  title: "Christmas Gift Tracker",
+  subtitle: "Every present, every penny",
+  accent: "#c0392b",
+  howTo: ["Type your budget on the Summary tab", "Add each gift"],
+  inputs: [{ label: "Christmas budget", type: "money", example: 400 }],
+  tabs: [
+    {
+      name: "Gifts",
+      columns: [
+        { header: "Person", type: "text" },
+        { header: "Gift idea", type: "text" },
+        { header: "Budget", type: "money" },
+        { header: "Spent", type: "money" },
+        { header: "Left", type: "money", formula: "{Budget} - {Spent}" },
+        { header: "Bought?", type: "checkbox" },
+        { header: "Where", type: "choice", options: ["Online", "In store"] },
+      ],
+      exampleRows: [["Mum", "Cosy socks", 25, 18, 999, "yes", "online"]],
+      blankRows: 30,
+    },
+  ],
+  summary: [
+    { label: "Total spent", formula: "SUM(Gifts[Spent])", type: "money" },
+    { label: "Left to spend", formula: "{input:Christmas budget} - [Total spent]", type: "money" },
+    { label: "Gifts bought", formula: 'COUNTIF(Gifts[Bought?], "Yes")', type: "number" },
+    { label: "Share bought", formula: "([Gifts bought] / COUNTA(Gifts[Person])) * 100", type: "percent" },
+  ],
+};
+
+describe("sheet design", () => {
+  it("keeps a good design and translates its formulas to real Excel", () => {
+    const { spec, dropped } = tidySheetSpec(christmas, "x");
+    expect(dropped).toEqual([]);
+    const tab = spec.tabs[0];
+    expect(columnFormula(tab.columns[4].formula!, tab, 7, spec)).toBe("C7 - D7");
+    // Example value in a calculated column is cleared; checkbox and choice values are tidied.
+    expect(tab.exampleRows[0]).toEqual(["Mum", "Cosy socks", 25, 18, null, "Yes", "Online"]);
+    const last = TAB_FIRST_ROW + 1 + 30 - 1;
+    expect(summaryFormula(spec.summary[0].formula, spec, 0)).toBe(`SUM('Gifts'!$D$4:$D$${last})`);
+    expect(summaryFormula(spec.summary[1].formula, spec, 1)).toBe("'Summary'!$C$4 - 'Summary'!$C$6");
+    expect(summaryFormula(spec.summary[2].formula, spec, 2)).toBe(`COUNTIF('Gifts'!$F$4:$F$${last},"Yes")`);
+    expect(summaryFormula(spec.summary[3].formula, spec, 3)).toBe(`('Summary'!$C$8 / COUNTA('Gifts'!$A$4:$A$${last})) * 100`);
+    expect(summaryCells(spec).items.get("total spent")).toBe("'Summary'!$C$6");
+  });
+
+  it("drops anything outside the safe formula language", () => {
+    const { spec, dropped } = tidySheetSpec(
+      {
+        ...christmas,
+        tabs: [
+          {
+            ...christmas.tabs[0],
+            columns: [
+              { header: "Budget", type: "money" },
+              { header: "Spent", type: "money", formula: "HYPERLINK(\"http://x\")" },
+              { header: "Left", type: "money", formula: "{Budget} - {Nope}" },
+              { header: "Twice", type: "money", formula: "{Budget} - A1" },
+            ],
+          },
+        ],
+        summary: [
+          { label: "Evil", formula: 'WEBSERVICE("http://x")', type: "money" },
+          { label: "Forward ref", formula: "[Later] + 1", type: "money" },
+          { label: "Later", formula: "SUM(Gifts[Budget])", type: "money" },
+          { label: "Unknown tab", formula: "SUM(Nope[Budget])", type: "money" },
+        ],
+      },
+      "x",
+    );
+    expect(spec.tabs[0].columns.map((c) => c.formula)).toEqual([undefined, undefined, undefined, undefined]);
+    expect(spec.summary.map((s) => s.label)).toEqual(["Later"]);
+    expect(dropped.length).toBe(6);
+  });
+
+  it("always gives something buildable, with safe tab names", () => {
+    const { spec } = tidySheetSpec({ tabs: [{ name: "Summary", columns: [{ header: "A", type: "text" }], exampleRows: [] }, { name: "Bad/Name?*", columns: [] }] }, "Fallback");
+    expect(spec.title).toBe("Fallback");
+    expect(spec.tabs.map((t) => t.name)).toEqual(["Summary 2"]);
+    expect(tidySheetSpec({}, "T").spec.tabs[0].name).toBe("Tracker");
+    expect(colLetter(0) + colLetter(25) + colLetter(26)).toBe("AZAA");
+  });
+});
+
+describe("product format", () => {
+  it("guesses from the idea and respects a chosen format", () => {
+    expect(guessFormat("Monthly salary budget sheet")).toBe("excel");
+    expect(guessFormat("Christmas list tracker")).toBe("pdf");
+    expect(guessFormat("Cottagecore mushroom wall art")).toBe("art");
+    expect(formatOf({ data: { format: "excel", suggestion: { idea: "mushroom art" } } })).toBe("excel");
+    expect(formatOf({ demo: true, data: { format: "excel" } })).toBe("art");
+  });
+});
+
+describe("preview maths", () => {
+  it("works out example rows and the dashboard like the spreadsheet will", async () => {
+    const { previewValues, evalArith, formatValue } = await import("../../src/shared/sheetSpec");
+    expect(evalArith("(2 + 3) * 4 - 10 / 4")).toBe(17.5);
+    expect(evalArith("5 / 0")).toBe(0);
+    expect(evalArith("-3 + 1")).toBe(-2);
+    const { spec } = tidySheetSpec(
+      {
+        ...christmas,
+        tabs: [{ ...christmas.tabs[0], exampleRows: [["Mum", "Socks", 25, 18, null, "Yes", "Online"], ["Dad", "Gloves", 20, 30, null, "No", "Online"]] }],
+      },
+      "x",
+    );
+    const p = previewValues(spec);
+    expect(p.tabs[0].rows.map((r) => r[4])).toEqual([7, -10]);
+    expect(p.summary.map((s) => s.value)).toEqual([48, 352, 1, 50]);
+    expect(formatValue(-10, "money", "£")).toBe("-£10.00");
+  });
+});

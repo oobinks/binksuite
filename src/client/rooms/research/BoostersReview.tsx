@@ -1,10 +1,14 @@
 // Analyst's brief, plus "boosters": ideas the agent came up with to make the product stronger.
 import { useEffect, useState } from "react";
 import type { ReviewDef } from "../shared/types";
+import { FormatBadge } from "../../components/FormatBadge";
+import { SheetPreview } from "../shared/SheetPreview";
+import type { SheetSpec } from "../../../shared/sheetSpec";
+import type { ProductFormat } from "../../../shared/format";
 
 interface Booster {
   id: string;
-  kind: "slogan" | "art" | "bundle" | "listing";
+  kind: "slogan" | "art" | "bundle" | "listing" | "feature";
   title: string;
   why: string;
   artHint?: string;
@@ -18,6 +22,9 @@ interface Out {
   style: string;
   palette: string[];
   boosters?: Booster[];
+  format?: ProductFormat;
+  sheet?: SheetSpec;
+  included?: string;
 }
 
 const KIND = {
@@ -25,6 +32,7 @@ const KIND = {
   art: { icon: "🎨", label: "Art twist" },
   bundle: { icon: "🎁", label: "Bundle" },
   listing: { icon: "🏷️", label: "Listing" },
+  feature: { icon: "🧩", label: "Extra feature" },
 };
 
 export const boostersReview: ReviewDef = {
@@ -50,7 +58,10 @@ export const boostersReview: ReviewDef = {
     return (
       <div className="space-y-4">
         <div className="rounded-xl bg-black/[0.03] p-3 dark:bg-white/[0.04]">
-          <div className="text-lg font-black">{o.productTitle}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-lg font-black">{o.productTitle}</span>
+            <FormatBadge format={o.format ?? task.productFormat} />
+          </div>
           <div className="text-sm text-cocoa dark:text-stone-400">
             For {o.audience} · {o.style}
           </div>
@@ -61,14 +72,18 @@ export const boostersReview: ReviewDef = {
               ))}
             </div>
           )}
+          {o.included && <div className="mt-1 text-xs">📦 {o.included}</div>}
         </div>
+        {o.sheet && <SheetPreview spec={o.sheet} />}
 
         {boosters.length === 0 ? (
           <p className="text-sm">The Analyst didn't pitch any boosters this time. Add your own idea below if you like.</p>
         ) : (
           <div>
             <h4 className="font-black">✨ The Analyst has ideas to make this stronger</h4>
-            <p className="mb-2 text-sm text-cocoa dark:text-stone-400">Switch on the ones you like. The Designer and Copywriter will use them.</p>
+            <p className="mb-2 text-sm text-cocoa dark:text-stone-400">
+              Switch on the ones you like. {o.sheet ? "Extra features are added to the design before the Printer builds it." : "The Designer and Copywriter will use them."}
+            </p>
             <ul className="space-y-2">
               {boosters.map((b) => {
                 const active = !!on[b.id];
@@ -86,7 +101,7 @@ export const boostersReview: ReviewDef = {
                           </span>
                         </span>
                         <span className="block text-sm text-cocoa dark:text-stone-400">{b.why}</span>
-                        {b.artHint && <span className="block text-xs italic">🎨 {b.artHint}</span>}
+                        {b.artHint && <span className="block text-xs italic">{b.kind === "feature" ? "🧩" : "🎨"} {b.artHint}</span>}
                         {b.listingHint && <span className="block text-xs italic">🏷️ {b.listingHint}</span>}
                       </span>
                     </button>
@@ -122,7 +137,13 @@ export const boostersReview: ReviewDef = {
         )}
         <label className="block">
           <span className="label">💡 Your own idea (optional)</span>
-          <input className="input" value={custom} onChange={(e) => setCustom(e.target.value)} maxLength={300} placeholder="e.g. add a tiny snail hiding in each print" />
+          <input
+            className="input"
+            value={custom}
+            onChange={(e) => setCustom(e.target.value)}
+            maxLength={300}
+            placeholder={o.sheet ? "e.g. add a tab for Christmas cards with a Sent? tick box" : "e.g. add a tiny snail hiding in each print"}
+          />
         </label>
       </div>
     );

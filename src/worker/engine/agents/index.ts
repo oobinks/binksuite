@@ -10,6 +10,7 @@ import { nicheFromSuggestion, researchIdea, type MarketReport } from "./marketRe
 import { friendlyPrice, priceStats, type CompetitorPrice } from "../../../shared/pricing";
 import { undercutPrice } from "../../../shared/market";
 import { REAL_STEPS } from "./real";
+import { formatOf, isSheetFormat } from "../../../shared/format";
 
 export type { StepDef } from "./types";
 
@@ -86,6 +87,21 @@ export const STEPS: StepDef[] = [
       };
     },
     next: "images",
+    // 📊 Spreadsheets and 📄 printable trackers are designed, not painted: skip the art steps.
+    nextFor: (p) => (!p.demo && isSheetFormat(formatOf(p)) ? "sheet_build" : "images"),
+  },
+  {
+    kind: "sheet_build",
+    agent: "printer",
+    room: "studio",
+    needsApproval: true,
+    approvalKind: "review",
+    durationMs: [6_000, 10_000],
+    estimatedCostPence: 0,
+    title: (p) => `Build files: ${p.title}`,
+    // Only real products reach this step (see brief.nextFor); the real version lives in real.ts.
+    run: () => ({ output: {}, log: "Spreadsheet files are built on your device" }),
+    next: "mockups",
   },
   {
     kind: "images",

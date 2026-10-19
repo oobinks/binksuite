@@ -70,6 +70,8 @@ export interface StepDef {
   standalone?: boolean;
   /** Next step kind after approval / auto-finish; null = product goes live. */
   next: string | null;
+  /** Pick the next step per product (e.g. spreadsheets skip the art steps). Falls back to `next`. */
+  nextFor?(product: ProductRow): string | null;
   /** Rejecting sends the product back to this step instead of redoing this one. */
   rejectTo?: string;
   /** Return an error message to refuse an approval (e.g. failing compliance without an override note). */

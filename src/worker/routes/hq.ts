@@ -11,6 +11,7 @@ import { kvGet, kvSet, visible } from "../lib/store";
 import { radarTick } from "../engine/trends";
 import { priceWatchTick } from "../engine/priceWatch";
 import { etsyFor } from "./radar";
+import { FORMATS, formatOf } from "../../shared/format";
 import { tick, approveTask, rejectTask, retryTask, dropTask, suggestIdea, listSuggestions, EngineError } from "../engine/queue";
 import { buildBriefing, buildSnapshot } from "../engine/snapshot";
 import { recordEvent, checkAchievements } from "../engine/game";
@@ -24,7 +25,7 @@ const TASK_HISTORY_MS = 3 * 86_400_000;
 async function taskViews(db: DB, where: Parameters<typeof and>[number], demoMode: boolean): Promise<TaskView[]> {
   const cutoff = new Date(Date.now() - TASK_HISTORY_MS).toISOString();
   const rows = await db
-    .select({ t: tasks, productTitle: products.title })
+    .select({ t: tasks, productTitle: products.title, productNiche: products.niche, productData: products.data, productDemo: products.demo })
     .from(tasks)
     .leftJoin(products, eq(products.id, tasks.productId))
     .where(
@@ -38,10 +39,11 @@ async function taskViews(db: DB, where: Parameters<typeof and>[number], demoMode
     .limit(60)
     .all();
   const now = Date.now();
-  return rows.map(({ t, productTitle }) => ({
+  return rows.map(({ t, productTitle, productNiche, productData, productDemo }) => ({
     id: t.id,
     productId: t.productId,
     productTitle: productTitle ?? "",
+    productFormat: formatOf({ demo: productDemo ?? t.demo, niche: productNiche ?? "", data: productData }),
     room: t.room as RoomId,
     agent: t.agent as AgentId | null,
     kind: t.kind,
@@ -148,9 +150,10 @@ export const hqRoutes = newApp()
       z.object({
         idea: z.string().trim().min(3, "Tell Scout a bit more (3+ characters)").max(120),
         notes: z.string().max(1000).optional(),
+        format: z.enum(FORMATS).optional(),
       }),
     );
-    const p = await suggestIdea(c.get("db"), c.get("settings"), b.idea, b.notes, !!aiFor(c));
+    const p = await suggestIdea(c.get("db"), c.get("settings"), b.idea, b.notes, !!aiFor(c), { format: b.format });
     return c.json({ ok: true, productId: p.id, real: !p.demo });
   })
   .post("/research/ideas", async (c) => {

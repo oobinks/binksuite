@@ -4,6 +4,7 @@ import type { TaskView } from "../../../shared/api";
 import { Avatar } from "../../agents/Avatar";
 import { ProgressBar } from "../../components/ui";
 import { timeAgo } from "../../lib/format";
+import { FormatBadge } from "../../components/FormatBadge";
 
 const COLUMNS: { key: string; title: string; icon: string; states: TaskView["state"][] }[] = [
   { key: "you", title: "Needs you", icon: "❗", states: ["needs_approval"] },
@@ -50,7 +51,8 @@ function TaskCard({ task, onOpen, onRetry }: { task: TaskView; onOpen: (t: TaskV
         {agent ? <Avatar agent={agent} size={28} showProp={false} status={task.state === "working" ? "working" : "idle"} /> : <span className="text-xl">👤</span>}
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold leading-tight">{task.title}</div>
-          <div className="text-[11px] text-cocoa dark:text-stone-400">
+          <div className="flex flex-wrap items-center gap-1 text-[11px] text-cocoa dark:text-stone-400">
+            {task.productId && <FormatBadge format={task.productFormat} />}
             {agent?.name ?? "You"} · {timeAgo(task.updatedAt)}
           </div>
         </div>

@@ -39,7 +39,7 @@ interface RawListing {
   listing_type?: string;
 }
 
-const DIGITAL_WORDS = /printable|digital|download|template|svg|png|pdf/i;
+const DIGITAL_WORDS = /printable|digital|download|template|svg|png|pdf|spreadsheet|excel|google sheets?|xlsx/i;
 
 /** We compete with digital downloads, so search for those rather than posters and framed prints. */
 export function digitalQuery(keywords: string): string {

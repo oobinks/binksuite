@@ -123,6 +123,7 @@ Checked against the code on 19 Oct 2026. ✅ = handled by the app · 🟡 = part
 | No fake "was/now" prices | ✅ | The app never creates sales or discounts. The Pricer only suggests a single price. |
 | Fees in profit tracking | ✅ | Listing, transaction, payment processing and VAT on fees are in every price and in the Finance Vault. |
 | Buyer data (UK GDPR) | ✅ | BinkSuite stores no buyer names, emails or addresses. Recorded sales are only amounts. The Etsy key is read-only for public listings and is encrypted in the Key Vault. |
+| Spreadsheets: no financial advice or tax maths | ✅ | 📊 EXCEL products never calculate tax, National Insurance, pensions or interest; buyers type their own take-home figures. The Copywriter is told not to promise financial results. Every formula is checked before a file is built. |
 | Messages | ➖ | BinkSuite never messages buyers. If a Messages helper is added, it must follow section 6 and the guardrail above. |
 | Reviews | ✅ | The app never writes or asks for reviews. |
 | One shop | 👤 | The app is built for one shop. |

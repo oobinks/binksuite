@@ -23,7 +23,56 @@ export const fakeAi: AiServices = {
         priceHighGBP: 7,
         seasonality: "Peaks August to November.",
       };
-    else if (keys.includes("imagePrompts"))
+    else if (keys.includes("sheet") || keys.includes("tabs")) {
+      const sheet = {
+        title: "Christmas Gift Tracker",
+        subtitle: "(Local test) Every present, every penny",
+        currency: "£",
+        accent: "#c0392b",
+        howTo: ["Type your Christmas budget on the Summary tab", "Add each gift on the Gifts tab", "Mark gifts as bought as you go"],
+        inputs: [{ label: "Christmas budget", type: "money", example: 400 }],
+        summary: [
+          { label: "Total budgeted", formula: "SUM(Gifts[Budget])", type: "money" },
+          { label: "Total spent", formula: "SUM(Gifts[Spent])", type: "money" },
+          { label: "Left to spend", formula: "{input:Christmas budget} - [Total spent]", type: "money" },
+          { label: "Gifts bought", formula: 'COUNTIF(Gifts[Bought?], "Yes")', type: "number" },
+        ],
+        tabs: [
+          {
+            name: "Gifts",
+            columns: [
+              { header: "Person", type: "text" },
+              { header: "Gift idea", type: "text" },
+              { header: "Budget", type: "money" },
+              { header: "Spent", type: "money" },
+              { header: "Left", type: "money", formula: "{Budget} - {Spent}" },
+              { header: "Bought?", type: "checkbox" },
+              { header: "Where", type: "choice", options: ["Online", "In store", "Handmade"] },
+            ],
+            exampleRows: [
+              ["Mum", "Cosy socks and candle", "30", "24.50", "", "Yes", "Online"],
+              ["Dad", "Gardening gloves", "25", "", "", "No", "In store"],
+              ["Ellie", "Art set", "20", "18", "", "Yes", "Online"],
+            ],
+            blankRows: 40,
+            totals: true,
+          },
+        ],
+      };
+      out = keys.includes("sheet")
+        ? {
+            productTitle: "Christmas Gift Tracker",
+            audience: "Busy families planning Christmas",
+            style: "festive, clean and cosy",
+            palette: ["#c0392b", "#f6efe4", "#2e7d32", "#e9a96b", "#3b2f2a"],
+            sheet,
+            boosters: [
+              { kind: "feature", title: "Add a card list tab", why: "(Local test) Buyers also track cards", artHint: "Add a tab 'Cards' with Name, Address, Sent? (checkbox)" },
+              { kind: "bundle", title: "Excel + printable PDF", why: "(Local test) Two formats feel like more value", listingHint: "Includes both the spreadsheet and a printable PDF" },
+            ],
+          }
+        : sheet;
+    } else if (keys.includes("imagePrompts"))
       out = {
         productTitle: "Cottage Toadstool Print Set",
         audience: "Cottagecore and plant lovers",
