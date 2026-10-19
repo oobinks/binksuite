@@ -54,6 +54,8 @@ export function TrendRadar({ settings }: { settings: Settings }) {
   if (!data) return null;
   const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
   const live = data.etsyConnected;
+  // Niches where your minimum profit stops you undercutting the median properly.
+  const squeezed = data.niches.filter((n) => n.medianPricePence && undercutPrice(n.medianPricePence, settings.radar.undercutPercent, floor) === floor).length;
 
   return (
     <Section
@@ -61,7 +63,11 @@ export function TrendRadar({ settings }: { settings: Settings }) {
       icon="📡"
       right={
         <span className={`chip ${live ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-honey/25"}`}>
-          {live ? `🟢 Live Etsy data · ${data.scannedLive}/${data.watching} niches read` : "🟡 AI estimates: add your Etsy key for live data"}
+          {live
+            ? data.scannedLive
+              ? `🟢 Live Etsy data · ${data.scannedLive}/${data.watching} niches read`
+              : "🟢 Etsy connected · first scan starting, or tap Scan now"
+            : "🟡 AI estimates: add your Etsy key for live data"}
         </span>
       }
     >
@@ -150,9 +156,7 @@ export function TrendRadar({ settings }: { settings: Settings }) {
                   <td className="px-1 tabular-nums">{n.favsPerDay != null ? `${n.favsPerDay} ♥/day` : "—"}</td>
                   <td className="px-1 tabular-nums">{n.totalListings != null ? n.totalListings.toLocaleString() : "—"}</td>
                   <td className="px-1 tabular-nums">{n.medianPricePence ? formatGBP(n.medianPricePence) : "—"}</td>
-                  <td className="px-1 font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                    {n.medianPricePence ? formatGBP(undercutPrice(n.medianPricePence, settings.radar.undercutPercent, floor)) : "—"}
-                  </td>
+                  <UndercutCell medianPence={n.medianPricePence} undercutPercent={settings.radar.undercutPercent} floorPence={floor} />
                   <td className="px-1 text-right">
                     <button className="btn-good !px-2 !py-1 text-xs" onClick={() => research.mutate(n.keyword)} disabled={research.isPending}>
                       🔬 Research
@@ -166,8 +170,19 @@ export function TrendRadar({ settings }: { settings: Settings }) {
       )}
       <p className="mt-2 text-xs text-cocoa dark:text-stone-400">
         <b>Heat</b> = how fast brand-new listings are collecting favourites, against how crowded the niche is. Etsy doesn't share sales numbers with anyone, so this is
-        the best live signal. <b>Undercut at</b> = {settings.radar.undercutPercent}% below the median, never below your {formatGBP(settings.minProfitPence)} minimum profit.
+        the best live signal. <b>Undercut at</b> = {settings.radar.undercutPercent}% below the median, never below {formatGBP(floor)} (the lowest price that still
+        leaves your {formatGBP(settings.minProfitPence)} minimum profit).
       </p>
+      {squeezed > 0 && (
+        <p className="mt-2 rounded-xl bg-honey/15 p-2 text-xs">
+          ⚠️ In <b>{squeezed}</b> of these niches your minimum profit stops a proper undercut (shown in amber). Today's ideas pick niches with room to undercut first. To
+          compete harder on price, lower <b>Minimum profit per sale</b> in{" "}
+          <Link to="/settings" className="font-bold underline">
+            Settings
+          </Link>
+          .
+        </p>
+      )}
 
       <form
         className="mt-3 flex gap-2"
@@ -183,5 +198,19 @@ export function TrendRadar({ settings }: { settings: Settings }) {
       </form>
       <ErrorNote error={scan.error ?? daily.error ?? research.error ?? watch.error} />
     </Section>
+  );
+}
+
+/** Green when we can undercut properly; amber when the profit floor holds the price at (or above) the market. */
+function UndercutCell({ medianPence, undercutPercent, floorPence }: { medianPence: number | null; undercutPercent: number; floorPence: number }) {
+  if (!medianPence) return <td className="px-1">—</td>;
+  const price = undercutPrice(medianPence, undercutPercent, floorPence);
+  if (price !== floorPence) return <td className="px-1 font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{formatGBP(price)}</td>;
+  const atOrAbove = price >= medianPence;
+  return (
+    <td className="px-1 tabular-nums text-amber-700 dark:text-amber-300" title={`Your minimum profit needs at least ${formatGBP(floorPence)}`}>
+      <b>{formatGBP(price)}</b>
+      <span className="block text-[11px]">{atOrAbove ? "⚠️ above market" : "min profit"}</span>
+    </td>
   );
 }
