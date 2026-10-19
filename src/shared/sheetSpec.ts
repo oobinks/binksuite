@@ -235,7 +235,12 @@ export function normaliseSpec(spec: SheetSpec): SheetSpec {
 
 /** The real sheet names a tab becomes (a monthly tab becomes Jan … Dec). */
 export function sheetNames(t: SheetTab): string[] {
-  return t.repeat === "months" ? [...MONTHS] : [t.name];
+  return t.repeat === "months" ? [...MONTHS] : [excelSheetName(t.name)];
+}
+
+/** Excel keeps the sheet name "History" for itself (any case), so a tab called that becomes "History Log". */
+export function excelSheetName(name: string): string {
+  return /^history$/i.test(name.trim()) ? `${name.trim()} Log` : name;
 }
 
 /** Every sheet the buyer fills in, in order. */

@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { isStaleBuild, reloadForUpdate } from "../lib/staleBuild";
 import { STATUS_EMOJI, STATUS_LABEL, type AgentStatus } from "../../shared/tasks";
 
 export function ProgressBar({ value, color = "#f2b35b", className = "", label }: { value: number; color?: string; className?: string; label?: string }) {
@@ -115,6 +116,17 @@ export function Spinner() {
 }
 
 export function ErrorNote({ error }: { error: unknown }) {
+  const stale = !!error && isStaleBuild(error);
+  useEffect(() => {
+    if (stale) reloadForUpdate();
+  }, [stale]);
   if (!error) return null;
+  if (stale) {
+    return (
+      <p className="rounded-xl bg-honey/20 px-3 py-2 text-sm font-semibold">
+        ✨ BinkSuite was just updated. Reloading to the new version… If nothing happens, refresh the page and try again.
+      </p>
+    );
+  }
   return <p className="rounded-xl bg-berry/10 px-3 py-2 text-sm font-semibold text-berry">{error instanceof Error ? error.message : String(error)}</p>;
 }
