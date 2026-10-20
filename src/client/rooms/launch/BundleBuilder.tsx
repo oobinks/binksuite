@@ -1,4 +1,4 @@
-// 🎁 Bundle builder: pick finished products (or tap an idea), name it, choose the saving.
+// Bundle builder: pick finished products (or tap an idea), name it, choose the saving.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
@@ -6,6 +6,7 @@ import { formatGBP } from "../../lib/format";
 import { FormatBadge } from "../../components/FormatBadge";
 import { ArtImage } from "../../components/ArtImage";
 import { ErrorNote, Section } from "../../components/ui";
+import { Icon } from "../../components/Icon";
 import { BUNDLE_MAX, BUNDLE_MIN, BUNDLE_SAVE_DEFAULT, separatePrice, type BundleCandidate, type BundleIdea } from "../../../shared/bundle";
 
 export function BundleBuilder() {
@@ -40,20 +41,20 @@ export function BundleBuilder() {
   };
 
   return (
-    <Section title="Bundle builder" icon="🎁">
+    <Section title="Bundle builder">
       {list.length < BUNDLE_MIN ? (
-        <p className="text-sm text-cocoa dark:text-stone-400">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
           Bundles sell your finished products together for less than buying them one by one. Once {BUNDLE_MIN} or more products have their files, listing and price done, they'll show up here.
         </p>
       ) : (
         <div className="space-y-3">
           {data!.ideas.length > 0 && (
             <div>
-              <div className="label">💡 Bundle ideas</div>
+              <div className="label">Bundle ideas</div>
               <div className="flex flex-wrap gap-2">
                 {data!.ideas.map((i) => (
                   <button key={i.name} className="btn-soft text-left text-xs" onClick={() => useIdea(i)} title={i.why}>
-                    🎁 {i.name} <span className="opacity-60">({i.ids.length})</span>
+                    {i.name} <span className="text-zinc-400 tabular-nums">({i.ids.length})</span>
                   </button>
                 ))}
               </div>
@@ -71,16 +72,21 @@ export function BundleBuilder() {
                     key={c.id}
                     onClick={() => toggle(c.id)}
                     aria-pressed={on}
-                    className={`flex items-center gap-2 rounded-xl p-2 text-left text-sm ring-2 ${on ? "bg-honey/25 ring-honey" : "bg-white ring-black/5 dark:bg-night-3 dark:ring-white/10"}`}
+                    className={`flex items-center gap-3 rounded-lg border p-2 text-left text-sm transition ${on ? "border-indigo-300 bg-indigo-50/60 dark:border-indigo-500/40 dark:bg-indigo-500/10" : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-night-3 dark:hover:border-white/20"}`}
                   >
-                    {c.cover ? <ArtImage imageKey={c.cover} className="h-12 w-16 shrink-0 rounded-md" /> : <span className="grid h-12 w-16 shrink-0 place-items-center rounded-md bg-black/5 text-xl">📦</span>}
+                    {c.cover ? <ArtImage imageKey={c.cover} className="h-12 w-16 shrink-0 rounded-md" /> : <span className="grid h-12 w-16 shrink-0 place-items-center rounded-md bg-zinc-100 text-zinc-400 dark:bg-white/[0.06]"><Icon name="orders" size={18} /></span>}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-bold">{c.title}</span>
-                      <span className="flex items-center gap-1.5 text-xs">
-                        <FormatBadge format={c.format} /> {formatGBP(c.pricePence)} {!c.live && <span className="opacity-60">· not launched yet</span>}
+                      <span className="block truncate font-medium">{c.title}</span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                        <FormatBadge format={c.format} /> <span className="tabular-nums">{formatGBP(c.pricePence)}</span> {!c.live && <span className="text-zinc-400">· not launched yet</span>}
                       </span>
                     </span>
-                    <span className="text-lg">{on ? "✅" : "⬜"}</span>
+                    <span
+                      className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded border ${on ? "border-accent bg-accent text-white dark:border-indigo-500 dark:bg-indigo-500" : "border-zinc-300 bg-white dark:border-white/20 dark:bg-transparent"}`}
+                      aria-hidden
+                    >
+                      {on && <Icon name="check" size={12} strokeWidth={2.5} />}
+                    </span>
                   </button>
                 );
               })}
@@ -88,7 +94,7 @@ export function BundleBuilder() {
           </div>
           {chosen.length >= BUNDLE_MIN && (
             <form
-              className="space-y-2 rounded-xl bg-black/[0.03] p-3 dark:bg-white/[0.04]"
+              className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-white/[0.03]"
               onSubmit={(e) => {
                 e.preventDefault();
                 make.mutate();
@@ -100,20 +106,25 @@ export function BundleBuilder() {
               </label>
               <label className="block">
                 <span className="label">
-                  Saving vs buying separately: <b>{save}%</b>
+                  Saving vs buying separately: <span className="text-zinc-900 tabular-nums dark:text-zinc-100">{save}%</span>
                 </span>
-                <input type="range" className="w-full" min={10} max={50} step={5} value={save} onChange={(e) => setSave(Number(e.target.value))} />
+                <input type="range" className="w-full accent-indigo-600" min={10} max={50} step={5} value={save} onChange={(e) => setSave(Number(e.target.value))} />
               </label>
-              <p className="text-sm">
-                Separately: <b>{formatGBP(separate)}</b> · Bundle: about <b>{formatGBP(about)}</b>. Pricer rounds it and keeps it above your minimum profit. Keep the separate listings live so the saving stays true.
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Separately: <span className="font-medium text-zinc-900 tabular-nums dark:text-zinc-100">{formatGBP(separate)}</span> · Bundle: about <span className="font-medium text-zinc-900 tabular-nums dark:text-zinc-100">{formatGBP(about)}</span>. Pricer rounds it and keeps it above your minimum profit. Keep the separate listings live so the saving stays true.
               </p>
               <button className="btn-primary w-full" disabled={name.trim().length < 3 || make.isPending}>
-                {make.isPending ? "Making…" : `🎁 Make this bundle (${chosen.length} products)`}
+                {make.isPending ? "Making…" : `Make this bundle (${chosen.length} products)`}
               </button>
               <ErrorNote error={make.error} />
             </form>
           )}
-          {done && <p className="rounded-xl bg-emerald-50 p-2 text-sm font-semibold dark:bg-emerald-900/25">✅ “{done}” is in the Print Studio. Open it there to build the bundle.</p>}
+          {done && (
+            <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+              <Icon name="check" size={15} className="shrink-0" />
+              “{done}” is in the Print Studio. Open it there to build the bundle.
+            </p>
+          )}
         </div>
       )}
     </Section>

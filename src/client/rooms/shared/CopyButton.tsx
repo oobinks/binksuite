@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { Icon } from "../../components/Icon";
 
 export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
       type="button"
-      className="btn-soft px-2.5 py-1 text-xs"
+      className="btn-soft inline-flex items-center gap-1.5 px-2.5 py-1 text-xs"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -21,7 +22,13 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
         setTimeout(() => setDone(false), 1500);
       }}
     >
-      {done ? "✅ Copied" : `📋 ${label}`}
+      {done ? (
+        <>
+          <Icon name="check" size={13} className="text-emerald-600 dark:text-emerald-400" /> Copied
+        </>
+      ) : (
+        label
+      )}
     </button>
   );
 }

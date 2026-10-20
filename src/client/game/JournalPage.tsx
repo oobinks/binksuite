@@ -1,10 +1,11 @@
-// Quests, achievements and the level ladder.
+// Goals, achievements and milestones.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { api } from "../lib/api";
-import { celebrate, useUi } from "../lib/store";
-import { formatGBP } from "../lib/format";
+import { useUi } from "../lib/store";
+import { formatGBP, plain } from "../lib/format";
 import { ProgressBar, Section } from "../components/ui";
+import { Icon } from "../components/Icon";
+import { PageHeader } from "../components/PageHeader";
 import { useSnapshot } from "../lib/hooks";
 import { MAX_LADDER_LEVEL, levelTitle, xpForLevel, type QuestStatus } from "../../shared/game";
 import type { AchievementView } from "../../shared/api";
@@ -17,95 +18,114 @@ export function JournalPage() {
   const toast = useUi((s) => s.toast);
   const claim = useMutation({
     mutationFn: (id: string) => api.post<{ xp: number }>(`/quests/${id}/claim`),
-    onSuccess: (r) => {
-      celebrate("small");
-      toast({ icon: "📜", title: `+${r.xp} XP`, body: "Quest reward claimed" });
+    onSuccess: () => {
+      toast({ icon: "", title: "Goal completed", body: "Marked as done" });
       qc.invalidateQueries();
     },
   });
 
   const list = (quests.data?.quests ?? []).filter((q) => q.visible);
-  const groups: [string, string, QuestStatus[]][] = [
-    ["Starter campaign", "🗺️", list.filter((q) => q.quest.kind === "campaign")],
-    ["Daily", "☀️", list.filter((q) => q.quest.kind === "daily")],
-    ["Weekly", "📅", list.filter((q) => q.quest.kind === "weekly")],
+  const groups: [string, QuestStatus[]][] = [
+    ["Getting started", list.filter((q) => q.quest.kind === "campaign")],
+    ["Daily", list.filter((q) => q.quest.kind === "daily")],
+    ["Weekly", list.filter((q) => q.quest.kind === "weekly")],
   ];
+  const achievements = ach.data?.achievements ?? [];
+  const unlocked = achievements.filter((a) => a.unlockedAt).length;
+  const level = snap?.game.level ?? 1;
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-black">📜 Journal</h1>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {groups.map(([title, icon, qs]) => (
-          <Section key={title} title={title} icon={icon}>
-            <ul className="space-y-3">
-              {qs.map((q) => (
-                <li key={q.quest.id} className={`rounded-xl p-3 ring-1 ring-black/5 dark:ring-white/10 ${q.claimed ? "opacity-60" : ""}`}>
-                  <div className="flex items-start gap-2">
-                    <span className="text-2xl" aria-hidden>
-                      {q.quest.icon}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-black">{q.quest.title}</span>
-                        <span className="chip">+{q.quest.xp} XP</span>
-                      </div>
-                      <p className="text-sm text-cocoa dark:text-stone-400">{q.quest.description}</p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <ProgressBar value={q.progress / q.quest.target} color="#5bbf9a" className="flex-1" label={q.quest.title} />
-                        <span className="text-xs font-bold">
-                          {q.quest.metric === "profit" ? `${formatGBP(q.progress)}/${formatGBP(q.quest.target)}` : `${q.progress}/${q.quest.target}`}
+    <div className="space-y-8">
+      <PageHeader title="Activity" subtitle="Goals, achievements and milestones for the shop." />
+
+      <section>
+        <h2 className="mb-3 text-[15px] font-semibold">Goals</h2>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {groups.map(([title, qs]) => (
+            <Section key={title} title={title} right={<span className="text-xs text-zinc-400 tabular-nums">{qs.length}</span>}>
+              <ul className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
+                {qs.map((q) => (
+                  <li key={q.quest.id} className={`py-3 first:pt-0 last:pb-0 ${q.claimed ? "opacity-60" : ""}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-medium">{plain(q.quest.title)}</span>
+                      {q.claimed ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                          <Icon name="check" size={13} /> Done
                         </span>
-                      </div>
+                      ) : (
+                        <span className="shrink-0 text-[11px] text-zinc-400 tabular-nums dark:text-zinc-500">{q.quest.xp} XP</span>
+                      )}
                     </div>
-                  </div>
-                  {q.complete && !q.claimed && (
-                    <motion.button
-                      initial={{ scale: 0.9 }}
-                      animate={{ scale: [1, 1.04, 1] }}
-                      transition={{ repeat: Infinity, duration: 1.4 }}
-                      className="btn-good mt-2 w-full"
-                      onClick={() => claim.mutate(q.quest.id)}
-                      disabled={claim.isPending}
-                    >
-                      🎁 Claim reward
-                    </motion.button>
-                  )}
-                  {q.claimed && <p className="mt-1 text-xs font-bold text-emerald-700 dark:text-emerald-300">✅ Claimed</p>}
-                </li>
-              ))}
-              {qs.length === 0 && <li className="text-sm text-cocoa">All done! 🎉</li>}
-            </ul>
-          </Section>
-        ))}
-      </div>
-
-      <Section title="Achievements" icon="🏅">
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {(ach.data?.achievements ?? []).map((a) => (
-            <li key={a.id} className={`rounded-2xl p-3 text-center ring-1 ring-black/5 dark:ring-white/10 ${a.unlockedAt ? "bg-amber-50 dark:bg-amber-900/20" : "opacity-50 grayscale"}`}>
-              <div className="text-4xl" aria-hidden>
-                {a.unlockedAt ? a.icon : "🔒"}
-              </div>
-              <div className="mt-1 font-black">{a.title}</div>
-              <div className="text-xs text-cocoa dark:text-stone-400">{a.description}</div>
-            </li>
+                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{plain(q.quest.description)}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <ProgressBar value={q.progress / q.quest.target} color={q.complete ? "#10b981" : "#4f46e5"} className="flex-1" label={q.quest.title} />
+                      <span className="text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+                        {q.quest.metric === "profit" ? `${formatGBP(q.progress)}/${formatGBP(q.quest.target)}` : `${q.progress}/${q.quest.target}`}
+                      </span>
+                    </div>
+                    {q.complete && !q.claimed && (
+                      <button className="btn-primary mt-2.5 w-full px-2.5 py-1 text-xs" onClick={() => claim.mutate(q.quest.id)} disabled={claim.isPending}>
+                        Mark complete
+                      </button>
+                    )}
+                  </li>
+                ))}
+                {qs.length === 0 && <li className="py-2 text-sm text-zinc-500 dark:text-zinc-400">Nothing outstanding.</li>}
+              </ul>
+            </Section>
           ))}
-        </ul>
-      </Section>
+        </div>
+      </section>
 
-      <Section title="Shop titles" icon="🔝" right={<span className="chip">every room is always open</span>}>
-        <ol className="space-y-2">
-          {Array.from({ length: MAX_LADDER_LEVEL }, (_, i) => i + 1).map((lv) => {
-            const reached = (snap?.game.level ?? 1) >= lv;
+      <Section title="Achievements" right={<span className="text-xs text-zinc-500 tabular-nums dark:text-zinc-400">{unlocked} of {achievements.length} unlocked</span>}>
+        <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {achievements.map((a) => {
+            const done = !!a.unlockedAt;
             return (
-              <li key={lv} className={`flex items-center gap-3 rounded-xl p-2 ${reached ? "bg-mint/10" : ""}`}>
-                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full font-black ${reached ? "bg-mint text-white" : "bg-black/10 dark:bg-white/10"}`}>{lv}</span>
-                <span className="flex-1 text-sm font-semibold">{levelTitle(lv)}</span>
-                <span className="text-xs text-cocoa dark:text-stone-400">{xpForLevel(lv)} XP</span>
+              <li key={a.id} className={`flex items-start gap-3 rounded-lg border p-3 ${done ? "border-zinc-200 bg-white dark:border-white/10 dark:bg-night-2" : "border-zinc-200/70 bg-zinc-50 dark:border-white/[0.06] dark:bg-white/[0.02]"}`}>
+                <span
+                  className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${done ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-zinc-100 text-zinc-400 dark:bg-white/[0.06] dark:text-zinc-500"}`}
+                  aria-label={done ? "Unlocked" : "Locked"}
+                >
+                  <Icon name={done ? "check" : "lock"} size={14} />
+                </span>
+                <div className="min-w-0">
+                  <div className={`text-sm font-medium ${done ? "" : "text-zinc-500 dark:text-zinc-400"}`}>{plain(a.title)}</div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">{plain(a.description)}</div>
+                </div>
               </li>
             );
           })}
-        </ol>
+        </ul>
+      </Section>
+
+      <Section title="Milestones" right={<span className="text-xs text-zinc-500 dark:text-zinc-400">All areas are always available</span>}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] font-semibold tracking-[0.06em] text-zinc-500 uppercase">
+              <th className="w-12 pb-2 font-semibold">Level</th>
+              <th className="pb-2 font-semibold">Title</th>
+              <th className="pb-2 text-right font-semibold">XP</th>
+              <th className="w-8 pb-2" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
+            {Array.from({ length: MAX_LADDER_LEVEL }, (_, i) => i + 1).map((lv) => {
+              const reached = level >= lv;
+              return (
+                <tr key={lv} className={reached ? "" : "text-zinc-500 dark:text-zinc-400"}>
+                  <td className="py-2 tabular-nums">{lv}</td>
+                  <td className={`py-2 ${lv === level ? "font-medium text-zinc-900 dark:text-white" : ""}`}>
+                    {plain(levelTitle(lv))}
+                    {lv === level && <span className="chip ml-2">Current</span>}
+                  </td>
+                  <td className="py-2 text-right tabular-nums">{xpForLevel(lv).toLocaleString("en-GB")}</td>
+                  <td className="py-2 text-right">{reached && <Icon name="check" size={14} className="ml-auto text-emerald-600 dark:text-emerald-400" />}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </Section>
     </div>
   );

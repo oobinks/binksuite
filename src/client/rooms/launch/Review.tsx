@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api } from "../../lib/api";
 import { ErrorNote } from "../../components/ui";
+import { Icon } from "../../components/Icon";
 
 interface Pack {
   listing?: { title: string; tags: string[]; description: string };
@@ -26,8 +27,8 @@ interface Pack {
 }
 
 export const launchReview: ReviewDef = {
-  approveLabel: "🚀 I've listed it on Etsy — mark as launched",
-  rejectLabel: "🔁 Rebuild pack",
+  approveLabel: "I've listed it on Etsy — mark as launched",
+  rejectLabel: "Rebuild pack",
   startsReady: true,
   Body: ({ task }) => {
     const p = task.output as unknown as Pack;
@@ -36,11 +37,11 @@ export const launchReview: ReviewDef = {
       <div className="space-y-4">
         {task.productId && <SendToEtsy productId={task.productId} />}
         {p.bundle && (
-          <div className="rounded-xl bg-honey/20 p-3 text-sm">
-            <div className="font-black">
-              🎁 Bundle of {p.bundle.items.length}: buyers save {p.bundle.savePercent}% ({formatGBP(p.bundle.separatePence)} separately)
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="font-semibold">
+              Bundle of {p.bundle.items.length}: buyers save {p.bundle.savePercent}% ({formatGBP(p.bundle.separatePence)} separately)
             </div>
-            <p className="text-xs">The description says so. Keep these listings live at their current prices so the saving stays true: {p.bundle.items.map((i) => `${i.title} (${formatGBP(i.pricePence)})`).join(", ")}.</p>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">The description says so. Keep these listings live at their current prices so the saving stays true: {p.bundle.items.map((i) => `${i.title} (${formatGBP(i.pricePence)})`).join(", ")}.</p>
           </div>
         )}
         <ListingCheck listing={l} research={p.seo} />
@@ -60,12 +61,12 @@ export const launchReview: ReviewDef = {
         </div>
         <Field label="Description" text={l.description} multiline />
         <Field label="Price" text={p.pricePence ? (p.pricePence / 100).toFixed(2) : ""} display={p.pricePence ? formatGBP(p.pricePence) : "—"} />
-        <div className="rounded-xl bg-black/5 p-3 text-sm dark:bg-white/5">
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300">
           <div className="label">Etsy settings to pick</div>
-          <ul className="space-y-0.5">
-            <li>• Type: <b>Digital files</b></li>
-            <li>• Who made it: <b>I did</b> · What is it: <b>A finished product</b></li>
-            <li>• “Designed by”: <b>you (the seller)</b></li>
+          <ul className="list-disc space-y-0.5 pl-5 marker:text-zinc-400">
+            <li>Type: <span className="font-medium">Digital files</span></li>
+            <li>Who made it: <span className="font-medium">I did</span> · What is it: <span className="font-medium">A finished product</span></li>
+            <li>“Designed by”: <span className="font-medium">you (the seller)</span></li>
           </ul>
         </div>
         {p.images && p.images.length > 0 && (
@@ -74,8 +75,8 @@ export const launchReview: ReviewDef = {
             <div className="flex flex-wrap gap-2">
               {p.images.map((k, i) => (
                 <button key={k} className="group relative" onClick={() => downloadImage(k, `${task.productFormat === "art" ? "art" : "listing-photo"}-${i + 1}.jpg`)} title="Download">
-                  <ArtImage imageKey={k} className="h-20 w-20 rounded-lg" />
-                  <span className="absolute inset-x-0 bottom-0 rounded-b-lg bg-black/50 text-[10px] font-bold text-white">⬇️ save</span>
+                  <ArtImage imageKey={k} className="h-20 w-20 rounded-lg border border-zinc-200 dark:border-white/10" />
+                  <span className="absolute inset-x-0 bottom-0 rounded-b-lg bg-zinc-950/60 py-0.5 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">Save</span>
                 </button>
               ))}
             </div>
@@ -98,18 +99,18 @@ export const launchReview: ReviewDef = {
         {p.files && (
           <div>
             <div className="label">Digital files ({p.zip})</div>
-            <ul className="text-sm">
+            <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 text-sm dark:divide-white/[0.06] dark:border-white/10">
               {p.files.map((f) => (
-                <li key={f}>📄 {f}</li>
+                <li key={f} className="px-3 py-1.5 font-mono text-xs text-zinc-700 dark:text-zinc-300">{f}</li>
               ))}
             </ul>
             {p.zipKey ? (
               <a className="btn-primary mt-2 text-xs" href={fileUrl(p.zipKey, p.zip)} download>
-                ⬇️ Download print pack (ZIP)
+                Download print pack (ZIP)
               </a>
             ) : (
               <button className="btn-soft mt-2 text-xs" disabled title="Demo products have no real files">
-                ⬇️ Download ZIP (demo)
+                Download ZIP (demo)
               </button>
             )}
           </div>
@@ -126,27 +127,35 @@ function Field({ label, text, multiline, display }: { label: string; text: strin
         <span className="label !mb-0">{label}</span>
         <CopyButton text={text} />
       </div>
-      <div className={`rounded-xl bg-white p-2.5 text-sm ring-1 ring-black/10 dark:bg-night-3 dark:ring-white/10 ${multiline ? "max-h-48 overflow-y-auto whitespace-pre-wrap" : ""}`}>{display ?? text}</div>
+      <div className={`rounded-lg border border-zinc-200 bg-white p-2.5 text-sm text-zinc-800 dark:border-white/10 dark:bg-night-3 dark:text-zinc-200 ${multiline ? "max-h-48 overflow-y-auto whitespace-pre-wrap" : ""}`}>{display ?? text}</div>
     </div>
   );
 }
 
-/** 🔎 How Etsy-ready the words are, and the searches they were written for. */
+/** How Etsy-ready the words are, and the searches they were written for. */
 function ListingCheck({ listing, research }: { listing: { title: string; tags: string[]; description: string }; research?: KeywordResearch }) {
   const { score, checks } = seoCheck(listing, research);
   const tagSet = new Set(listing.tags);
-  const colour = score >= 80 ? "bg-emerald-100 dark:bg-emerald-900/30" : score >= 60 ? "bg-amber-100 dark:bg-amber-900/30" : "bg-rose-100 dark:bg-rose-900/30";
+  const dot = score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-amber-500" : "bg-rose-500";
   return (
-    <details className={`rounded-2xl p-3 text-sm ${colour}`}>
-      <summary className="flex cursor-pointer items-center justify-between gap-2 font-black">
-        <span>🔎 Listing check: {score}%</span>
-        <span className="text-xs font-bold opacity-70">{checks.filter((c) => c.pass).length}/{checks.length} ✓ · tap for details</span>
+    <details className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-white/10 dark:bg-white/[0.03]">
+      <summary className="flex cursor-pointer items-center justify-between gap-2 font-semibold">
+        <span className="flex items-center gap-2">
+          <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
+          Listing check: <span className="tabular-nums">{score}%</span>
+        </span>
+        <span className="text-xs font-normal text-zinc-500 tabular-nums dark:text-zinc-400">{checks.filter((c) => c.pass).length}/{checks.length} passed · details</span>
       </summary>
-      <ul className="mt-2 space-y-1">
+      <ul className="mt-3 space-y-1.5">
         {checks.map((c) => (
-          <li key={c.key}>
-            {c.pass ? "✅" : "💡"} <b>{c.label}</b>
-            {!c.pass && <div className="ml-6 text-xs text-cocoa dark:text-stone-300">{c.tip}</div>}
+          <li key={c.key} className="flex items-start gap-2">
+            <span className={`mt-0.5 shrink-0 ${c.pass ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+              <Icon name={c.pass ? "check" : "alert"} size={14} />
+            </span>
+            <div className="min-w-0">
+              <span className="font-medium">{c.label}</span>
+              {!c.pass && <div className="text-xs text-zinc-500 dark:text-zinc-400">{c.tip}</div>}
+            </div>
           </li>
         ))}
       </ul>
@@ -159,14 +168,14 @@ function ListingCheck({ listing, research }: { listing: { title: string; tags: s
           </div>
           <div className="flex flex-wrap gap-1">
             {research.phrases.slice(0, 20).map((p) => (
-              <span key={p.phrase} className={`chip ${tagSet.has(p.phrase) ? "bg-emerald-200 dark:bg-emerald-800/60" : "bg-white/70 dark:bg-night-3"}`} title={p.listings ? `Used by ${p.listings} of the top listings` : undefined}>
-                {tagSet.has(p.phrase) ? "✓ " : ""}
+              <span key={p.phrase} className={`chip inline-flex items-center gap-1 ${tagSet.has(p.phrase) ? "border-emerald-300 text-emerald-700 dark:border-emerald-500/40 dark:text-emerald-300" : ""}`} title={p.listings ? `Used by ${p.listings} of the top listings` : undefined}>
+                {tagSet.has(p.phrase) && <Icon name="check" size={11} />}
                 {p.phrase}
-                {p.listings > 0 && <span className="opacity-50"> {p.listings}</span>}
+                {p.listings > 0 && <span className="text-zinc-400 tabular-nums"> {p.listings}</span>}
               </span>
             ))}
           </div>
-          {research.source === "etsy" && <p className="mt-1 text-xs opacity-70">From the listings Etsy shows first (official API). ✓ = in your tags. The number is how many top listings use it.</p>}
+          {research.source === "etsy" && <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">From the listings Etsy shows first (official API). Ticked = in your tags. The number is how many top listings use it.</p>}
         </div>
       )}
     </details>
@@ -182,7 +191,7 @@ interface EtsyDraft {
   category: string;
 }
 
-/** 🛍️ Send the product to your Etsy shop as a draft; you publish it on Etsy yourself. */
+/** Send the product to your Etsy shop as a draft; you publish it on Etsy yourself. */
 function SendToEtsy({ productId }: { productId: string }) {
   const qc = useQueryClient();
   const status = useQuery({ queryKey: ["etsy"], queryFn: () => api.get<{ shop: { shopName: string } | null; apiKey: boolean }>("/etsy") });
@@ -195,15 +204,18 @@ function SendToEtsy({ productId }: { productId: string }) {
   if (!status.data) return null;
   if (!status.data.shop)
     return (
-      <p className="rounded-xl bg-honey/20 p-2 text-sm font-semibold">
-        🛍️ <Link to="/settings#etsy" className="underline">Connect your Etsy shop</Link> to send this straight to Etsy as a draft. Or copy each piece across below (Etsy → Shop Manager → Listings → Add a listing).
+      <p className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-100">
+        <Link to="/settings#etsy" className="font-medium underline">Connect your Etsy shop</Link> to send this straight to Etsy as a draft. Or copy each piece across below (Etsy → Shop Manager → Listings → Add a listing).
       </p>
     );
   return (
-    <div className="space-y-2 rounded-2xl bg-orange-50 p-3 text-sm dark:bg-orange-900/20">
+    <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700 dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300">
       {draft ? (
         <>
-          <div className="font-black">✅ Draft on Etsy ({status.data.shop.shopName})</div>
+          <div className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-zinc-100">
+            <Icon name="check" size={15} className="text-emerald-600 dark:text-emerald-400" />
+            Draft on Etsy ({status.data.shop.shopName})
+          </div>
           <p>
             {draft.photos} photo{draft.photos === 1 ? "" : "s"} and {draft.files.length} download file{draft.files.length === 1 ? "" : "s"} ({draft.files.join(", ")}), in {draft.category}.
           </p>
@@ -216,7 +228,7 @@ function SendToEtsy({ productId }: { productId: string }) {
           </ol>
           <div className="flex flex-wrap gap-2">
             <a className="btn-primary" href={draft.editUrl} target="_blank" rel="noreferrer">
-              Open the draft on Etsy ↗
+              Open the draft on Etsy <Icon name="external" size={14} />
             </a>
             <button className="btn-soft text-xs" onClick={() => confirm("Send a second draft to Etsy? (Delete the old one there.)") && send.mutate(true)} disabled={send.isPending}>
               {send.isPending ? "Sending…" : "Send again"}
@@ -225,13 +237,13 @@ function SendToEtsy({ productId }: { productId: string }) {
         </>
       ) : (
         <>
-          <div className="font-black">🛍️ Send to {status.data.shop.shopName} as a draft</div>
+          <div className="font-semibold text-zinc-900 dark:text-zinc-100">Send to {status.data.shop.shopName} as a draft</div>
           <p>
             Creates the listing on Etsy with the title, tags, description, price, listing photos and{" "}
             {product.data?.downloads ? `${product.data.downloads} download file${product.data.downloads === 1 ? "" : "s"}` : "the download ZIP"}. Buyers can't see it until you press Publish on Etsy.
           </p>
           <button className="btn-primary w-full" onClick={() => send.mutate(false)} disabled={send.isPending}>
-            {send.isPending ? "Sending to Etsy… (about a minute)" : "🚀 Send to Etsy as a draft"}
+            {send.isPending ? "Sending to Etsy… (about a minute)" : "Send to Etsy as a draft"}
           </button>
         </>
       )}

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../../lib/api";
 import { useSnapshot, logEvent } from "../../lib/hooks";
-import { celebrate, useUi } from "../../lib/store";
+import { useUi } from "../../lib/store";
 import { formatGBP, toPence } from "../../lib/format";
 import { calculateFees, minimumPriceFor } from "../../../shared/fees";
 import type { FinanceSummary, LedgerEntry } from "../../../shared/api";
@@ -96,7 +96,6 @@ function FeeCalculator() {
         offsiteAds: ads,
       }),
     onSuccess: () => {
-      celebrate("small");
       toast({ icon: "💰", title: "Sale recorded", body: "Added to your ledger with its fees" });
       qc.invalidateQueries();
     },

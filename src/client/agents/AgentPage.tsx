@@ -7,7 +7,8 @@ import type { RoomDetail } from "../../shared/api";
 import { Avatar } from "./Avatar";
 import { ActivityLog } from "./ActivityLog";
 import { ProgressBar, Section, StatusPill, Toggle } from "../components/ui";
-import { timeAgo } from "../lib/format";
+import { plain, timeAgo } from "../lib/format";
+import { PageHeader } from "../components/PageHeader";
 
 export function AgentPage() {
   const { id } = useParams();
@@ -15,48 +16,53 @@ export function AgentPage() {
   const { data: snap } = useSnapshot();
   const save = useSaveSettings();
   const { data } = useQuery({ queryKey: ["agent", id], queryFn: () => api.get<RoomDetail>(`/agents/${id}`), refetchInterval: 4000, enabled: !!agent });
-  if (!agent) return <p>Unknown agent.</p>;
+  if (!agent) return <p className="text-sm text-zinc-500">Unknown agent.</p>;
   const room = ROOM_BY_ID[agent.room];
   const st = snap?.agents.find((a) => a.id === agent.id);
   const enabled = snap?.settings.agentsEnabled[agent.id] !== false;
   return (
-    <div className="space-y-4">
-      <Link to={`/room/${room.id}`} className="text-sm font-bold text-cocoa hover:underline dark:text-stone-400">
-        ← {room.icon} {room.name}
-      </Link>
-      <div className="card flex flex-col items-center gap-4 p-5 sm:flex-row" style={{ borderTop: `6px solid ${room.color}` }}>
-        <Avatar agent={agent} status={st?.status} size={110} />
-        <div className="flex-1 text-center sm:text-left">
-          <h1 className="text-3xl font-black">{agent.name}</h1>
-          <p className="font-semibold text-cocoa dark:text-stone-400">
-            {agent.role} · {room.icon} {room.name}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+    <div className="space-y-6">
+      <PageHeader
+        title={agent.name}
+        subtitle={
+          <>
+            {agent.role} · <Link to={`/room/${room.id}`} className="hover:text-zinc-900 hover:underline dark:hover:text-white">{plain(room.name)}</Link>
+          </>
+        }
+        back="/"
+        crumb="Dashboard"
+        right={
+          <label className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            On duty
+            <Toggle checked={enabled} onChange={(v) => save.mutate({ agentsEnabled: { [agent.id]: v } })} label={`${agent.name} on duty`} />
+          </label>
+        }
+      />
+      <div className="card flex items-center gap-4 p-4 sm:p-5">
+        <Avatar agent={agent} status={st?.status} size={48} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
             {st && <StatusPill status={st.status} />}
-            {st && <span className="text-sm italic">“{st.bubble}”</span>}
+            {st?.bubble && <span className="truncate text-sm text-zinc-500 dark:text-zinc-400">{plain(st.bubble)}</span>}
           </div>
-          {st?.status === "working" && <ProgressBar value={st.progress} color={room.color} className="mt-3 max-w-sm" label="Progress" />}
+          {st?.status === "working" && <ProgressBar value={st.progress} className="mt-3 max-w-sm" label="Progress" />}
         </div>
-        <label className="flex items-center gap-2 text-sm font-bold">
-          On duty
-          <Toggle checked={enabled} onChange={(v) => save.mutate({ agentsEnabled: { [agent.id]: v } })} label={`${agent.name} on duty`} />
-        </label>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section title="Activity log" icon="📒">
+        <Section title="Activity log">
           <ActivityLog items={data?.activity ?? []} empty={`${agent.name} hasn't done anything yet.`} />
         </Section>
-        <Section title="Recent tasks" icon="🗂️">
-          <ul className="space-y-1.5 text-sm">
+        <Section title="Recent tasks">
+          <ul className="divide-y divide-zinc-100 text-sm dark:divide-white/[0.06]">
             {(data?.tasks ?? []).map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-2">
-                <span className="truncate">{t.title}</span>
-                <span className="chip shrink-0">
-                  {t.state.replace("_", " ")} · {timeAgo(t.updatedAt)}
+              <li key={t.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                <span className="truncate text-zinc-700 dark:text-zinc-300">{plain(t.title)}</span>
+                <span className="shrink-0 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+                  <span className="capitalize">{t.state.replace("_", " ")}</span> · {timeAgo(t.updatedAt)}
                 </span>
               </li>
             ))}
-            {!data?.tasks.length && <li className="text-cocoa dark:text-stone-400">No tasks yet.</li>}
+            {!data?.tasks.length && <li className="text-zinc-500 dark:text-zinc-400">No tasks yet.</li>}
           </ul>
         </Section>
       </div>

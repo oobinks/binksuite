@@ -5,7 +5,7 @@ import { dataSheets, formatValue, hasDashboard, normaliseSpec, previewValues, SE
 
 function Bar({ value, max, colour }: { value: number; max: number; colour: string }) {
   return (
-    <span className="block h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+    <span className="block h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
       <span className="block h-full rounded-full" style={{ width: `${max ? Math.max(2, (Math.abs(value) / max) * 100) : 0}%`, background: colour }} />
     </span>
   );
@@ -20,36 +20,36 @@ export function SheetPreview({ spec: raw }: { spec: SheetSpec }) {
   const sheetCount = dataSheets(spec).length + 1 + (hasDashboard(spec) ? 1 : 0) + (spec.lists.length ? 1 : 0);
   const typeOf = (tab: string, col: string) => spec.tabs.find((t) => t.name === tab)?.columns.find((c) => c.header === col)?.type ?? "money";
   return (
-    <div className="overflow-hidden rounded-xl ring-1 ring-black/10 dark:ring-white/10">
+    <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-white/10">
       <div className="flex items-start justify-between gap-2 px-3 py-2" style={{ background: spec.accent }}>
         <div>
-          <div className="font-black text-white">{spec.title}</div>
+          <div className="text-sm font-semibold text-white">{spec.title}</div>
           {spec.subtitle && <div className="text-xs text-white/85">{spec.subtitle}</div>}
         </div>
-        <span className="chip shrink-0 bg-white/90 text-ink">{sheetCount} tabs</span>
+        <span className="shrink-0 rounded-md bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-zinc-800 tabular-nums">{sheetCount} tabs</span>
       </div>
-      <div className="max-h-80 overflow-y-auto bg-white p-2 text-ink dark:bg-night-3 dark:text-cream">
+      <div className="max-h-80 overflow-y-auto bg-white p-2.5 text-zinc-800 dark:bg-night-3 dark:text-zinc-200">
         {open === SUMMARY_TAB ? (
           <div className="space-y-3">
             <div className="grid gap-1.5 sm:grid-cols-2">
               {spec.inputs.map((i) => (
-                <div key={i.label} className="flex justify-between rounded-lg px-2 py-1 text-sm ring-2" style={{ ["--tw-ring-color" as string]: spec.accent }}>
-                  <span>✏️ {i.label}</span>
-                  <b>{formatValue(i.example, i.type, spec.currency)}</b>
+                <div key={i.label} className="flex justify-between rounded-md px-2 py-1 text-sm ring-1" style={{ ["--tw-ring-color" as string]: spec.accent }}>
+                  <span>{i.label}</span>
+                  <b className="font-semibold tabular-nums">{formatValue(i.example, i.type, spec.currency)}</b>
                 </div>
               ))}
               {values.summary.map((s) => (
-                <div key={s.label} className="flex justify-between rounded-lg bg-black/5 px-2 py-1 text-sm dark:bg-white/10">
-                  <span>🧮 {s.label}</span>
-                  <b>{formatValue(s.value, s.type, spec.currency)}</b>
+                <div key={s.label} className="flex justify-between rounded-md bg-zinc-100 px-2 py-1 text-sm dark:bg-white/[0.06]">
+                  <span>{s.label}</span>
+                  <b className="font-semibold tabular-nums">{formatValue(s.value, s.type, spec.currency)}</b>
                 </div>
               ))}
             </div>
             {values.goals.map((g) => (
               <div key={g.label} className="text-sm">
                 <div className="flex justify-between">
-                  <span>🎯 {g.label}</span>
-                  <b>{g.value}%</b>
+                  <span>{g.label}</span>
+                  <b className="font-semibold tabular-nums">{g.value}%</b>
                 </div>
                 <Bar value={Math.min(100, g.value)} max={100} colour={spec.accent} />
               </div>
@@ -58,8 +58,8 @@ export function SheetPreview({ spec: raw }: { spec: SheetSpec }) {
               const max = Math.max(...b.items.map((i) => i.value), 1);
               return (
                 <div key={b.title} className="text-xs">
-                  <div className="mb-1 font-black">
-                    🍩 {b.title} <span className="font-normal opacity-60">({b.chart} chart)</span>
+                  <div className="mb-1 font-semibold">
+                    {b.title} <span className="font-normal text-zinc-500 dark:text-zinc-400">({b.chart} chart)</span>
                   </div>
                   {b.items.map((i) => (
                     <div key={i.label} className="grid grid-cols-[7rem_1fr_5rem] items-center gap-2">
@@ -75,8 +75,8 @@ export function SheetPreview({ spec: raw }: { spec: SheetSpec }) {
               const max = Math.max(...t.months.flatMap((m) => m.values), 1);
               return (
                 <div key={t.title} className="text-xs">
-                  <div className="mb-1 font-black">
-                    📊 {t.title} <span className="font-normal opacity-60">({t.chart} chart: {t.series.join(" vs ")})</span>
+                  <div className="mb-1 font-semibold">
+                    {t.title} <span className="font-normal text-zinc-500 dark:text-zinc-400">({t.chart} chart: {t.series.join(" vs ")})</span>
                   </div>
                   <div className="flex h-20 items-end gap-1">
                     {t.months.map((m) => (
@@ -98,28 +98,28 @@ export function SheetPreview({ spec: raw }: { spec: SheetSpec }) {
           <div className="flex flex-wrap gap-3 text-xs">
             {spec.lists.map((l) => (
               <div key={l.name} className="min-w-32">
-                <div className="mb-1 rounded px-2 py-0.5 font-black text-white" style={{ background: spec.accent }}>
+                <div className="mb-1 rounded px-2 py-0.5 font-semibold text-white" style={{ background: spec.accent }}>
                   {l.name}
                 </div>
                 <ul className="space-y-0.5 px-2">
                   {l.items.map((i) => (
                     <li key={i}>{i}</li>
                   ))}
-                  <li className="opacity-50">+ spare rows to add your own</li>
+                  <li className="text-zinc-400 dark:text-zinc-500">+ spare rows to add your own</li>
                 </ul>
               </div>
             ))}
           </div>
         ) : tabIndex >= 0 ? (
           <div className="overflow-x-auto">
-            {spec.tabs[tabIndex].repeat === "months" && <p className="mb-1 text-xs font-bold">📅 12 tabs, Jan to Dec. January shown:</p>}
+            {spec.tabs[tabIndex].repeat === "months" && <p className="mb-1.5 text-xs text-zinc-500 dark:text-zinc-400">12 tabs, Jan to Dec. January shown:</p>}
             <table className="w-full text-xs">
               <thead>
                 <tr>
                   {spec.tabs[tabIndex].columns.map((c) => (
-                    <th key={c.header} className="whitespace-nowrap border border-black/10 px-1.5 py-1 text-left font-black dark:border-white/10" title={c.formula ? `Works out: ${c.formula}` : c.type}>
+                    <th key={c.header} className="whitespace-nowrap border border-zinc-200 bg-zinc-50 px-1.5 py-1 text-left font-semibold dark:border-white/10 dark:bg-white/[0.04]" title={c.formula ? `Works out: ${c.formula}` : c.type}>
                       {c.header}
-                      {c.formula ? " 🧮" : c.type === "checkbox" ? " ☑️" : c.type === "choice" ? " ▾" : ""}
+                      {c.formula ? <span className="ml-1 font-normal italic text-zinc-400">fx</span> : c.type === "checkbox" ? <span className="ml-1 inline-block h-2.5 w-2.5 rounded-sm border border-zinc-400 align-[-1px]" aria-label="checkbox" /> : c.type === "choice" ? " ▾" : ""}
                     </th>
                   ))}
                 </tr>
@@ -128,14 +128,14 @@ export function SheetPreview({ spec: raw }: { spec: SheetSpec }) {
                 {values.tabs[tabIndex].rows.map((r, k) => (
                   <tr key={k}>
                     {spec.tabs[tabIndex].columns.map((c, i) => (
-                      <td key={c.header} className={`whitespace-nowrap border border-black/10 px-1.5 py-1 dark:border-white/10 ${c.formula ? "bg-black/5 font-bold dark:bg-white/10" : ""}`}>
+                      <td key={c.header} className={`whitespace-nowrap border border-zinc-200 px-1.5 py-1 tabular-nums dark:border-white/10 ${c.formula ? "bg-zinc-50 font-medium dark:bg-white/[0.04]" : ""}`}>
                         {formatValue(r[i], c.type, spec.currency)}
                       </td>
                     ))}
                   </tr>
                 ))}
                 <tr>
-                  <td colSpan={spec.tabs[tabIndex].columns.length} className="px-1.5 py-1 text-center text-[11px] text-cocoa dark:text-stone-400">
+                  <td colSpan={spec.tabs[tabIndex].columns.length} className="px-1.5 py-1 text-center text-[11px] text-zinc-500 dark:text-zinc-400">
                     + {spec.tabs[tabIndex].blankRows} empty rows ready to fill in
                   </td>
                 </tr>
@@ -144,7 +144,7 @@ export function SheetPreview({ spec: raw }: { spec: SheetSpec }) {
           </div>
         ) : null}
       </div>
-      <div className="flex gap-1 overflow-x-auto bg-black/5 p-1 dark:bg-white/5" role="tablist">
+      <div className="flex gap-1 overflow-x-auto border-t border-zinc-200 bg-zinc-50 p-1 dark:border-white/10 dark:bg-white/[0.03]" role="tablist">
         {tabs.map((t) => {
           const monthly = spec.tabs.find((x) => x.name === t)?.repeat === "months";
           return (
@@ -153,13 +153,13 @@ export function SheetPreview({ spec: raw }: { spec: SheetSpec }) {
               role="tab"
               aria-selected={open === t}
               onClick={() => setOpen(t)}
-              className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-bold ${open === t ? "bg-white shadow dark:bg-night-2" : "opacity-70"}`}
+              className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${open === t ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-night-2 dark:text-white dark:ring-white/10" : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"}`}
             >
               {monthly ? `${t} ×12` : t}
             </button>
           );
         })}
-        <span className="shrink-0 px-2 py-0.5 text-xs opacity-60">+ How to use</span>
+        <span className="shrink-0 px-2 py-0.5 text-xs text-zinc-400 dark:text-zinc-500">+ How to use</span>
       </div>
     </div>
   );
