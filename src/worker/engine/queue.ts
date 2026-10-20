@@ -5,7 +5,7 @@
 import type { EtsyClient } from "../providers/etsy";
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { DB } from "../db";
-import { activity, approvals, claudeJobs, handoffs, ledger, products, tasks } from "../db/schema";
+import { activity, approvals, claudeJobs, handoffs, ledger, products, tasks, trendNiches } from "../db/schema";
 import { nextState, type TaskEvent, type TaskState } from "../../shared/tasks";
 import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared/registry";
 import { XP } from "../../shared/game";
@@ -144,7 +144,8 @@ export async function listSuggestions(db: DB, demoMode: boolean) {
     .orderBy(desc(products.createdAt))
     .limit(20)
     .all();
-  return rows.map((p) => {
+  // Dropped ideas leave the list (they can still come back as a new suggestion).
+  return rows.filter((p) => !(p.data as { dropped?: boolean }).dropped && p.stage !== "dropped").map((p) => {
     const d = p.data as { suggestion: { idea: string; notes?: string; origin?: string }; report?: { verdict: string; overall: number }; dropped?: boolean };
     return {
       productId: p.id,
@@ -536,9 +537,31 @@ export async function dropTask(db: DB, id: string, note?: string) {
   if (t.productId) {
     const p = await getProduct(db, t.productId);
     await db.update(products).set({ stage: "dropped", data: { ...p.data, dropped: true }, updatedAt: nowIso() }).where(eq(products.id, p.id));
+    await forgetDroppedIdea(db, p);
   }
   await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "rejected", `🗑️ Dropped: ${t.title}${note ? ` (${note})` : ""}`, t.demo);
   return getTask(db, id);
+}
+
+/**
+ * Dropping only removes an idea for now. Its niche can be suggested again (no
+ * "recently suggested" cooldown), and if it was one of today's ideas it goes back
+ * on today's list, ready to send again or to pick something else instead.
+ */
+async function forgetDroppedIdea(db: DB, p: ProductRow) {
+  const keyword = (p.data as { trendKeyword?: string }).trendKeyword;
+  if (keyword) await db.update(trendNiches).set({ lastSuggested: null }).where(eq(trendNiches.keyword, keyword));
+  const key = `daily:${new Date().toISOString().slice(0, 10)}`;
+  const daily = await kvGet<{ pickedId?: string; items: { id: string; productId?: string }[] }>(db, key);
+  const item = daily?.items.find((i) => i.productId === p.id);
+  if (!daily || !item) return;
+  delete item.productId;
+  if (daily.pickedId === item.id) {
+    const other = daily.items.find((i) => i.productId);
+    if (other) daily.pickedId = other.id;
+    else delete daily.pickedId;
+  }
+  await kvSet(db, key, daily);
 }
 
 export async function retryTask(db: DB, id: string) {

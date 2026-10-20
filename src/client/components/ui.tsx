@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { isStaleBuild, reloadForUpdate } from "../lib/staleBuild";
 import { STATUS_LABEL, type AgentStatus } from "../../shared/tasks";
@@ -82,18 +82,60 @@ export function Modal({ open, onClose, children, title, wide = false }: { open: 
   );
 }
 
-/** A titled card. `icon` is accepted for older call sites but emoji icons aren't drawn. */
-export function Section({ title, icon, children, right, className = "" }: { title: string; icon?: ReactNode; children: ReactNode; right?: ReactNode; className?: string }) {
+/** Open/closed state for a collapsible block, remembered on this device per page. */
+export function useCollapsed(id: string): [boolean, () => void] {
+  const key = `bs-collapsed:${location.pathname}:${id}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setCollapsed((c) => {
+      try {
+        if (c) localStorage.removeItem(key);
+        else localStorage.setItem(key, "1");
+      } catch {
+        /* private mode: just don't remember */
+      }
+      return !c;
+    });
+  return [collapsed, toggle];
+}
+
+/** A heading you can click to show or hide what's under it. */
+export function CollapseHeading({ title, collapsed, onToggle, className = "text-[15px]", icon }: { title: string; collapsed: boolean; onToggle: () => void; className?: string; icon?: ReactNode }) {
+  return (
+    <button type="button" onClick={onToggle} aria-expanded={!collapsed} className={`group -mx-1 flex items-center gap-1.5 rounded-md px-1 text-left font-semibold hover:text-zinc-900 dark:hover:text-white ${className}`} title={collapsed ? "Show" : "Hide"}>
+      <Icon name="chevronRight" size={15} className={`text-zinc-400 transition-transform duration-150 group-hover:text-zinc-600 ${collapsed ? "" : "rotate-90"}`} />
+      {icon}
+      {title}
+    </button>
+  );
+}
+
+/** A titled card. Click the title to collapse it. `icon` is accepted for older call sites but emoji icons aren't drawn. */
+export function Section({ title, icon, children, right, className = "", collapsible = true, id }: { title: string; icon?: ReactNode; children: ReactNode; right?: ReactNode; className?: string; collapsible?: boolean; id?: string }) {
+  const [collapsed, toggle] = useCollapsed(id ?? title);
+  const shut = collapsible && collapsed;
   return (
     <section className={`card p-4 sm:p-5 ${className}`}>
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-[15px] font-semibold">
-          {typeof icon === "string" ? null : icon}
-          {title}
-        </h3>
+      <div className={`flex items-center justify-between gap-2 ${shut ? "" : "mb-4"}`}>
+        {collapsible ? (
+          <h3>
+            <CollapseHeading title={title} collapsed={collapsed} onToggle={toggle} icon={typeof icon === "string" ? null : icon} />
+          </h3>
+        ) : (
+          <h3 className="flex items-center gap-2 text-[15px] font-semibold">
+            {typeof icon === "string" ? null : icon}
+            {title}
+          </h3>
+        )}
         {right}
       </div>
-      {children}
+      {!shut && children}
     </section>
   );
 }
