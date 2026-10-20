@@ -1,5 +1,5 @@
 // 🛍️ Connect your Etsy shop, and send finished products to it as drafts.
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { newApp, body, HttpError, type Ctx } from "../app";
 import { products } from "../db/schema";
@@ -8,6 +8,7 @@ import { EtsyError } from "../providers/etsy";
 import { callbackUrl, connectUrl, disconnect, ETSY_SCOPES, finishConnect, shopClient, shopInfo } from "../providers/etsyShop";
 import { ordersList, ordersState, syncOrders } from "../engine/orders";
 import { sendDraft } from "../engine/etsyPublish";
+import { renewalTick } from "../engine/renewals";
 
 const origin = (c: Ctx) => new URL(c.req.url).origin;
 
@@ -68,6 +69,31 @@ export const etsyRoutes = newApp()
     if (!shop) throw new HttpError(400, "Connect your Etsy shop first (Settings → Your Etsy shop).");
     try {
       return c.json({ ok: true, added: await syncOrders(db, c.get("settings"), shop, { force: true }) });
+    } catch (e) {
+      return etsyErrors(e);
+    }
+  })
+  // ⏳ Your products on Etsy with their expiry countdowns, and "Check now".
+  .get("/live", async (c) => {
+    const rows = await c
+      .get("db")
+      .select()
+      .from(products)
+      .where(and(eq(products.demo, false), sql`json_extract(${products.data}, '$.etsy.listingId') IS NOT NULL`))
+      .all();
+    return c.json({
+      products: rows.map((p) => {
+        const d = p.data as { etsy: { listingId: number; editUrl: string }; etsyLive?: { state: string; endsAt: string | null; views: number; favourites: number; checkedAt: string; url?: string } };
+        return { id: p.id, title: p.title, pricePence: p.pricePence, stage: p.stage, listingId: d.etsy.listingId, editUrl: d.etsy.editUrl, live: d.etsyLive ?? null };
+      }),
+    });
+  })
+  .post("/live/check", async (c) => {
+    const db = c.get("db");
+    const shop = await shopClient(db, c.env, await apiKeyOrThrow(c));
+    if (!shop) throw new HttpError(400, "Connect your Etsy shop first (Settings → Your Etsy shop).");
+    try {
+      return c.json({ ok: true, ...(await renewalTick(db, shop, { force: true })) });
     } catch (e) {
       return etsyErrors(e);
     }
