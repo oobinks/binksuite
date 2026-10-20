@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useSnapshot } from "../lib/hooks";
 import { formatGBP, plain } from "../lib/format";
-import { BUSINESS, LATER, PIPELINE, ROOM_ICON, ROOM_LABEL, ROOM_TONE } from "../lib/rooms";
+import { BUSINESS, GROW, PIPELINE, ROOM_ICON, ROOM_LABEL, ROOM_TONE } from "../lib/rooms";
 import type { IconName } from "../components/Icon";
 import { AGENTS, ROOM_BY_ID, type RoomId } from "../../shared/registry";
 import type { RoomSnapshot } from "../../shared/api";
@@ -50,7 +50,7 @@ export function HQPage() {
         <section className="lg:col-span-3">
           <SectionTitle title="Team" hint="What each agent is doing right now." />
           <div className="card divide-y divide-zinc-100 dark:divide-white/[0.06]">
-            {AGENTS.filter((a) => ROOM_BY_ID[a.room].demoInteractive || a.room === "orders").map((a) => {
+            {AGENTS.map((a) => {
               const st = snap.agents.find((s) => s.id === a.id);
               const status = st?.status ?? "idle";
               return (
@@ -77,10 +77,10 @@ export function HQPage() {
               <RoomRow key={id} id={id} st={room(id)} />
             ))}
           </div>
-          <h3 className="mt-6 mb-2 text-xs font-semibold tracking-[0.06em] text-zinc-400 uppercase dark:text-zinc-500">Coming later</h3>
+          <h3 className="mt-6 mb-3 text-[15px] font-semibold">Grow</h3>
           <div className="card divide-y divide-zinc-100 dark:divide-white/[0.06]">
-            {LATER.map((id) => (
-              <RoomRow key={id} id={id} muted />
+            {GROW.map((id) => (
+              <RoomRow key={id} id={id} st={room(id)} />
             ))}
           </div>
         </section>

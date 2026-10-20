@@ -33,7 +33,8 @@ export const ROOM_LABEL: Record<RoomId, string> = {
 /** The product pipeline, in order. */
 export const PIPELINE: RoomId[] = ["research", "studio", "mockups", "listing", "compliance", "launch"];
 export const BUSINESS: RoomId[] = ["orders", "finance"];
-export const LATER: RoomId[] = ["care", "marketing", "strategy"];
+/** Growing the shop: buyers, promotion and the weekly plan. */
+export const GROW: RoomId[] = ["care", "marketing", "strategy"];
 
 /** Each area's colour: a tinted tile, a coloured icon and a solid hex for bars. */
 export interface Tone {
@@ -51,7 +52,7 @@ export const ROOM_TONE: Record<RoomId, Tone> = {
   launch: { tile: "bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300", icon: "text-orange-500 dark:text-orange-400", hex: "#f97316" },
   orders: { tile: "bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300", icon: "text-rose-500 dark:text-rose-400", hex: "#f43f5e" },
   finance: { tile: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300", icon: "text-emerald-500 dark:text-emerald-400", hex: "#10b981" },
-  care: { tile: "bg-zinc-50 text-zinc-400 dark:bg-white/[0.03] dark:text-zinc-500", icon: "", hex: "#a1a1aa" },
-  marketing: { tile: "bg-zinc-50 text-zinc-400 dark:bg-white/[0.03] dark:text-zinc-500", icon: "", hex: "#a1a1aa" },
-  strategy: { tile: "bg-zinc-50 text-zinc-400 dark:bg-white/[0.03] dark:text-zinc-500", icon: "", hex: "#a1a1aa" },
+  care: { tile: "bg-cyan-50 text-cyan-600 dark:bg-cyan-500/15 dark:text-cyan-300", icon: "text-cyan-500 dark:text-cyan-400", hex: "#06b6d4" },
+  marketing: { tile: "bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-500/15 dark:text-fuchsia-300", icon: "text-fuchsia-500 dark:text-fuchsia-400", hex: "#d946ef" },
+  strategy: { tile: "bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300", icon: "text-blue-500 dark:text-blue-400", hex: "#3b82f6" },
 };
