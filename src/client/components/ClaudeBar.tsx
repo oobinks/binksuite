@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useUi } from "../lib/store";
+import { describeJob } from "../../shared/claudeJobs";
 
 export interface ClaudeStatus {
   provider: "workers" | "claude-code";
@@ -58,11 +59,19 @@ export function ClaudeBar({ provider }: { provider: string | undefined }) {
       </div>
     );
   if (!data.waiting && !data.working && !data.running) return null;
+  // The job in Claude's hands, or the next one up.
+  const now = data.jobs.find((j) => j.status === "working") ?? data.jobs[0];
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 bg-violet-100 px-4 py-1.5 text-xs font-bold text-violet-900 dark:bg-violet-900/40 dark:text-violet-100">
       {data.running || data.working ? (
         <>
           <span className="animate-pulse">✨ Claude is working on {data.waiting + data.working} job{data.waiting + data.working === 1 ? "" : "s"}…</span>
+          {now && (
+            <span className="w-full text-center font-semibold sm:w-auto">
+              Now: {describeJob(now)}
+              {data.jobs.length > 1 ? ` · then ${data.jobs.length - 1} more` : ""}
+            </span>
+          )}
           {data.run?.sessionUrl && (
             <a className="underline" href={data.run.sessionUrl} target="_blank" rel="noreferrer">
               watch
@@ -72,7 +81,7 @@ export function ClaudeBar({ provider }: { provider: string | undefined }) {
       ) : (
         <>
           <span>
-            ✨ {data.waiting} job{data.waiting === 1 ? "" : "s"} waiting for Claude
+            ✨ {data.waiting} job{data.waiting === 1 ? "" : "s"} waiting for Claude{now ? `: ${describeJob(now)}${data.jobs.length > 1 ? ` and ${data.jobs.length - 1} more` : ""}` : ""}
             {data.run?.error ? ` · ${data.run.error}` : ""}
           </span>
           <button className="rounded-full bg-violet-700 px-3 py-0.5 text-white" onClick={() => start.mutate(false)} disabled={start.isPending}>
