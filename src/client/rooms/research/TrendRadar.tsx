@@ -6,7 +6,7 @@ import { api } from "../../lib/api";
 import { useUi } from "../../lib/store";
 import { formatGBP, plain, timeAgo } from "../../lib/format";
 import { Icon } from "../../components/Icon";
-import { ErrorNote, ProgressBar, Section } from "../../components/ui";
+import { CollapseHeading, ErrorNote, ProgressBar, Section, useCollapsed } from "../../components/ui";
 import { etsySearchUrl } from "../../../shared/pricing";
 import { undercutPrice } from "../../../shared/market";
 import { minimumPriceFor } from "../../../shared/fees";
@@ -75,6 +75,8 @@ export function TrendRadar({ settings }: { settings: Settings }) {
   const toast = useUi((s) => s.toast);
   const { data } = useQuery({ queryKey: ["radar"], queryFn: () => api.get<RadarResp>("/radar"), refetchInterval: 15_000 });
   const [newNiche, setNewNiche] = useState("");
+  const [ideasShut, toggleIdeas] = useCollapsed("todays-ideas");
+  const [trendShut, toggleTrend] = useCollapsed("trending-now");
   const refresh = () => qc.invalidateQueries();
   const scan = useMutation({ mutationFn: () => api.post<{ scanned: number; error: string | null }>("/radar/scan"), onSuccess: (r) => (toast({ icon: "", title: `Scanned ${r.scanned} niches`, body: r.error }), refresh()) });
   const daily = useMutation({
@@ -145,8 +147,10 @@ export function TrendRadar({ settings }: { settings: Settings }) {
 
       {/* Today's ideas */}
       <div className="mb-6">
-        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-sm font-semibold">Today's ideas</h4>
+        <div className={`flex flex-wrap items-center justify-between gap-2 ${ideasShut ? "" : "mb-2.5"}`}>
+          <h4>
+            <CollapseHeading title="Today's ideas" collapsed={ideasShut} onToggle={toggleIdeas} className="text-sm" />
+          </h4>
           <div className={`flex items-center gap-3 text-xs ${muted}`}>
             {settings.radar.autoDaily ? `Best ${settings.radar.dailyIdeas} each morning · send the one you want to the task board` : "Auto off"}
             {!data.daily?.pickedId && (
@@ -157,169 +161,179 @@ export function TrendRadar({ settings }: { settings: Settings }) {
             )}
           </div>
         </div>
-        {data.daily?.items.length ? (
-          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200 dark:divide-white/[0.06] dark:border-white/10">
-            {data.daily.items.map((i, n) => {
-              const picked = !!i.productId;
-              const isToday = data.daily!.pickedId ? i.id === data.daily!.pickedId : false;
-              const v = i.verdict ? VERDICT[i.verdict] : undefined;
-              return (
-                <li key={i.id ?? i.productId ?? n} className={`flex items-start gap-3 px-3 py-3 text-sm ${isToday ? "bg-emerald-50/60 shadow-[inset_2px_0_0_#10b981] dark:bg-emerald-500/[0.06]" : "bg-white dark:bg-transparent"}`}>
-                  <span
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-semibold tabular-nums text-zinc-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100"
-                    title="Scout's score out of 10"
-                  >
-                    {i.score ?? (v ? <Dot className={v.dot} /> : <span className="text-zinc-400">–</span>)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <FormatBadge format={i.format ?? "art"} />
-                      <span className="font-medium">{plain(i.idea)}</span>
-                      {n === 0 && (
-                        <span className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">Top pick</span>
-                      )}
-                    </div>
-                    <div className={`mt-0.5 text-xs ${muted}`}>
-                      {i.keyword} · {plain(i.angle)}
-                    </div>
-                    {i.why && <div className={`mt-0.5 text-xs ${muted}`}>{plain(i.why)}</div>}
-                    {i.market && (
-                      <div className="mt-1 text-[11px] text-zinc-400 tabular-nums dark:text-zinc-500">
-                        {i.market.totalListings != null && `${i.market.totalListings.toLocaleString("en-GB")} competitors`}
-                        {i.market.medianPricePence ? ` · usually ${formatGBP(i.market.medianPricePence)}` : ""}
-                        {i.market.favsPerDay != null ? ` · ${i.market.favsPerDay} favs/day on new listings` : ""}
+        {!ideasShut && (
+          <>
+            {data.daily?.items.length ? (
+              <ul className="divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200 dark:divide-white/[0.06] dark:border-white/10">
+                {data.daily.items.map((i, n) => {
+                  const picked = !!i.productId;
+                  const isToday = data.daily!.pickedId ? i.id === data.daily!.pickedId : false;
+                  const v = i.verdict ? VERDICT[i.verdict] : undefined;
+                  return (
+                    <li key={i.id ?? i.productId ?? n} className={`flex items-start gap-3 px-3 py-3 text-sm ${isToday ? "bg-emerald-50/60 shadow-[inset_2px_0_0_#10b981] dark:bg-emerald-500/[0.06]" : "bg-white dark:bg-transparent"}`}>
+                      <span
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-semibold tabular-nums text-zinc-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100"
+                        title="Scout's score out of 10"
+                      >
+                        {i.score ?? (v ? <Dot className={v.dot} /> : <span className="text-zinc-400">–</span>)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <FormatBadge format={i.format ?? "art"} />
+                          <span className="font-medium">{plain(i.idea)}</span>
+                          {n === 0 && (
+                            <span className="inline-flex items-center rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">Top pick</span>
+                          )}
+                        </div>
+                        <div className={`mt-0.5 text-xs ${muted}`}>
+                          {i.keyword} · {plain(i.angle)}
+                        </div>
+                        {i.why && <div className={`mt-0.5 text-xs ${muted}`}>{plain(i.why)}</div>}
+                        {i.market && (
+                          <div className="mt-1 text-[11px] text-zinc-400 tabular-nums dark:text-zinc-500">
+                            {i.market.totalListings != null && `${i.market.totalListings.toLocaleString("en-GB")} competitors`}
+                            {i.market.medianPricePence ? ` · usually ${formatGBP(i.market.medianPricePence)}` : ""}
+                            {i.market.favsPerDay != null ? ` · ${i.market.favsPerDay} favs/day on new listings` : ""}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {picked ? (
-                    <span className="chip shrink-0 gap-1.5">
-                      {v ? (
-                        <>
-                          <Dot className={v.dot} />
-                          {v.label} <span className="tabular-nums">{i.overall}</span>
-                        </>
-                      ) : i.stage === "research" ? (
-                        <>
-                          <Dot className="bg-indigo-500 anim-glow" />
-                          Researching
-                        </>
+                      {picked ? (
+                        <span className="chip shrink-0 gap-1.5">
+                          {v ? (
+                            <>
+                              <Dot className={v.dot} />
+                              {v.label} <span className="tabular-nums">{i.overall}</span>
+                            </>
+                          ) : i.stage === "research" ? (
+                            <>
+                              <Dot className="bg-indigo-500 anim-glow" />
+                              Researching
+                            </>
+                          ) : (
+                            (i.stage ?? "Started")
+                          )}
+                        </span>
+                      ) : data.daily!.pickedId ? (
+                        <button className={`shrink-0 text-xs underline-offset-2 hover:underline ${muted}`} onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
+                          Send this too
+                        </button>
                       ) : (
-                        (i.stage ?? "Started")
+                        <button className={`${n === 0 ? "btn-primary" : "btn-soft"} shrink-0 !px-2.5 !py-1 text-xs`} onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
+                          <Icon name="arrowRight" size={13} />
+                          Send to task board
+                        </button>
                       )}
-                    </span>
-                  ) : data.daily!.pickedId ? (
-                    <button className={`shrink-0 text-xs underline-offset-2 hover:underline ${muted}`} onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
-                      Send this too
-                    </button>
-                  ) : (
-                    <button className={`${n === 0 ? "btn-primary" : "btn-soft"} shrink-0 !px-2.5 !py-1 text-xs`} onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
-                      <Icon name="arrowRight" size={13} />
-                      Send to task board
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className={`rounded-lg border border-dashed border-zinc-200 px-3 py-6 text-center text-sm dark:border-white/10 ${muted}`}>
-            No ideas yet today. The best {settings.radar.dailyIdeas} arrive each morning, or tap the button.
-          </p>
-        )}
-        {data.daily?.pickedId && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
-            <Icon name="check" size={13} /> Today's product is picked. Fresh ideas arrive tomorrow morning.
-          </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className={`rounded-lg border border-dashed border-zinc-200 px-3 py-6 text-center text-sm dark:border-white/10 ${muted}`}>
+                No ideas yet today. The best {settings.radar.dailyIdeas} arrive each morning, or tap the button.
+              </p>
+            )}
+            {data.daily?.pickedId && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                <Icon name="check" size={13} /> Today's product is picked. Fresh ideas arrive tomorrow morning.
+              </p>
+            )}
+          </>
         )}
       </div>
 
       {/* Trending niches */}
-      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold">Trending now</h4>
+      <div className={`flex flex-wrap items-center justify-between gap-2 ${trendShut ? "" : "mb-2.5"}`}>
+        <h4>
+          <CollapseHeading title="Trending now" collapsed={trendShut} onToggle={toggleTrend} className="text-sm" />
+        </h4>
         <button className="btn-soft inline-flex items-center gap-1.5 !px-2.5 !py-1 text-xs" onClick={() => scan.mutate()} disabled={scan.isPending}>
           <Icon name="refresh" size={13} />
           {scan.isPending ? "Scanning…" : "Scan now"}
         </button>
       </div>
-      {data.niches.length === 0 ? (
-        <p className={`rounded-lg border border-dashed border-zinc-200 px-3 py-6 text-center text-sm dark:border-white/10 ${muted}`}>Nothing scored yet. Tap Scan now, or wait a few minutes.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-white/10">
-          <table className="w-full min-w-[660px] text-sm">
-            <thead className="border-b border-zinc-200 bg-zinc-50 text-left dark:border-white/10 dark:bg-white/[0.03]">
-              <tr>
-                <th className={th}>Niche</th>
-                <th className={th}>Heat</th>
-                <th className={`${th} text-right`}>Momentum</th>
-                <th className={`${th} text-right`}>Competitors</th>
-                <th className={`${th} text-right`}>Median</th>
-                <th className={th}>Undercut at</th>
-                <th className={th} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
-              {data.niches.map((n) => (
-                <tr key={n.keyword} className="transition-colors hover:bg-zinc-50/70 dark:hover:bg-white/[0.02]">
-                  <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <a href={etsySearchUrl(n.keyword)} target="_blank" rel="noreferrer" className="font-medium hover:underline">
-                        {n.keyword}
-                      </a>
-                      <FormatBadge format={n.format} />
-                    </div>
-                    <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      <Dot className={n.source === "ai" ? "bg-zinc-400" : "bg-emerald-500"} />
-                      {n.source === "ai" ? "AI estimate" : n.lastScanned ? timeAgo(n.lastScanned) : "Live"}
-                      {n.origin === "you" ? " · yours" : ""}
-                      {n.lastSuggested ? " · sent before" : ""}
-                    </span>
-                  </td>
-                  <td className="w-32 px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <ProgressBar value={n.score / 100} color={n.score > 60 ? "#e11d48" : n.score > 35 ? "#f59e0b" : "#4f46e5"} className="flex-1" label={`${n.keyword} heat`} />
-                      <span className="w-6 text-right text-xs font-medium tabular-nums">{n.score}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{n.favsPerDay != null ? `${n.favsPerDay}/day` : <span className="text-zinc-400">—</span>}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{n.totalListings != null ? n.totalListings.toLocaleString() : <span className="text-zinc-400">—</span>}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{n.medianPricePence ? formatGBP(n.medianPricePence) : <span className="text-zinc-400">—</span>}</td>
-                  <UndercutCell medianPence={n.medianPricePence} undercutPercent={settings.radar.undercutPercent} floorPence={floor} />
-                  <td className="px-3 py-2.5 text-right">
-                    {sent.has(n.keyword) ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                        <Icon name="check" size={13} />
-                        On the board
-                      </span>
-                    ) : (
-                      <button className="btn-soft !px-2.5 !py-1 text-xs" onClick={() => research.mutate(n.keyword)} disabled={research.isPending && research.variables === n.keyword}>
-                        <Icon name="arrowRight" size={13} />
-                        {research.isPending && research.variables === n.keyword ? "Sending…" : "Send to task board"}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p className={`mt-2.5 text-xs leading-relaxed ${muted}`}>
-        <span className="font-medium text-zinc-700 dark:text-zinc-300">Heat</span> = how fast brand-new listings are collecting favourites, against how crowded the niche is. Momentum is favourites per day on new listings. Etsy doesn't share sales numbers with anyone, so this is
-        the best live signal. <span className="font-medium text-zinc-700 dark:text-zinc-300">Undercut at</span> = {settings.radar.undercutPercent}% below the median, never below {formatGBP(floor)} (the lowest price that still
-        leaves your {formatGBP(settings.minProfitPence)} minimum profit).
-      </p>
-      {squeezed > 0 && (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-          <Icon name="alert" size={14} className="mt-px shrink-0" />
-          <span>
-            In <b className="font-semibold">{squeezed}</b> of these niches your minimum profit stops a proper undercut (shown in amber). Today's ideas pick niches with room to undercut first. To
-            compete harder on price, lower <b className="font-semibold">Minimum profit per sale</b> in{" "}
-            <Link to="/settings" className="font-medium underline">
-              Settings
-            </Link>
-            .
-          </span>
-        </p>
+      {!trendShut && (
+        <>
+          {data.niches.length === 0 ? (
+            <p className={`rounded-lg border border-dashed border-zinc-200 px-3 py-6 text-center text-sm dark:border-white/10 ${muted}`}>Nothing scored yet. Tap Scan now, or wait a few minutes.</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-white/10">
+              <table className="w-full min-w-[660px] text-sm">
+                <thead className="border-b border-zinc-200 bg-zinc-50 text-left dark:border-white/10 dark:bg-white/[0.03]">
+                  <tr>
+                    <th className={th}>Niche</th>
+                    <th className={th}>Heat</th>
+                    <th className={`${th} text-right`}>Momentum</th>
+                    <th className={`${th} text-right`}>Competitors</th>
+                    <th className={`${th} text-right`}>Median</th>
+                    <th className={th}>Undercut at</th>
+                    <th className={th} />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
+                  {data.niches.map((n) => (
+                    <tr key={n.keyword} className="transition-colors hover:bg-zinc-50/70 dark:hover:bg-white/[0.02]">
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <a href={etsySearchUrl(n.keyword)} target="_blank" rel="noreferrer" className="font-medium hover:underline">
+                            {n.keyword}
+                          </a>
+                          <FormatBadge format={n.format} />
+                        </div>
+                        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                          <Dot className={n.source === "ai" ? "bg-zinc-400" : "bg-emerald-500"} />
+                          {n.source === "ai" ? "AI estimate" : n.lastScanned ? timeAgo(n.lastScanned) : "Live"}
+                          {n.origin === "you" ? " · yours" : ""}
+                          {n.lastSuggested ? " · sent before" : ""}
+                        </span>
+                      </td>
+                      <td className="w-32 px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <ProgressBar value={n.score / 100} color={n.score > 60 ? "#e11d48" : n.score > 35 ? "#f59e0b" : "#4f46e5"} className="flex-1" label={`${n.keyword} heat`} />
+                          <span className="w-6 text-right text-xs font-medium tabular-nums">{n.score}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{n.favsPerDay != null ? `${n.favsPerDay}/day` : <span className="text-zinc-400">—</span>}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{n.totalListings != null ? n.totalListings.toLocaleString() : <span className="text-zinc-400">—</span>}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{n.medianPricePence ? formatGBP(n.medianPricePence) : <span className="text-zinc-400">—</span>}</td>
+                      <UndercutCell medianPence={n.medianPricePence} undercutPercent={settings.radar.undercutPercent} floorPence={floor} />
+                      <td className="px-3 py-2.5 text-right">
+                        {sent.has(n.keyword) ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            <Icon name="check" size={13} />
+                            On the board
+                          </span>
+                        ) : (
+                          <button className="btn-soft !px-2.5 !py-1 text-xs" onClick={() => research.mutate(n.keyword)} disabled={research.isPending && research.variables === n.keyword}>
+                            <Icon name="arrowRight" size={13} />
+                            {research.isPending && research.variables === n.keyword ? "Sending…" : "Send to task board"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className={`mt-2.5 text-xs leading-relaxed ${muted}`}>
+            <span className="font-medium text-zinc-700 dark:text-zinc-300">Heat</span> = how fast brand-new listings are collecting favourites, against how crowded the niche is. Momentum is favourites per day on new listings. Etsy doesn't share sales numbers with anyone, so this is
+            the best live signal. <span className="font-medium text-zinc-700 dark:text-zinc-300">Undercut at</span> = {settings.radar.undercutPercent}% below the median, never below {formatGBP(floor)} (the lowest price that still
+            leaves your {formatGBP(settings.minProfitPence)} minimum profit).
+          </p>
+          {squeezed > 0 && (
+            <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+              <Icon name="alert" size={14} className="mt-px shrink-0" />
+              <span>
+                In <b className="font-semibold">{squeezed}</b> of these niches your minimum profit stops a proper undercut (shown in amber). Today's ideas pick niches with room to undercut first. To
+                compete harder on price, lower <b className="font-semibold">Minimum profit per sale</b> in{" "}
+                <Link to="/settings" className="font-medium underline">
+                  Settings
+                </Link>
+                .
+              </span>
+            </p>
+          )}
+        </>
       )}
 
       <form
