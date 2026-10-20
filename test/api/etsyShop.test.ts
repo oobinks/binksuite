@@ -95,7 +95,7 @@ describe("Etsy shop (publishing and orders)", () => {
     expect(draft).toMatchObject({ listingId: 555, photos: 2, files: ["Gift Tracker.xlsx", "Gift Tracker - Printable A4.pdf"], category: "Paper & Party Supplies › Paper › Calendars & Planners" });
     expect(draft.editUrl).toBe("https://www.etsy.com/your/shops/me/listing-editor/edit/555");
     const create = log.find((l) => l.url.endsWith("/shops/99/listings"))!;
-    expect(create.body).toMatchObject({ title: data.listing.title, price: "4.49", type: "download", who_made: "i_did", when_made: "made_to_order", taxonomy_id: "3", quantity: "999", is_supply: "false", tags: "gift tracker,christmas budget" });
+    expect(create.body).toMatchObject({ title: data.listing.title, price: "4.49", type: "download", who_made: "i_did", when_made: "made_to_order", taxonomy_id: "3", quantity: "999", is_supply: "false", should_auto_renew: "false", tags: "gift tracker,christmas budget" });
     expect(log.filter((l) => l.url.includes("/images")).map((l) => (l.body as any).rank)).toEqual(["1", "2"]);
     expect(log.filter((l) => l.url.includes("/files")).map((l) => (l.body as any).name)).toEqual(["Gift Tracker.xlsx", "Gift Tracker - Printable A4.pdf"]);
     // Sending again returns the same draft unless you ask for a second one.

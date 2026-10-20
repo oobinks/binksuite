@@ -155,7 +155,8 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
         type: "download",
         is_supply: "false",
         tags: l.tags.map((t) => t.replace(/,/g, " ")).join(","),
-        should_auto_renew: "true",
+        // Renewing is your call: BinkSuite asks you a week before each listing expires.
+        should_auto_renew: "false",
       });
       const r = await call<{ listing_id: number }>("POST", `/shops/${shop.shopId}/listings`, form, "form");
       return { listingId: r.listing_id };
@@ -172,6 +173,10 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
       form.append("name", name);
       form.append("rank", String(rank));
       await call("POST", `/shops/${shop.shopId}/listings/${listingId}/files`, form);
+    },
+    /** A listing's state, when it expires, and how it's doing. */
+    async listing(listingId: number) {
+      return call<{ listing_id: number; state: string; ending_timestamp?: number; views?: number; num_favorers?: number; url?: string }>("GET", `/listings/${listingId}`);
     },
     async receipts(minCreatedSec: number, limit = 50) {
       return call<{ count: number; results: EtsyReceipt[] }>("GET", `/shops/${shop.shopId}/receipts?was_paid=true&min_created=${minCreatedSec}&limit=${limit}&sort_on=created&sort_order=asc`);

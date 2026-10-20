@@ -15,6 +15,7 @@ import { radarTick } from "./engine/trends";
 import { priceWatchTick } from "./engine/priceWatch";
 import { shopClient } from "./providers/etsyShop";
 import { syncOrders } from "./engine/orders";
+import { renewalTick } from "./engine/renewals";
 
 const KEEP_LOGS_DAYS = 45;
 
@@ -32,6 +33,8 @@ export async function runCron(env: Env) {
   // 🧾 New Etsy orders (every 15 minutes, once your shop is connected).
   const shop = key ? await shopClient(db, env, key).catch(() => null) : null;
   if (shop) await syncOrders(db, settings, shop).catch((e) => console.error("orders", e));
+  // ⏳ Expiry countdowns and keep-or-retire reviews (every 6 hours).
+  if (shop) await renewalTick(db, shop).catch((e) => console.error("renewals", e));
   const cutoff = new Date(Date.now() - KEEP_LOGS_DAYS * 86_400_000).toISOString();
   await db.delete(activity).where(lt(activity.createdAt, cutoff));
   await db.delete(notifications).where(lt(notifications.createdAt, cutoff));

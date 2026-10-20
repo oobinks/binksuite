@@ -307,6 +307,21 @@ STEPS.push({
   },
 });
 
+// ⏳ A week before a listing expires on Etsy: keep it (you renew on Etsy) or let it go.
+STEPS.push({
+  kind: "renewal_review",
+  agent: null,
+  room: "launch",
+  needsApproval: true,
+  approvalKind: "review",
+  durationMs: [0, 0],
+  estimatedCostPence: 0,
+  standalone: true,
+  title: (p) => `Keep or retire: ${p.title}`,
+  run: ({ task }) => ({ output: task.output ?? {}, log: "Renewal review ready" }),
+  next: null,
+});
+
 // Phase 2: upgrade steps with their real (Workers AI) versions for real products.
 for (const step of STEPS) Object.assign(step, REAL_STEPS[step.kind] ?? {});
 

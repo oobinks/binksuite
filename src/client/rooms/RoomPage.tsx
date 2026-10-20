@@ -16,6 +16,7 @@ import { SuggestionBox } from "./research/SuggestionBox";
 import { TrendRadar } from "./research/TrendRadar";
 import { BundleBuilder } from "./launch/BundleBuilder";
 import { OrdersDesk } from "./orders/OrdersDesk";
+import { LiveProducts } from "./launch/LiveProducts";
 import { darkFloor } from "../hq/HQMap";
 
 /** Rooms whose agents do real work for real products in Phase 2. */
@@ -112,6 +113,7 @@ function PipelineRoom({ roomId }: { roomId: RoomId }) {
           </div>
         )}
       </div>
+      {roomId === "launch" && <LiveProducts />}
       {roomId === "launch" && <BundleBuilder />}
       <Section title="Task board" icon="🗂️">
         {data ? <TaskBoard tasks={data.tasks} onOpen={setOpen} onRetry={(t) => retry.mutate(t)} /> : <p>Loading…</p>}
