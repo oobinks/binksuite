@@ -52,7 +52,9 @@ describe("Etsy shop (publishing and orders)", () => {
     const fetcher = fakeEtsy(log);
 
     // 1. Connect: a proper PKCE link, then the code is swapped for tokens and the shop is found.
-    const link = new URL(await connectUrl(db, KEY, ORIGIN));
+    const raw = await connectUrl(db, KEY, ORIGIN);
+    expect(raw).toContain("scope=listings_r%20listings_w%20shops_r%20transactions_r");
+    const link = new URL(raw);
     expect(link.origin + link.pathname).toBe("https://www.etsy.com/oauth/connect");
     expect(link.searchParams.get("client_id")).toBe("keystring123");
     expect(link.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/etsy/callback`);

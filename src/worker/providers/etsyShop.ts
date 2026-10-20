@@ -43,15 +43,17 @@ export async function connectUrl(db: DB, apiKey: string, origin: string): Promis
   const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
   await kvSet(db, `etsyOauth:${state}`, { verifier, at: Date.now() });
-  const u = new URL(AUTHORIZE);
-  u.searchParams.set("response_type", "code");
-  u.searchParams.set("redirect_uri", callbackUrl(origin));
-  u.searchParams.set("scope", ETSY_SCOPES.join(" "));
-  u.searchParams.set("client_id", clientId(apiKey));
-  u.searchParams.set("state", state);
-  u.searchParams.set("code_challenge", challenge);
-  u.searchParams.set("code_challenge_method", "S256");
-  return u.toString();
+  // Spaces as %20 (not "+"), exactly like Etsy's own examples.
+  const q: [string, string][] = [
+    ["response_type", "code"],
+    ["redirect_uri", callbackUrl(origin)],
+    ["scope", ETSY_SCOPES.join(" ")],
+    ["client_id", clientId(apiKey)],
+    ["state", state],
+    ["code_challenge", challenge],
+    ["code_challenge_method", "S256"],
+  ];
+  return `${AUTHORIZE}?${q.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
 }
 
 async function saveTokens(db: DB, env: Env, t: Tokens) {
