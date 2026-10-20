@@ -17,6 +17,8 @@ import { etsyRoutes } from "./routes/etsy";
 import { careRoutes } from "./routes/care";
 import { marketingRoutes } from "./routes/marketing";
 import { strategyRoutes } from "./routes/strategy";
+import { pushRoutes } from "./routes/push";
+import { flushPushes } from "./engine/push";
 import { runCron } from "./cron";
 
 const app = newApp();
@@ -45,6 +47,14 @@ app.use("/api/*", async (c, next) => {
   c.set("settings", await getSettings(db));
   c.header("Cache-Control", "no-store");
   await next();
+  // Phone notifications lined up during this request go out after the reply.
+  if (c.req.method !== "GET") {
+    try {
+      c.executionCtx.waitUntil(flushPushes(db, c.env).catch((e) => console.error("push", e)));
+    } catch {
+      /* no execution context (tests): the scheduler sends them instead */
+    }
+  }
 });
 
 app.route("/api/auth", authRoutes);
@@ -68,6 +78,7 @@ app.route("/api", etsyRoutes);
 app.route("/api", careRoutes);
 app.route("/api", marketingRoutes);
 app.route("/api", strategyRoutes);
+app.route("/api", pushRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

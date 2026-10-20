@@ -21,6 +21,7 @@ import { AiLimitError, aiUsageToday, isAiLimit, MAX_CALL_NEURONS, type AiService
 import { DEMO_NICHES } from "./agents/demoContent";
 import { CLAUDE_WAITING, isClaudePending } from "../providers/claudeCode";
 import { awardXp, checkAchievements, notify, recordEvent } from "./game";
+import { queuePush } from "./push";
 
 export class EngineError extends Error {
   constructor(
@@ -418,6 +419,7 @@ async function applyResult(db: DB, t: TaskRow, product: ProductRow, res: StepRes
   await transition(db, t, event, { ...patch, output: res.output, progress: 1, finishedAt: nowIso(now), error: null });
   await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "finish", res.log, t.demo);
   if (t.needsApproval) {
+    if (!t.demo) await queuePush(db, "approvals", { title: "Waiting for you", body: t.title, url: `/room/${t.room}`, tag: "approvals" });
     await db.insert(approvals).values({
       id: newId("a_"),
       taskId: t.id,
