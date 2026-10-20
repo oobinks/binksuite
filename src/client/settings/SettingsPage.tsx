@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Notifications } from "./Notifications";
+import { ClaudeUsageCard } from "./ClaudeUsage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useSnapshot, useSaveSettings, applyTheme } from "../lib/hooks";
@@ -38,6 +39,7 @@ export function SettingsPage() {
         <General s={snap.settings} />
         <ProductKinds s={snap.settings} />
         <ClaudeCode s={snap.settings} />
+        {snap.settings.ai.provider === "claude-code" && <ClaudeUsageCard />}
         <EtsyRadar s={snap.settings} />
         <EtsyShop />
         <Notifications />

@@ -37,7 +37,7 @@ If a job is borderline, make it better rather than sending it.
 
 ## The loop
 
-1. `node scripts/claude-jobs.mjs check`
+1. `node scripts/claude-jobs.mjs check` (this also sends the owner's Claude plan limits to BinkSuite; `done` does too)
 2. `node scripts/claude-jobs.mjs list`, which saves each job to `.claude-jobs/<id>.job.json`
    (`kind`, `title`, `product`, `system`, `prompt`, `jsonSchema`, `previousProblem`).
 3. For each job, oldest first:

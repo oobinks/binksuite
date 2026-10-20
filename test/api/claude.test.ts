@@ -147,4 +147,23 @@ describe("Claude Code engine", () => {
     await kvSet(db, "claudeRun", { at: ago(1), finishedAt: ago(0) });
     expect((await owner.get("/api/claude")).data.running).toBe(false); // reported done
   });
+
+  it("stores the plan limits a session reports, and pauses automatic starts near a limit", async () => {
+    const { owner, key } = await setup();
+    const soon = Math.floor(Date.now() / 1000) + 3600;
+    const line = JSON.stringify({ type: "rate_limit_event", rate_limit_info: { status: "allowed_warning", unifiedWindows: { five_hour: { utilization: 0.97, resetsAt: soon }, seven_day: { utilization: 0.5, resetsAt: soon + 86400 } } } });
+    const r = await agent(key, "POST", "/usage", { events: [line] });
+    expect(r.status).toBe(200);
+    expect(r.data.usage.session.usedPercent).toBe(97);
+    const status = (await owner.get("/api/claude")).data;
+    expect(status.usage.weekly.usedPercent).toBe(50);
+    expect((await agent(key, "POST", "/usage", { events: ['{"type":"assistant"}'] })).data).toEqual({ ok: false, usage: null });
+    // With a job waiting, an automatic start holds off; the reason says why.
+    await suggestIdea(getDb(env.DB), await getSettings(getDb(env.DB)), "Frog teacher posters", undefined, true);
+    for (let i = 0; i < 2; i++) await tick(getDb(env.DB), await getSettings(getDb(env.DB)), { interactive: false, ai: claudeCodeAi(getDb(env.DB), null), files: env.FILES });
+    expect((await owner.get("/api/claude")).data.waiting).toBeGreaterThan(0);
+    const auto = await owner.post("/api/claude/start", { auto: true });
+    expect(auto.data.started).toBe(false);
+    expect(auto.data.reason).toMatch(/session limit is nearly used up/);
+  });
 });

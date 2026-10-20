@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useUi } from "../lib/store";
 import { describeJob } from "../../shared/claudeJobs";
+import { usagePause, type ClaudeUsage } from "../../shared/claudeUsage";
 import { Icon } from "./Icon";
 
 const BAR = "flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-indigo-100 bg-indigo-50/80 px-4 py-2 text-xs text-indigo-950 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-100";
@@ -21,6 +22,7 @@ export interface ClaudeStatus {
   jobs: { id: string; title: string; kind: string; status: string; error: string | null; createdAt: string }[];
   run: { at: string; sessionUrl?: string | null; finishedAt?: string; answered?: number; error?: string | null } | null;
   running: boolean;
+  usage: ClaudeUsage | null;
 }
 
 export function useClaude(enabled = true) {
@@ -63,6 +65,7 @@ export function ClaudeBar({ provider }: { provider: string | undefined }) {
       </div>
     );
   if (!data.waiting && !data.working && !data.running) return null;
+  const pause = usagePause(data.usage);
   // The job in Claude's hands, or the next one up.
   const now = data.jobs.find((j) => j.status === "working") ?? data.jobs[0];
   return (
@@ -87,7 +90,7 @@ export function ClaudeBar({ provider }: { provider: string | undefined }) {
         <>
           <span>
             {data.waiting} job{data.waiting === 1 ? "" : "s"} waiting for Claude{now ? `: ${describeJob(now)}${data.jobs.length > 1 ? ` and ${data.jobs.length - 1} more` : ""}` : ""}
-            {data.run?.error ? ` · ${data.run.error}` : ""}
+            {pause ? ` · Your Claude ${pause.window} limit is nearly used up${pause.resetsAt ? `: it resets ${new Date(pause.resetsAt).toLocaleString("en-GB", { weekday: "short", hour: "numeric", minute: "2-digit" })}` : ""}` : data.run?.error ? ` · ${data.run.error}` : ""}
           </span>
           <button className="rounded-md bg-accent px-2.5 py-1 font-semibold text-white hover:bg-accent-strong dark:bg-indigo-500" onClick={() => start.mutate(false)} disabled={start.isPending}>
             {start.isPending ? "Starting…" : "Start Claude"}
