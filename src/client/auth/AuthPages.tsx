@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { ErrorNote } from "../components/ui";
 import { CopyButton } from "../rooms/shared/CopyButton";
 import { Logo } from "../components/Logo";
+import { Icon } from "../components/Icon";
 
 export interface AuthStatus {
   passwordSet: boolean;
@@ -16,15 +17,17 @@ export function useAuthStatus() {
   return useQuery({ queryKey: ["auth"], queryFn: () => api.get<AuthStatus>("/auth/status"), staleTime: 10_000 });
 }
 
-function Shell({ children }: { children: ReactNode }) {
+function Shell({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
-    <div className="floor-boards flex min-h-dvh items-center justify-center bg-[#efe3cf] p-4 dark:bg-night">
-      <div className="card w-full max-w-md p-6">
-        <div className="mb-4 text-center">
-          <Logo size={72} className="mx-auto drop-shadow" />
-          <h1 className="text-2xl font-black">BinkSuite HQ</h1>
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-zinc-50 px-4 py-10 dark:bg-night">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <Logo size={40} className="mx-auto" />
+          <h1 className="mt-5 text-xl font-semibold tracking-tight">{title}</h1>
+          {subtitle && <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p>}
         </div>
-        {children}
+        <div className="card p-6 shadow-[0_1px_3px_rgba(16,24,40,0.06)] sm:p-7">{children}</div>
+        <p className="mt-6 text-center text-xs text-zinc-400 dark:text-zinc-500">BinkSuite</p>
       </div>
     </div>
   );
@@ -37,9 +40,9 @@ export function LoginPage() {
   const nav = useNavigate();
   const qc = useQueryClient();
   return (
-    <Shell>
+    <Shell title="Sign in to BinkSuite" subtitle="Enter your password to continue.">
       <form
-        className="space-y-3"
+        className="space-y-4"
         onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
@@ -57,11 +60,11 @@ export function LoginPage() {
       >
         <label className="block">
           <span className="label">Password</span>
-          <input className="input text-lg" type="password" autoComplete="current-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input className="input" type="password" autoComplete="current-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         <ErrorNote error={error} />
-        <button className="btn-primary w-full py-3 text-base" disabled={busy || !password}>
-          {busy ? "Opening…" : "Clock in 🔑"}
+        <button className="btn-primary w-full py-2.5" disabled={busy || !password}>
+          {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
     </Shell>
@@ -88,8 +91,7 @@ export function SetupPage() {
 
   if (status?.passwordSet) {
     return (
-      <Shell>
-        <p className="text-center">Your password is already set.</p>
+      <Shell title="Already set up" subtitle="Your password is already set.">
         {!secretsOk && <MissingSecrets status={status} fresh={fresh} onCheck={() => refetch()} />}
         <button className="btn-primary mt-4 w-full" onClick={() => nav("/login")}>
           Go to login
@@ -99,18 +101,18 @@ export function SetupPage() {
   }
 
   return (
-    <Shell>
-      <ol className="mb-4 flex justify-center gap-2 text-xs font-black">
-        <li className={`chip px-3 py-1 ${secretsOk ? "bg-mint text-white" : "bg-honey/40"}`}>1 · Secrets {secretsOk ? "✓" : ""}</li>
-        <li className={`chip px-3 py-1 ${secretsOk ? "bg-honey/40" : ""}`}>2 · Password</li>
+    <Shell title="Set up BinkSuite" subtitle={secretsOk ? "Step 2 of 2: choose your password." : "Step 1 of 2: add your secrets."}>
+      <ol className="mb-5 grid grid-cols-2 gap-2 text-xs font-medium">
+        <SetupStep n={1} label="Secrets" active={!secretsOk} done={secretsOk} />
+        <SetupStep n={2} label="Password" active={secretsOk} done={false} />
       </ol>
       {!status ? (
-        <p className="text-center">Checking…</p>
+        <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">Checking…</p>
       ) : !secretsOk ? (
         <MissingSecrets status={status} fresh={fresh} onCheck={() => refetch()} />
       ) : (
         <form
-          className="space-y-3"
+          className="space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
             if (password !== confirmPw) return setError(new Error("The two passwords don't match"));
@@ -127,7 +129,7 @@ export function SetupPage() {
             }
           }}
         >
-          <p className="text-sm">Choose the password you'll use to open your HQ. Use 10+ characters — a short sentence is easy to remember.</p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">Choose the password you'll use to sign in. Use 10+ characters — a short sentence is easy to remember.</p>
           <label className="block">
             <span className="label">New password</span>
             <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -139,11 +141,11 @@ export function SetupPage() {
           <label className="block">
             <span className="label">Setup code = your SESSION_SECRET value</span>
             <input className="input font-mono" autoComplete="off" value={setupCode} onChange={(e) => setSetupCode(e.target.value)} placeholder="Paste the SESSION_SECRET you saved" />
-            <span className="mt-1 block text-xs text-cocoa dark:text-stone-400">Proves it's you setting the password, not a stranger who found the URL.</span>
+            <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">Proves it's you setting the password, not a stranger who found the URL.</span>
           </label>
           <ErrorNote error={error} />
-          <button className="btn-primary w-full py-3 text-base" disabled={busy || password.length < 10 || !setupCode}>
-            {busy ? "Setting up your HQ…" : "Create password & open HQ ✨"}
+          <button className="btn-primary w-full py-2.5" disabled={busy || password.length < 10 || !setupCode}>
+            {busy ? "Setting up…" : "Create password and continue"}
           </button>
         </form>
       )}
@@ -154,20 +156,26 @@ export function SetupPage() {
 function MissingSecrets({ status, fresh, onCheck }: { status: AuthStatus; fresh: { session: string; vault: string }; onCheck: () => void }) {
   return (
     <div className="space-y-3 text-sm">
-      <p className="font-semibold">Your Worker needs two secrets before it can log you in. I've made two random values for you:</p>
+      <p className="font-medium">Your Worker needs two secrets before it can log you in. I've made two random values for you:</p>
       {[
         ["SESSION_SECRET", fresh.session, status.secrets.sessionSecret],
         ["VAULT_MASTER_KEY", fresh.vault, status.secrets.vaultMasterKey],
       ].map(([name, value, ok]) => (
-        <div key={name as string} className="rounded-xl bg-black/5 p-2.5 dark:bg-white/5">
+        <div key={name as string} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-white/10 dark:bg-white/[0.03]">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-xs font-black">{name as string}</span>
-            {ok ? <span className="chip bg-mint/30">✓ set</span> : <CopyButton text={value as string} />}
+            <span className="font-mono text-xs font-semibold">{name as string}</span>
+            {ok ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                <Icon name="check" size={13} /> Set
+              </span>
+            ) : (
+              <CopyButton text={value as string} />
+            )}
           </div>
-          {!ok && <div className="mt-1 break-all font-mono text-[11px]">{value as string}</div>}
+          {!ok && <div className="mt-1.5 break-all font-mono text-[11px] text-zinc-600 dark:text-zinc-400">{value as string}</div>}
         </div>
       ))}
-      <ol className="list-decimal space-y-1 pl-5">
+      <ol className="list-decimal space-y-1 pl-5 text-zinc-600 marker:text-zinc-400 dark:text-zinc-300">
         <li>Save both values somewhere safe (a password manager or notes app).</li>
         <li>Cloudflare dashboard → <b>Workers &amp; Pages</b> → <b>binksuite</b> → <b>Settings</b> → <b>Variables and Secrets</b>.</li>
         <li>
@@ -179,8 +187,21 @@ function MissingSecrets({ status, fresh, onCheck }: { status: AuthStatus; fresh:
         <li>Come back here and press the button below.</li>
       </ol>
       <button className="btn-primary w-full" onClick={onCheck}>
-        I've added them — check again
+        I've added them, check again
       </button>
     </div>
+  );
+}
+
+function SetupStep({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) {
+  return (
+    <li
+      className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ${active ? "border-indigo-200 bg-indigo-50 text-indigo-900 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-100" : "border-zinc-200 text-zinc-500 dark:border-white/10 dark:text-zinc-400"}`}
+    >
+      <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] ${done ? "bg-emerald-500 text-white" : active ? "bg-accent text-white" : "bg-zinc-100 dark:bg-white/10"}`}>
+        {done ? <Icon name="check" size={12} /> : n}
+      </span>
+      {label}
+    </li>
   );
 }

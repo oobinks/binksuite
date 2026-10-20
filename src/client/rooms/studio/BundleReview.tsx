@@ -1,16 +1,17 @@
-// 🎁 Printer puts the bundle together on your device (one ZIP + photos), then you approve it.
+// Printer puts the bundle together on your device (one ZIP + photos), then you approve it.
 import { useState } from "react";
 import type { ReviewDef } from "../shared/types";
 import { ArtImage } from "../../components/ArtImage";
 import { FormatBadge } from "../../components/FormatBadge";
 import { ErrorNote, ProgressBar } from "../../components/ui";
-import { formatGBP } from "../../lib/format";
+import { Icon } from "../../components/Icon";
+import { formatGBP, plain } from "../../lib/format";
 import type { BundlePack } from "../../lib/bundle";
 import { separatePrice, type BundleSpec } from "../../../shared/bundle";
 
 export const bundleReview: ReviewDef = {
-  approveLabel: "👍 Bundle looks good → Listing",
-  rejectLabel: "🔁 Rebuild",
+  approveLabel: "Bundle looks good → Listing",
+  rejectLabel: "Rebuild",
   Body: ({ task, setReady, setData }) => {
     const bundle = (task.output as { bundle?: BundleSpec } | null)?.bundle;
     const [step, setStep] = useState<{ label: string; f: number } | null>(null);
@@ -35,33 +36,34 @@ export const bundleReview: ReviewDef = {
 
     return (
       <div className="space-y-3">
-        <ul className="space-y-1 rounded-xl bg-black/5 p-3 text-sm dark:bg-white/5">
+        <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 text-sm dark:divide-white/[0.06] dark:border-white/10">
           {bundle.items.map((i) => (
-            <li key={i.id} className="flex items-center gap-2">
+            <li key={i.id} className="flex items-center gap-2 px-3 py-2">
               <FormatBadge format={i.format} />
-              <span className="min-w-0 flex-1 truncate font-bold">{i.title}</span>
-              <span className="tabular-nums">{formatGBP(i.pricePence)}</span>
+              <span className="min-w-0 flex-1 truncate font-medium">{i.title}</span>
+              <span className="text-zinc-600 tabular-nums dark:text-zinc-400">{formatGBP(i.pricePence)}</span>
             </li>
           ))}
-          <li className="flex justify-between border-t border-black/10 pt-1 font-black dark:border-white/10">
+          <li className="flex justify-between bg-zinc-50 px-3 py-2 font-semibold dark:bg-white/[0.03]">
             <span>Separately</span>
-            <span>{formatGBP(separatePrice(bundle.items))}</span>
+            <span className="tabular-nums">{formatGBP(separatePrice(bundle.items))}</span>
           </li>
         </ul>
-        <p className="text-sm">
+        <p className="text-sm text-zinc-700 dark:text-zinc-300">
           Printer puts every product's files into <b>one ZIP</b> (a folder each, plus a read-me) and draws <b>the bundle's listing photos</b> on your device. Pricer then sets a price about{" "}
           <b>{bundle.savePercent}% below</b> buying them separately.
         </p>
         {step && !pack && (
           <div>
-            <div className="mb-1 text-sm font-bold">{step.label}</div>
+            <div className="mb-1.5 text-sm font-medium">{plain(step.label)}</div>
             <ProgressBar value={step.f} label="Building the bundle" />
           </div>
         )}
         {pack ? (
-          <div className="space-y-2 rounded-xl bg-emerald-50 p-3 text-sm dark:bg-emerald-900/25">
-            <div>
-              ✅ Bundled {pack.files.length} files ({(pack.bytes / 1024).toFixed(0)} KB) and saved them. Approve to send it to the Listing Office.
+          <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+            <div className="flex items-start gap-2">
+              <Icon name="check" size={15} className="mt-0.5 shrink-0" />
+              Bundled {pack.files.length} files ({(pack.bytes / 1024).toFixed(0)} KB) and saved them. Approve to send it to the Listing Office.
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {pack.previews.map((k) => (
@@ -71,7 +73,7 @@ export const bundleReview: ReviewDef = {
           </div>
         ) : (
           <button className="btn-primary w-full" onClick={build} disabled={!!step}>
-            {step ? "Building… keep this open" : "🎁 Build the bundle"}
+            {step ? "Building… keep this open" : "Build the bundle"}
           </button>
         )}
         <ErrorNote error={error} />

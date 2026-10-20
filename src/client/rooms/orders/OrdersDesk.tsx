@@ -1,10 +1,11 @@
-// 🧾 Orders Desk: your real Etsy orders, read from your connected shop.
+// Orders Desk: your real Etsy orders, read from your connected shop.
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { useUi } from "../../lib/store";
 import { formatGBP, timeAgo } from "../../lib/format";
 import { ErrorNote, Section } from "../../components/ui";
+import { Icon } from "../../components/Icon";
 
 interface Order {
   receiptId: number;
@@ -27,20 +28,20 @@ export function OrdersDesk() {
   const sync = useMutation({
     mutationFn: () => api.post<{ added: number }>("/orders/sync"),
     onSuccess: (r) => {
-      toast({ icon: "🧾", title: r.added ? `${r.added} new order${r.added === 1 ? "" : "s"}!` : "No new orders yet" });
+      toast({ icon: "", title: r.added ? `${r.added} new order${r.added === 1 ? "" : "s"}` : "No new orders yet" });
       qc.invalidateQueries();
     },
   });
-  if (!data) return <p>Loading…</p>;
+  if (!data) return <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>;
   if (!data.shop)
     return (
-      <Section title="Orders" icon="🧾">
-        <p className="text-sm">
+      <Section title="Orders">
+        <p className="text-sm text-zinc-700 dark:text-zinc-300">
           Connect your Etsy shop in{" "}
-          <Link to="/settings#etsy" className="font-bold underline">
+          <Link to="/settings#etsy" className="font-medium text-accent underline dark:text-indigo-300">
             Settings → Your Etsy shop
           </Link>{" "}
-          and your orders appear here by themselves. Each new sale is recorded in the Finance Vault (with Etsy's fees), earns coins and XP, and gets a celebration.
+          and your orders appear here by themselves. Each new sale is recorded in the Finance Vault (with Etsy's fees).
         </p>
       </Section>
     );
@@ -50,60 +51,65 @@ export function OrdersDesk() {
     <div className="space-y-4">
       <Section
         title={`Orders from ${data.shop.shopName}`}
-        icon="🧾"
         right={
-          <button className="btn-soft !py-1 text-xs" onClick={() => sync.mutate()} disabled={sync.isPending}>
-            {sync.isPending ? "Checking…" : "🔄 Check now"}
+          <button className="btn-soft px-2.5 py-1 text-xs" onClick={() => sync.mutate()} disabled={sync.isPending}>
+            <Icon name="refresh" size={13} /> {sync.isPending ? "Checking…" : "Check now"}
           </button>
         }
       >
-        <div className="mb-3 grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-xl bg-black/5 p-2 dark:bg-white/5">
-            <div className="text-xs font-bold">This week</div>
-            <div className="text-xl font-black">{week.length}</div>
+        <div className="mb-4 grid grid-cols-3 gap-2">
+          <div className="rounded-lg border border-zinc-200 p-3 dark:border-white/10">
+            <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">This week</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums">{week.length}</div>
           </div>
-          <div className="rounded-xl bg-black/5 p-2 dark:bg-white/5">
-            <div className="text-xs font-bold">Takings this week</div>
-            <div className="text-xl font-black">{formatGBP(week.reduce((a, o) => a + o.totalPence, 0))}</div>
+          <div className="rounded-lg border border-zinc-200 p-3 dark:border-white/10">
+            <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Takings this week</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums">{formatGBP(week.reduce((a, o) => a + o.totalPence, 0))}</div>
           </div>
-          <div className={`rounded-xl p-2 ${notes.length ? "bg-honey/25" : "bg-black/5 dark:bg-white/5"}`}>
-            <div className="text-xs font-bold">Buyer notes</div>
-            <div className="text-xl font-black">{notes.length}</div>
+          <div className={`rounded-lg border p-3 ${notes.length ? "border-amber-300 dark:border-amber-500/40" : "border-zinc-200 dark:border-white/10"}`}>
+            <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Buyer notes</div>
+            <div className={`mt-1 text-lg font-semibold tabular-nums ${notes.length ? "text-amber-700 dark:text-amber-300" : ""}`}>{notes.length}</div>
           </div>
         </div>
-        <p className="mb-2 text-xs text-cocoa dark:text-stone-400">
+        <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
           Checks Etsy every 15 minutes{data.state?.at ? ` · last checked ${timeAgo(data.state.at)}` : ""}. Orders from before you connected aren't imported (add those in the Finance Vault if you need them).
         </p>
         {data.orders.length === 0 ? (
-          <p className="text-sm text-cocoa dark:text-stone-400">No orders since you connected yet. Your first one will land here with a celebration. 🎉</p>
+          <p className="rounded-lg border border-dashed border-zinc-200 px-3 py-6 text-center text-sm text-zinc-500 dark:border-white/10 dark:text-zinc-400">No orders since you connected yet. Your first one will appear here.</p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 dark:divide-white/[0.06] dark:border-white/10">
             {data.orders.map((o) => (
-              <li key={o.receiptId} className="rounded-xl bg-white p-2.5 text-sm ring-1 ring-black/5 dark:bg-night-3 dark:ring-white/10">
+              <li key={o.receiptId} className="px-3 py-2.5 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-black">Order #{o.receiptId}</span>
-                  <span className="text-xs text-cocoa dark:text-stone-400">
-                    {new Date(o.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} · <b>{formatGBP(o.totalPence)}</b>
+                  <span className="font-semibold tabular-nums">Order #{o.receiptId}</span>
+                  <span className="text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+                    {new Date(o.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} · <span className="font-semibold text-zinc-900 dark:text-zinc-100">{formatGBP(o.totalPence)}</span>
                   </span>
                 </div>
-                <ul className="mt-1 space-y-0.5">
+                <ul className="mt-1.5 space-y-0.5 text-zinc-700 dark:text-zinc-300">
                   {o.items.map((i, k) => (
                     <li key={k} className="flex justify-between gap-2">
                       <span className="min-w-0 truncate">
                         {i.quantity > 1 ? `${i.quantity} × ` : ""}
                         {i.title}
-                        {!i.productId && <span className="text-xs text-cocoa dark:text-stone-400"> (not made in BinkSuite)</span>}
+                        {!i.productId && <span className="text-xs text-zinc-500 dark:text-zinc-400"> (not made in BinkSuite)</span>}
                       </span>
                       <span className="shrink-0 tabular-nums">{formatGBP(i.pricePence)}</span>
                     </li>
                   ))}
                 </ul>
-                {o.note && <p className="mt-1 rounded-lg bg-honey/20 p-1.5 text-xs">📝 Buyer's note: {o.note}</p>}
+                {o.note && (
+                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                    <span className="font-medium">Buyer's note:</span> {o.note}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
         )}
-        <ErrorNote error={sync.error} />
+        <div className="mt-2">
+          <ErrorNote error={sync.error} />
+        </div>
       </Section>
     </div>
   );

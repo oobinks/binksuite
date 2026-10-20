@@ -2,17 +2,51 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * BinkSuite design tokens: neutral greys, one indigo accent, quiet status colours.
+ * The older token names (cream, ink, cocoa, honey, berry, mint, night) are kept so
+ * every screen picks up the new palette without renaming classes.
+ */
 @theme {
-  --font-sans: "Nunito", "Noto Color Emoji", ui-rounded, system-ui, sans-serif;
-  --color-cream: #fbf6ee;
-  --color-ink: #3b2f2a;
-  --color-cocoa: #7a5c4d;
-  --color-honey: #f2b35b;
-  --color-berry: #e0607e;
-  --color-mint: #5bbf9a;
-  --color-night: #1e1b24;
-  --color-night-2: #2a2632;
-  --color-night-3: #37323f;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif, "Noto Color Emoji";
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces & text */
+  --color-cream: #f6f7f9;
+  --color-ink: #16181d;
+  --color-cocoa: #5d6472;
+  --color-night: #0d0f13;
+  --color-night-2: #15181e;
+  --color-night-3: #1d2129;
+
+  /* Accent & status */
+  --color-accent: #4f46e5;
+  --color-accent-strong: #4338ca;
+  --color-accent-soft: #eef0fe;
+  --color-honey: #e8a23a;
+  --color-berry: #e11d48;
+  --color-mint: #10b981;
+
+  /* Warm greys become neutral greys everywhere */
+  --color-stone-50: var(--color-zinc-50);
+  --color-stone-100: var(--color-zinc-100);
+  --color-stone-200: var(--color-zinc-200);
+  --color-stone-300: var(--color-zinc-300);
+  --color-stone-400: var(--color-zinc-400);
+  --color-stone-500: var(--color-zinc-500);
+  --color-stone-600: var(--color-zinc-600);
+  --color-stone-700: var(--color-zinc-700);
+  --color-stone-800: var(--color-zinc-800);
+  --color-stone-900: var(--color-zinc-900);
+  --color-stone-950: var(--color-zinc-950);
+
+  /* Quieter weights and tighter corners than Tailwind's defaults */
+  --font-weight-black: 700;
+  --font-weight-extrabold: 650;
+  --font-weight-bold: 600;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
 }
 
 :root {
@@ -24,75 +58,87 @@
 
 html,
 body {
-  @apply bg-cream text-ink dark:bg-night dark:text-stone-100;
+  @apply bg-cream text-ink antialiased dark:bg-night dark:text-zinc-100;
   font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Cosy floor texture for the HQ */
-.floor-boards {
-  background-image: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.035) 0 2px, transparent 2px 46px),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.02) 0 1px, transparent 1px 14px);
-}
-.dark .floor-boards {
-  background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 46px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 14px);
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.011em;
 }
 
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 22%, transparent);
 }
-@keyframes busy {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-2px) rotate(-3deg); }
-  75% { transform: translateY(-2px) rotate(3deg); }
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
-@keyframes wave {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-25deg); }
-}
-@keyframes glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 170, 40, 0.75); transform: scale(1); }
-  50% { box-shadow: 0 0 0 10px rgba(255, 170, 40, 0); transform: scale(1.08); }
-}
+
 @keyframes spin-slow {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
-.anim-bob { animation: bob 2.6s ease-in-out infinite; }
-.anim-busy { animation: busy 0.6s ease-in-out infinite; }
-.anim-wave { animation: wave 0.9s ease-in-out infinite; transform-origin: 50% 90%; }
-.anim-glow { animation: glow 1.6s ease-in-out infinite; }
-.anim-spin { animation: spin-slow 2s linear infinite; }
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.anim-spin {
+  animation: spin-slow 0.9s linear infinite;
+}
+/* "Needs attention" markers: a gentle pulse, nothing bouncy. */
+.anim-glow {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+/* Retired playful motions, kept as no-ops so old class names are harmless. */
+.anim-bob,
+.anim-busy,
+.anim-wave {
+  animation: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .anim-bob, .anim-busy, .anim-wave, .anim-glow, .anim-spin { animation: none; }
+  .anim-glow,
+  .anim-spin {
+    animation: none;
+  }
 }
 
 @utility card {
-  @apply rounded-2xl bg-white/90 shadow-[0_2px_0_rgba(59,47,42,0.08),0_8px_24px_-12px_rgba(59,47,42,0.25)] ring-1 ring-black/5 dark:bg-night-2 dark:ring-white/10;
+  @apply rounded-xl border border-zinc-200/80 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-white/[0.07] dark:bg-night-2 dark:shadow-none;
 }
 @utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
-  @apply btn bg-ink text-cream hover:bg-cocoa dark:bg-honey dark:text-night dark:hover:bg-amber-300;
+  @apply btn bg-accent text-white shadow-sm hover:bg-accent-strong dark:bg-indigo-500 dark:hover:bg-indigo-400;
 }
 @utility btn-good {
-  @apply btn bg-mint text-white hover:brightness-105;
+  @apply btn bg-emerald-600 text-white shadow-sm hover:bg-emerald-700;
 }
 @utility btn-soft {
-  @apply btn bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15;
+  @apply btn border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-100 dark:hover:bg-white/[0.08];
 }
 @utility btn-bad {
-  @apply btn bg-berry/15 text-berry hover:bg-berry/25;
+  @apply btn border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-transparent dark:text-rose-300 dark:hover:bg-rose-500/10;
 }
 @utility input {
-  @apply w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-honey focus:ring-2 focus:ring-honey/40 dark:border-white/15 dark:bg-night-3;
+  @apply w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm shadow-[0_1px_2px_rgba(16,24,40,0.04)] outline-none transition placeholder:text-zinc-400 focus:border-accent focus:ring-3 focus:ring-accent/15 dark:border-white/12 dark:bg-night-3 dark:focus:border-indigo-400;
 }
 @utility label {
-  @apply mb-1 block text-xs font-bold tracking-wide text-cocoa uppercase dark:text-stone-400;
+  @apply mb-1 block text-[11px] font-semibold tracking-[0.06em] text-zinc-500 uppercase dark:text-zinc-400;
 }
 @utility chip {
-  @apply inline-flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 text-xs font-semibold dark:bg-white/10;
+  @apply inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-medium text-zinc-700 dark:border-white/10 dark:bg-white/[0.05] dark:text-zinc-300;
 }

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useSnapshot, useSaveSettings, applyTheme } from "../lib/hooks";
 import { useUi } from "../lib/store";
-import { pounds, toPence, timeAgo } from "../lib/format";
+import { plain, pounds, toPence, timeAgo } from "../lib/format";
 import { AGENTS, ROOM_BY_ID } from "../../shared/registry";
 import type { Settings } from "../../shared/settings";
 import type { FeeSettings } from "../../shared/fees";
@@ -14,13 +14,25 @@ import type { AiStatus } from "../../shared/api";
 import { useClaude } from "../components/ClaudeBar";
 import { CopyButton } from "../rooms/shared/CopyButton";
 import { FORMAT_INFO, FORMATS } from "../../shared/format";
+import { FormatBadge } from "../components/FormatBadge";
+import { PageHeader } from "../components/PageHeader";
+import { Icon } from "../components/Icon";
+
+function Status({ ok, children }: { ok: boolean; children: ReactNode }) {
+  return (
+    <span className="chip inline-flex items-center gap-1.5">
+      <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-500" : "bg-amber-500"}`} aria-hidden />
+      {children}
+    </span>
+  );
+}
 
 export function SettingsPage() {
   const { data: snap } = useSnapshot();
-  if (!snap) return <p>Loading…</p>;
+  if (!snap) return <p className="py-20 text-center text-sm text-zinc-500">Loading…</p>;
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-black">⚙️ Settings</h1>
+    <div className="space-y-6">
+      <PageHeader title="Settings" subtitle="Shop details, AI, Etsy connection, fees and your account." />
       <div className="grid gap-4 lg:grid-cols-2">
         <General s={snap.settings} />
         <ProductKinds s={snap.settings} />
@@ -46,11 +58,11 @@ function useSaved() {
   const toast = useUi((s) => s.toast);
   return {
     ...save,
-    saveNow: (patch: Record<string, unknown>) => save.mutate(patch, { onSuccess: () => toast({ icon: "💾", title: "Saved" }) }),
+    saveNow: (patch: Record<string, unknown>) => save.mutate(patch, { onSuccess: () => toast({ icon: "", title: "Saved" }) }),
   };
 }
 
-/** 🎨 / 📊 / 📄: which kinds of product the agents research, suggest and make. */
+/** Art / Excel / PDF: which kinds of product the agents research, suggest and make. */
 function ProductKinds({ s }: { s: Settings }) {
   const save = useSaved();
   const on = s.formats;
@@ -61,16 +73,14 @@ function ProductKinds({ s }: { s: Settings }) {
     pdf: "Printable planners, trackers and checklists",
   };
   return (
-    <Section title="Products we make" icon="🧺">
-      <p className="text-sm">Switch off a kind of product and Trend Radar, today's ideas and the Suggestion box stop offering it. Products already being made carry on.</p>
-      <ul className="mt-3 space-y-2">
+    <Section title="Products we make">
+      <p className="text-sm text-zinc-600 dark:text-zinc-300">Switch off a kind of product and Trend Radar, today's ideas and the Suggestion box stop offering it. Products already being made carry on.</p>
+      <ul className="mt-3 divide-y divide-zinc-100 rounded-lg border border-zinc-200 dark:divide-white/[0.06] dark:border-white/10">
         {FORMATS.map((f) => (
-          <li key={f} className={`flex items-center justify-between gap-3 rounded-xl p-2 ring-1 ring-black/5 dark:ring-white/10 ${on[f] ? "" : "opacity-60"}`}>
-            <span className="min-w-0">
-              <span className={`chip !px-1.5 !py-0 text-[10px] font-black ${FORMAT_INFO[f].chip}`}>
-                {FORMAT_INFO[f].icon} {FORMAT_INFO[f].label}
-              </span>{" "}
-              <span className="text-sm">{blurb[f]}</span>
+          <li key={f} className={`flex items-center justify-between gap-3 px-3 py-2.5 ${on[f] ? "" : "opacity-60"}`}>
+            <span className="flex min-w-0 items-center gap-2">
+              <FormatBadge format={f} />
+              <span className="text-sm text-zinc-700 dark:text-zinc-300">{blurb[f]}</span>
             </span>
             <Toggle
               checked={on[f]}
@@ -83,7 +93,7 @@ function ProductKinds({ s }: { s: Settings }) {
           </li>
         ))}
       </ul>
-      {count === 1 && <p className="mt-2 text-xs text-cocoa dark:text-stone-400">At least one kind stays on.</p>}
+      {count === 1 && <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">At least one kind stays on.</p>}
       <ErrorNote error={save.error} />
     </Section>
   );
@@ -94,7 +104,7 @@ function General({ s }: { s: Settings }) {
   const [shopName, setShopName] = useState(s.shopName);
   const [tone, setTone] = useState(s.toneOfVoice);
   return (
-    <Section title="Shop & look" icon="🏡">
+    <Section title="Shop and appearance">
       <div className="space-y-3">
         <label className="block">
           <span className="label">Shop name</span>
@@ -106,17 +116,20 @@ function General({ s }: { s: Settings }) {
         </label>
         <div>
           <span className="label">Theme</span>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-3 gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-white/10 dark:bg-white/[0.04]" role="radiogroup" aria-label="Theme">
             {(["light", "dark", "system"] as const).map((t) => (
               <button
                 key={t}
-                className={`btn flex-1 capitalize ${s.theme === t ? "bg-ink text-cream dark:bg-honey dark:text-night" : "bg-black/5 dark:bg-white/10"}`}
+                type="button"
+                role="radio"
+                aria-checked={s.theme === t}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${s.theme === t ? "bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-200 dark:bg-night-2 dark:text-white dark:ring-white/10" : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"}`}
                 onClick={() => {
                   applyTheme(t);
                   save.saveNow({ theme: t });
                 }}
               >
-                {t === "light" ? "☀️" : t === "dark" ? "🌙" : "🖥️"} {t}
+                {t === "light" ? "Light" : t === "dark" ? "Dark" : "System"}
               </button>
             ))}
           </div>
@@ -132,20 +145,20 @@ function Demo({ s }: { s: Settings }) {
   const reset = useMutation({ mutationFn: () => api.post("/demo/reset"), onSuccess: () => qc.invalidateQueries() });
   const clear = useMutation({ mutationFn: () => api.post("/demo/clear"), onSuccess: () => qc.invalidateQueries() });
   return (
-    <Section title="Demo mode" icon="🎮">
+    <Section title="Demo mode">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm">
-          Demo mode fills the HQ with a pretend shop and runs fake agents through the real task queue. Real ledger entries you add are always kept and always count.
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          Demo mode fills the app with a sample shop and runs fake agents through the real task queue. Real ledger entries you add are always kept and always count.
         </p>
         <Toggle checked={s.demoMode} onChange={(v) => save.saveNow({ demoMode: v })} label="Demo mode" />
       </div>
-      <p className="mt-2 text-xs text-cocoa dark:text-stone-400">Turning it off hides demo data (and demo XP) so you start your real game at Lv 1.</p>
+      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Turning it off hides demo data so you start from a clean slate.</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="btn-soft" onClick={() => confirm("Reset the demo shop to its starting state?") && reset.mutate()} disabled={reset.isPending}>
-          🔄 Reset demo shop
+          Reset demo shop
         </button>
         <button className="btn-bad" onClick={() => confirm("Delete all demo data and switch demo mode off? Your real entries stay.") && clear.mutate()} disabled={clear.isPending}>
-          🗑️ Clear demo data
+          Clear demo data
         </button>
       </div>
       <ErrorNote error={reset.error ?? clear.error} />
@@ -181,16 +194,16 @@ function Fees({ s }: { s: Settings }) {
     save.saveNow({ fees: { [f.key]: n } });
   };
   return (
-    <Section title="Etsy fee rates" icon="🏷️" right={<span className="chip">checked Oct 2026</span>}>
-      <div className="grid grid-cols-2 gap-2">
+    <Section title="Etsy fee rates" right={<span className="chip">Checked Oct 2026</span>}>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
         {FEE_FIELDS.map((f) => (
           <label key={f.key} className="block">
             <span className="label !text-[10px]">{f.label}</span>
-            <input className="input" inputMode="decimal" value={vals[f.key]} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))} onBlur={() => commit(f)} />
+            <input className="input tabular-nums" inputMode="decimal" value={vals[f.key]} onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))} onBlur={() => commit(f)} />
           </label>
         ))}
       </div>
-      <label className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
+      <label className="mt-3 flex items-center justify-between gap-2 text-sm font-medium">
         Charge VAT on payment processing too
         <Toggle checked={s.fees.vatOnProcessing} onChange={(v) => save.saveNow({ fees: { vatOnProcessing: v } })} label="VAT on processing" />
       </label>
@@ -209,13 +222,13 @@ function Money({ s }: { s: Settings }) {
   ] as const;
   const [vals, setVals] = useState(() => Object.fromEntries(fields.map(([k]) => [k, pounds(s[k])])));
   return (
-    <Section title="Targets & guardrails" icon="🎯">
-      <div className="grid grid-cols-2 gap-2">
+    <Section title="Targets and guardrails">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
         {fields.map(([k, label]) => (
           <label key={k} className="block">
             <span className="label !text-[10px]">{label} (£)</span>
             <input
-              className="input"
+              className="input tabular-nums"
               inputMode="decimal"
               value={vals[k]}
               onChange={(e) => setVals((v) => ({ ...v, [k]: e.target.value }))}
@@ -224,7 +237,7 @@ function Money({ s }: { s: Settings }) {
           </label>
         ))}
       </div>
-      <label className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
+      <label className="mt-3 flex items-center justify-between gap-2 text-sm font-medium">
         My image provider's licence allows selling the images
         <Toggle checked={s.providerLicenceOk} onChange={(v) => save.saveNow({ providerLicenceOk: v })} label="Provider licence OK" />
       </label>
@@ -246,16 +259,16 @@ function Money({ s }: { s: Settings }) {
 function Agents({ s }: { s: Settings }) {
   const save = useSaved();
   return (
-    <Section title="Agents on duty" icon="👥">
+    <Section title="Agents on duty">
       <ul className="grid gap-1.5 sm:grid-cols-2">
         {AGENTS.map((a) => {
           const on = s.agentsEnabled[a.id] !== false;
           return (
-            <li key={a.id} className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-black/5 dark:hover:bg-white/5">
+            <li key={a.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-white/[0.03]">
               <Avatar agent={a} size={30} showProp={false} status={on ? "idle" : "off"} />
               <span className="min-w-0 flex-1 text-sm">
-                <b>{a.name}</b>
-                <span className="block truncate text-xs text-cocoa dark:text-stone-400">{ROOM_BY_ID[a.room].icon} {a.role}</span>
+                <span className="font-medium">{a.name}</span>
+                <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">{a.role} · {plain(ROOM_BY_ID[a.room].name)}</span>
               </span>
               <Toggle checked={on} onChange={(v) => save.saveNow({ agentsEnabled: { [a.id]: v } })} label={`${a.name} on duty`} />
             </li>
@@ -287,24 +300,24 @@ function KeyVault() {
   });
   const del = useMutation({ mutationFn: (p: string) => api.del(`/vault/${p}`), onSuccess: () => qc.invalidateQueries({ queryKey: ["vault"] }) });
   return (
-    <Section title="Key Vault" icon="🔐">
-      <p className="mb-3 text-xs text-cocoa dark:text-stone-400">Keys are encrypted on Cloudflare with your VAULT_MASTER_KEY. The app only ever shows the last 4 characters. None are needed in Phase 1.</p>
-      {data && !data.ready && <p className="mb-2 rounded-xl bg-berry/10 p-2 text-sm font-bold text-berry">Set the VAULT_MASTER_KEY secret first.</p>}
-      <ul className="space-y-2">
+    <Section title="Key vault">
+      <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">Keys are encrypted on Cloudflare with your VAULT_MASTER_KEY. The app only ever shows the last 4 characters. None are needed in Phase 1.</p>
+      {data && !data.ready && <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200 px-3 py-2 text-sm">Set the VAULT_MASTER_KEY secret first.</p>}
+      <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 dark:divide-white/[0.06] dark:border-white/10">
         {data?.providers.map((p) => {
           const k = data.keys.find((x) => x.provider === p.id);
           return (
-            <li key={p.id} className="rounded-xl p-2 ring-1 ring-black/5 dark:ring-white/10">
+            <li key={p.id} className="px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="flex-1 text-sm">
-                  <b>{p.name}</b> <span className="chip">Phase {p.phase}</span>
-                  <span className="block font-mono text-xs text-cocoa dark:text-stone-400">{k ? `••••${k.last4} · ${timeAgo(k.updatedAt)}` : "not set"}</span>
+                  <span className="font-medium">{p.name}</span> <span className="chip ml-1">Phase {p.phase}</span>
+                  <span className="mt-0.5 block font-mono text-xs text-zinc-500 dark:text-zinc-400">{k ? `••••${k.last4} · ${timeAgo(k.updatedAt)}` : "not set"}</span>
                 </span>
-                <button className="btn-soft !py-1 text-xs" onClick={() => (setEditing(editing === p.id ? null : p.id), setValue(""))}>
+                <button className="btn-soft px-2.5 py-1 text-xs" onClick={() => (setEditing(editing === p.id ? null : p.id), setValue(""))}>
                   {k ? "Replace" : "Add"}
                 </button>
                 {k && (
-                  <button className="btn-bad !py-1 text-xs" onClick={() => confirm(`Remove the ${p.name} key?`) && del.mutate(p.id)}>
+                  <button className="btn-bad px-2.5 py-1 text-xs" onClick={() => confirm(`Remove the ${p.name} key?`) && del.mutate(p.id)}>
                     Remove
                   </button>
                 )}
@@ -336,20 +349,20 @@ function Storage() {
   const { data } = useQuery({ queryKey: ["storage"], queryFn: () => api.get<{ bytes: number; objects: number; freeBytes: number }>("/storage") });
   const gb = (b: number) => (b / 1024 ** 3).toFixed(b < 1024 ** 3 ? 3 : 2);
   return (
-    <Section title="File storage (R2)" icon="🗄️">
+    <Section title="File storage (R2)">
       {data ? (
         <>
-          <div className="flex justify-between text-sm font-bold">
-            <span>{data.objects} files</span>
-            <span>
+          <div className="mb-2 flex justify-between text-sm">
+            <span className="font-medium tabular-nums">{data.objects} files</span>
+            <span className="text-zinc-500 tabular-nums dark:text-zinc-400">
               {gb(data.bytes)} GB / {gb(data.freeBytes)} GB free
             </span>
           </div>
-          <ProgressBar value={data.bytes / data.freeBytes} color={data.bytes / data.freeBytes > 0.8 ? "#e0607e" : "#7c9cf5"} label="Storage used" />
-          <p className="mt-2 text-xs text-cocoa dark:text-stone-400">Roughly 2–4k print-ready products fit in the free 10 GB. After that it's about $0.015 per GB per month.</p>
+          <ProgressBar value={data.bytes / data.freeBytes} color={data.bytes / data.freeBytes > 0.8 ? "#e11d48" : "#4f46e5"} label="Storage used" />
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Roughly 2–4k print-ready products fit in the free 10 GB. After that it's about $0.015 per GB per month.</p>
         </>
       ) : (
-        <p className="text-sm">Checking…</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">Checking…</p>
       )}
     </Section>
   );
@@ -364,7 +377,7 @@ function Account() {
     onSuccess: () => {
       setCurrent("");
       setNext("");
-      toast({ icon: "🔑", title: "Password changed", body: "Other devices have been logged out" });
+      toast({ icon: "", title: "Password changed", body: "Other devices have been logged out" });
     },
   });
   const logout = async (all: boolean) => {
@@ -372,7 +385,7 @@ function Account() {
     location.href = "/login";
   };
   return (
-    <Section title="Account & data" icon="🔑">
+    <Section title="Account and data">
       <form
         className="space-y-2"
         onSubmit={(e) => {
@@ -387,18 +400,18 @@ function Account() {
           Change password
         </button>
       </form>
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-black/5 pt-3 dark:border-white/10">
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-zinc-100 pt-4 dark:border-white/[0.06]">
         <a className="btn-soft" href="/api/export" download>
-          ⬇️ Export all data (JSON)
+          Export all data (JSON)
         </a>
         <button className="btn-soft" onClick={() => logout(false)}>
-          👋 Log out
+          Log out
         </button>
         <button className="btn-bad" onClick={() => confirm("Log out on every device?") && logout(true)}>
           Log out everywhere
         </button>
       </div>
-      <p className="mt-2 text-xs text-cocoa dark:text-stone-400">The export never includes your API keys.</p>
+      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">The export never includes your API keys.</p>
     </Section>
   );
 }
@@ -407,28 +420,28 @@ function About() {
   const when = (iso: string) =>
     new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   return (
-    <Section title="About this app" icon="ℹ️">
+    <Section title="About">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        <dt className="font-bold">Version</dt>
+        <dt className="text-zinc-500 dark:text-zinc-400">Version</dt>
         <dd>
-          <span className="chip bg-honey/25 font-mono">v{BUILD_INFO.version}</span>
+          <span className="chip font-mono">v{BUILD_INFO.version}</span>
         </dd>
-        <dt className="font-bold">Last updated</dt>
+        <dt className="text-zinc-500 dark:text-zinc-400">Last updated</dt>
         <dd>
-          {when(BUILD_INFO.updatedAt)} <span className="text-cocoa dark:text-stone-400">({timeAgo(BUILD_INFO.updatedAt)})</span>
+          {when(BUILD_INFO.updatedAt)} <span className="text-zinc-500 dark:text-zinc-400">({timeAgo(BUILD_INFO.updatedAt)})</span>
         </dd>
         {BUILD_INFO.change && (
           <>
-            <dt className="font-bold">Latest change</dt>
-            <dd>{BUILD_INFO.change}</dd>
+            <dt className="text-zinc-500 dark:text-zinc-400">Latest change</dt>
+            <dd>{plain(BUILD_INFO.change)}</dd>
           </>
         )}
-        <dt className="font-bold">Update code</dt>
+        <dt className="text-zinc-500 dark:text-zinc-400">Update code</dt>
         <dd className="font-mono">{BUILD_INFO.commit ?? "—"}</dd>
-        <dt className="font-bold">Deployed</dt>
+        <dt className="text-zinc-500 dark:text-zinc-400">Deployed</dt>
         <dd>{when(BUILD_INFO.builtAt)}</dd>
       </dl>
-      <p className="mt-3 text-xs text-cocoa dark:text-stone-400">“Last updated” is when Claude last changed the code. “Deployed” is when Cloudflare built this copy. Quote the update code if you ever need to report a problem.</p>
+      <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">“Last updated” is when Claude last changed the code. “Deployed” is when Cloudflare built this copy. Quote the update code if you ever need to report a problem.</p>
     </Section>
   );
 }
@@ -449,18 +462,17 @@ function ClaudeCode({ s }: { s: Settings }) {
   return (
     <Section
       title="Claude Code"
-      icon="✨"
-      right={<span className={`chip ${data?.connected ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" : "bg-honey/25"}`}>{data?.connected ? "🟢 connected" : "🟡 not connected"}</span>}
+      right={<Status ok={!!data?.connected}>{data?.connected ? "Connected" : "Not connected"}</Status>}
     >
-      <p className="text-sm">
+      <p className="text-sm text-zinc-600 dark:text-zinc-300">
         Let <b>Claude</b> do the thinking on <b>your Claude plan</b>: research, spreadsheet designs, vector artwork and listings. While you're on the site, BinkSuite starts a
         Claude Code session that works through the jobs and sends the results back here for you to approve.
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="AI engine">
         {(
           [
-            ["claude-code", "✨ Claude Code", "Your Claude plan"],
-            ["workers", "☁️ Free Cloudflare AI", "Free, lower quality"],
+            ["claude-code", "Claude Code", "Your Claude plan"],
+            ["workers", "Free Cloudflare AI", "Free, lower quality"],
           ] as const
         ).map(([id, label, sub]) => (
           <button
@@ -468,15 +480,15 @@ function ClaudeCode({ s }: { s: Settings }) {
             role="radio"
             aria-checked={s.ai.provider === id}
             onClick={() => save.saveNow({ ai: { provider: id } })}
-            className={`rounded-xl p-2 text-left ring-2 ${s.ai.provider === id ? "bg-violet-100 ring-violet-500 dark:bg-violet-900/40" : "ring-black/10 dark:ring-white/10"}`}
+            className={`rounded-lg border px-3 py-2.5 text-left transition ${s.ai.provider === id ? "border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500 dark:border-indigo-400 dark:bg-indigo-500/10 dark:ring-indigo-400" : "border-zinc-200 hover:border-zinc-300 dark:border-white/10 dark:hover:border-white/20"}`}
           >
-            <b className="block">{label}</b>
-            <span className="text-xs text-cocoa dark:text-stone-400">{sub}</span>
+            <span className="block text-sm font-medium">{label}</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">{sub}</span>
           </button>
         ))}
       </div>
       {claude && (
-        <label className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
+        <label className="mt-3 flex items-center justify-between gap-2 text-sm font-medium">
           Start Claude automatically while I'm on the site
           <Toggle checked={s.ai.claudeAutoStart} onChange={(v) => save.saveNow({ ai: { claudeAutoStart: v } })} label="Start Claude automatically" />
         </label>
@@ -484,10 +496,10 @@ function ClaudeCode({ s }: { s: Settings }) {
 
       <ol className="mt-4 space-y-3 text-sm">
         <li>
-          <b>1. Connection key</b> {data?.keySet && <span className="chip">key made</span>}
-          <p className="text-xs text-cocoa dark:text-stone-400">Claude's sessions use this to fetch jobs and send results. Shown once.</p>
+          <span className="font-medium">1. Connection key</span> {data?.keySet && <span className="chip ml-1">Key made</span>}
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Claude's sessions use this to fetch jobs and send results. Shown once.</p>
           {key ? (
-            <div className="mt-1 space-y-1 rounded-xl bg-black/5 p-2 text-xs dark:bg-white/5">
+            <div className="mt-1.5 space-y-1.5 rounded-lg border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/[0.03] p-3 text-xs">
               <div>
                 Add these two <b>environment variables</b> to your Claude Code environment:
               </div>
@@ -496,14 +508,14 @@ function ClaudeCode({ s }: { s: Settings }) {
               <CopyButton text={`BINKSUITE_URL=${window.location.origin}\nBINKSUITE_AGENT_KEY=${key}`} label="Copy both" />
             </div>
           ) : (
-            <button className="btn-soft mt-1 !py-1 text-xs" onClick={() => makeKey.mutate()} disabled={makeKey.isPending}>
+            <button className="btn-soft mt-1.5 px-2.5 py-1 text-xs" onClick={() => makeKey.mutate()} disabled={makeKey.isPending}>
               {data?.keySet ? "Make a new key (the old one stops working)" : "Make a connection key"}
             </button>
           )}
         </li>
         <li>
-          <b>2. Routine link</b> {data?.routine && <span className="chip">token ••••{data.routine.last4}</span>}
-          <p className="text-xs text-cocoa dark:text-stone-400">From your routine's page on claude.ai/code/routines → API trigger.</p>
+          <span className="font-medium">2. Routine link</span> {data?.routine && <span className="chip ml-1 font-mono">token ••••{data.routine.last4}</span>}
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">From your routine's page on claude.ai/code/routines → API trigger.</p>
           <form
             className="mt-1 space-y-1.5"
             onSubmit={(e) => {
@@ -513,7 +525,7 @@ function ClaudeCode({ s }: { s: Settings }) {
           >
             <input className="input font-mono text-xs" placeholder="https://api.anthropic.com/v1/claude_code/routines/…/fire" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Routine API link" />
             <input className="input font-mono text-xs" type="password" autoComplete="off" placeholder="Routine token (sk-ant-…)" value={token} onChange={(e) => setToken(e.target.value)} aria-label="Routine token" />
-            <button className="btn-primary !py-1 text-xs" disabled={!url || token.length < 20 || saveRoutine.isPending}>
+            <button className="btn-primary px-2.5 py-1 text-xs" disabled={!url || token.length < 20 || saveRoutine.isPending}>
               Save and switch to Claude
             </button>
           </form>
@@ -524,13 +536,13 @@ function ClaudeCode({ s }: { s: Settings }) {
       {data && data.jobs.length > 0 && (
         <div className="mt-4">
           <div className="label">Claude's to-do list</div>
-          <ul className="space-y-1 text-xs">
+          <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 text-xs dark:divide-white/[0.06] dark:border-white/10">
             {data.jobs.map((j) => (
-              <li key={j.id} className="flex items-start gap-2 rounded-lg bg-black/5 p-1.5 dark:bg-white/5">
-                <span>{j.kind === "svg" ? "🖋️" : "🧠"}</span>
+              <li key={j.id} className="flex items-start gap-2 px-3 py-2">
+                <span className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${j.status === "working" ? "bg-indigo-500" : "bg-zinc-400"}`} aria-hidden />
                 <span className="min-w-0 flex-1">
-                  <b>{j.title}</b> <span className="opacity-60">· {j.status === "working" ? "Claude's on it" : "waiting"}</span>
-                  {j.error && <span className="block text-amber-700 dark:text-amber-300">↩ sent back: {j.error}</span>}
+                  <span className="font-medium">{plain(j.title)}</span> <span className="text-zinc-500 dark:text-zinc-400">· {j.kind === "svg" ? "Artwork" : "Research"} · {j.status === "working" ? "In progress" : "Waiting"}</span>
+                  {j.error && <span className="block text-amber-700 dark:text-amber-300">Sent back: {plain(j.error)}</span>}
                 </span>
               </li>
             ))}
@@ -538,10 +550,10 @@ function ClaudeCode({ s }: { s: Settings }) {
         </div>
       )}
       {data?.run && (
-        <p className="mt-2 text-xs text-cocoa dark:text-stone-400">
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
           Last session: {timeAgo(data.run.at)}
           {data.run.finishedAt ? ` · finished, made ${data.run.answered ?? 0}` : data.running ? " · working" : ""}
-          {data.run.error ? ` · ⚠️ ${data.run.error}` : ""}
+          {data.run.error ? ` · Error: ${plain(data.run.error)}` : ""}
           {data.run.sessionUrl && (
             <>
               {" "}
@@ -561,9 +573,9 @@ function AiEngine({ s }: { s: Settings }) {
   const save = useSaved();
   const { data } = useQuery({ queryKey: ["ai-status"], queryFn: () => api.get<AiStatus>("/ai/status"), refetchInterval: 15_000 });
   return (
-    <Section title="AI engine" icon="🤖" right={<span className="chip bg-mint/25">Free</span>}>
+    <Section title="AI engine" right={<span className="chip">Free</span>}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm">
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
           {s.ai.provider === "claude-code" ? (
             <>
               Claude does the thinking now. <b>Cloudflare Workers AI</b> (free) only paints the empty rooms and desks behind your mockups.
@@ -571,30 +583,30 @@ function AiEngine({ s }: { s: Settings }) {
           ) : (
             <>
               Your agents use <b>Cloudflare Workers AI</b>, which comes free with your Cloudflare account. No keys and no card. Real work happens for ideas you suggest; demo
-              products stay pretend.
+              products use sample output.
             </>
           )}
         </p>
         <Toggle checked={s.ai.enabled} onChange={(v) => save.saveNow({ ai: { enabled: v } })} label="Real AI on" />
       </div>
-      {data && !data.available && <p className="mt-2 rounded-xl bg-berry/10 p-2 text-sm font-bold text-berry">AI isn't connected on this server yet. It will be after the next deploy.</p>}
+      {data && !data.available && <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200 px-3 py-2 text-sm">AI isn't connected on this server yet. It will be after the next deploy.</p>}
       {data && (
         <div className="mt-3">
-          <div className="flex justify-between text-sm font-bold">
-            <span>Free allowance used today</span>
-            <span className="tabular-nums">
+          <div className="mb-2 flex justify-between text-sm">
+            <span className="font-medium">Free allowance used today</span>
+            <span className="text-zinc-500 tabular-nums dark:text-zinc-400">
               {Math.round(data.usedToday).toLocaleString()} / {data.cap.toLocaleString()}
             </span>
           </div>
-          <ProgressBar value={data.cap ? data.usedToday / data.cap : 0} color={data.usedToday / data.cap > 0.85 ? "#e0607e" : "#7c9cf5"} label="Free AI used today" />
-          <p className="mt-1 text-xs text-cocoa dark:text-stone-400">
+          <ProgressBar value={data.cap ? data.usedToday / data.cap : 0} color={data.usedToday / data.cap > 0.85 ? "#e11d48" : "#4f46e5"} label="Free AI used today" />
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
             Enough for about <b>{data.productsLeftToday}</b> more product{data.productsLeftToday === 1 ? "" : "s"} today. Resets at 1am UK time (midnight UTC). Stopping
             just under Cloudflare's 10,000 daily limit means you're never charged.
           </p>
         </div>
       )}
       <details className="mt-3 text-sm">
-        <summary className="cursor-pointer font-bold">Advanced</summary>
+        <summary className="cursor-pointer text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white">Advanced</summary>
         <div className="mt-2 space-y-2">
           <label className="block">
             <span className="label !text-[10px]">Writing model</span>
@@ -625,7 +637,7 @@ interface EtsyStatus {
   callbackUrl: string;
 }
 
-/** 🛍️ Connect your own shop so finished products can be sent to Etsy as drafts. */
+/** Connect your own shop so finished products can be sent to Etsy as drafts. */
 function EtsyShop() {
   const qc = useQueryClient();
   const toast = useUi((x) => x.toast);
@@ -635,7 +647,7 @@ function EtsyShop() {
     const q = new URLSearchParams(window.location.search);
     const result = q.get("etsy");
     if (!result) return;
-    if (result === "connected") toast({ icon: "🛍️", title: `Connected to ${q.get("shop") ?? "your Etsy shop"}`, body: "Finished products can now go to Etsy as drafts." });
+    if (result === "connected") toast({ icon: "", title: `Connected to ${q.get("shop") ?? "your Etsy shop"}`, body: "Finished products can now go to Etsy as drafts." });
     else toast({ icon: "⚠️", title: "Etsy didn't connect", body: q.get("reason") ?? undefined });
     window.history.replaceState(null, "", "/settings#etsy");
     qc.invalidateQueries({ queryKey: ["etsy"] });
@@ -649,41 +661,41 @@ function EtsyShop() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["etsy"] }),
   });
   return (
-    <Section title="Your Etsy shop (publishing)" icon="🛍️" right={<span className="chip">{data?.shop ? `🟢 ${data.shop.shopName}` : "🟡 not connected"}</span>}>
+    <Section title="Etsy shop (publishing)" right={<Status ok={!!data?.shop}>{data?.shop ? data.shop.shopName : "Not connected"}</Status>}>
       <div id="etsy" className="space-y-3 text-sm">
-        <p>
+        <p className="text-zinc-600 dark:text-zinc-300">
           Connect your shop once and the Launch Pad can send each finished product to Etsy as a <b>draft</b>, with title, tags, description, price, listing photos and the
           download files. You check the draft on Etsy and press <b>Publish</b> yourself: BinkSuite never publishes.
         </p>
         {!data?.apiKey ? (
-          <p className="rounded-xl bg-honey/15 p-2">Add your Etsy API key above first.</p>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100 px-3 py-2">Add your Etsy API key above first.</p>
         ) : data.shop ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 p-2 dark:bg-emerald-900/25">
-            <span>
-              ✅ Connected to <b>{data.shop.shopName}</b> · {timeAgo(data.shop.connectedAt)}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/[0.03] px-3 py-2">
+            <span className="flex items-center gap-1.5">
+              <Icon name="check" size={14} className="text-emerald-600 dark:text-emerald-400" /> Connected to <b>{data.shop.shopName}</b> · {timeAgo(data.shop.connectedAt)}
             </span>
             <span className="flex gap-2">
-              <button className="btn-soft !py-1 text-xs" onClick={() => connect.mutate()} disabled={connect.isPending}>
+              <button className="btn-soft px-2.5 py-1 text-xs" onClick={() => connect.mutate()} disabled={connect.isPending}>
                 Reconnect
               </button>
-              <button className="btn-soft !py-1 text-xs" onClick={() => confirm("Disconnect your Etsy shop from BinkSuite?") && disconnect.mutate()} disabled={disconnect.isPending}>
+              <button className="btn-soft px-2.5 py-1 text-xs" onClick={() => confirm("Disconnect your Etsy shop from BinkSuite?") && disconnect.mutate()} disabled={disconnect.isPending}>
                 Disconnect
               </button>
             </span>
           </div>
         ) : (
-          <ol className="space-y-2">
+          <ol className="space-y-3 text-zinc-700 dark:text-zinc-300">
             <li>
               <b>1.</b> On Etsy, open <b>Your account → Developers → Your apps</b>, edit your app, and add this as a <b>Callback URL</b>:
               <span className="mt-1 flex items-center gap-2">
-                <code className="min-w-0 flex-1 break-all rounded-lg bg-black/5 px-2 py-1 text-xs dark:bg-white/10">{data.callbackUrl}</code>
+                <code className="min-w-0 flex-1 break-all rounded-lg border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/[0.03] px-2 py-1 text-xs">{data.callbackUrl}</code>
                 <CopyButton text={data.callbackUrl} />
               </span>
             </li>
             <li>
               <b>2.</b> Tap Connect, sign in to Etsy if asked, and tap <b>Grant access</b>. You'll come straight back here.
               <button className="btn-primary mt-1 w-full" onClick={() => connect.mutate()} disabled={connect.isPending}>
-                {connect.isPending ? "Opening Etsy…" : "🛍️ Connect my Etsy shop"}
+                {connect.isPending ? "Opening Etsy…" : "Connect my Etsy shop"}
               </button>
             </li>
           </ol>
@@ -713,11 +725,11 @@ function EtsyRadar({ s }: { s: Settings }) {
   });
   const test = useMutation({
     mutationFn: () => api.get<{ ok: boolean; message: string }>("/radar/test"),
-    onSuccess: (r) => toast({ icon: r.ok ? "🟢" : "⚠️", title: r.ok ? "Etsy connected" : "Etsy problem", body: r.message }),
+    onSuccess: (r) => toast({ icon: r.ok ? "" : "⚠️", title: r.ok ? "Etsy connected" : "Etsy problem", body: r.message }),
   });
   const watchNow = useMutation({
     mutationFn: () => api.post<{ raised: number }>("/radar/price-watch"),
-    onSuccess: (r) => (toast({ icon: "👀", title: r.raised ? `${r.raised} price alert${r.raised === 1 ? "" : "s"}` : "Prices look fine" }), qc.invalidateQueries()),
+    onSuccess: (r) => (toast({ icon: "", title: r.raised ? `${r.raised} price alert${r.raised === 1 ? "" : "s"}` : "Prices look fine" }), qc.invalidateQueries()),
   });
   const num = (k: "dailyIdeas" | "undercutPercent" | "priceTolerancePercent", label: string, suffix: string) => (
     <label className="block">
@@ -732,17 +744,17 @@ function EtsyRadar({ s }: { s: Settings }) {
             if (Number.isFinite(v) && v !== s.radar[k]) save.saveNow({ radar: { [k]: v } });
           }}
         />
-        <span className="text-sm">{suffix}</span>
+        <span className="text-sm text-zinc-500 dark:text-zinc-400">{suffix}</span>
       </div>
     </label>
   );
   return (
-    <Section title="Etsy & Trend Radar" icon="📡" right={<span className="chip">{etsyKey ? "🟢 key saved" : "🟡 no key yet"}</span>}>
-      <p className="mb-3 text-sm">
+    <Section title="Etsy and Trend Radar" right={<Status ok={!!etsyKey}>{etsyKey ? "Key saved" : "No key yet"}</Status>}>
+      <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-300">
         Your Etsy app's <b>keystring</b> and <b>shared secret</b> (Etsy → Your account → Developers → Your apps) let BinkSuite read live listings: trends, competitor
         prices and your own shop. Read-only; it can't change anything on Etsy. Stored encrypted.
       </p>
-      {etsyKey && <p className="mb-2 font-mono text-xs">••••{etsyKey.last4} · saved {timeAgo(etsyKey.updatedAt)}</p>}
+      {etsyKey && <p className="mb-2 font-mono text-xs text-zinc-500 dark:text-zinc-400">••••{etsyKey.last4} · saved {timeAgo(etsyKey.updatedAt)}</p>}
       <form
         className="grid gap-2 sm:grid-cols-2"
         onSubmit={(e) => {
@@ -771,12 +783,12 @@ function EtsyRadar({ s }: { s: Settings }) {
         {num("undercutPercent", "Undercut market by", "%")}
         {num("priceTolerancePercent", "Alert when above market by", "%")}
       </div>
-      <label className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
+      <label className="mt-3 flex items-center justify-between gap-2 text-sm font-medium">
         Line up today's best ideas automatically each morning
         <Toggle checked={s.radar.autoDaily} onChange={(v) => save.saveNow({ radar: { autoDaily: v } })} label="Automatic daily ideas" />
       </label>
       <button className="btn-soft mt-3" onClick={() => watchNow.mutate()} disabled={watchNow.isPending}>
-        👀 Run Price Watch now
+        Run Price Watch now
       </button>
     </Section>
   );

@@ -19,3 +19,10 @@ export function toPence(input: string): number {
   const n = Number(String(input).replace(/[£,\s]/g, ""));
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
+
+const EMOJI = /(?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\u{FE0F}|\u{200D}|\p{Extended_Pictographic}|\p{Emoji_Modifier})*/gu;
+
+/** Server-written text (logs, toasts, bubbles) without its emoji decoration. */
+export function plain(text: string): string {
+  return text.replace(EMOJI, "").replace(/\s{2,}/g, " ").replace(/^[\s·:–-]+/, "").trim();
+}
