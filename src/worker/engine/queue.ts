@@ -299,22 +299,12 @@ export async function tick(db: DB, settings: Settings, opts: TickOptions): Promi
     spend = { todayPence: spend.todayPence + step.estimatedCostPence, monthPence: spend.monthPence + step.estimatedCostPence };
   }
 
-  // 3. Demo simulator: keep a few products flowing and the odd sale trickling in.
+  // 3. Demo simulator: the odd pretend sale trickling in. It never adds ideas to the
+  // task board by itself: only ideas you send (Today's ideas, Trending now, the
+  // Suggestion box) go on the board.
   if (demoMode && opts.interactive) {
     const clock = (await kvGet<{ lastSpawn: number; lastSale: number }>(db, "demoClock")) ?? { lastSpawn: 0, lastSale: now.getTime() };
     const before = JSON.stringify(clock);
-    if (now.getTime() - clock.lastSpawn > 90_000) {
-      const inPipeline = await db
-        .select({ n: sql<number>`count(*)`.mapWith(Number) })
-        .from(products)
-        .where(and(eq(products.demo, true), sql`${products.stage} NOT IN ('live', 'dropped')`))
-        .get();
-      if ((inPipeline?.n ?? 0) < 3) {
-        await spawnDemoProduct(db);
-        result.spawned++;
-      }
-      clock.lastSpawn = now.getTime();
-    }
     if (now.getTime() - clock.lastSale > 150_000 && Math.random() < 0.5) {
       if (await demoSale(db, settings, now)) result.sales++;
       clock.lastSale = now.getTime();

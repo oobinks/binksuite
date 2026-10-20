@@ -93,11 +93,15 @@ export function TrendRadar({ settings }: { settings: Settings }) {
       }
     },
     onSuccess: (r) => {
-      if (r) toast({ icon: "", title: "Today's product picked", body: "Scout is researching it now." });
+      if (r) toast({ icon: "", title: "Sent to the task board", body: "Scout is researching it. Find it on the Research task board." });
       refresh();
     },
   });
-  const research = useMutation({ mutationFn: (keyword: string) => api.post("/radar/research", { keyword }), onSuccess: () => (toast({ icon: "", title: "Sent to Scout" }), refresh()) });
+  const [sent, setSent] = useState<Set<string>>(new Set());
+  const research = useMutation({
+    mutationFn: (keyword: string) => api.post("/radar/research", { keyword }),
+    onSuccess: (_r, keyword) => (setSent((s) => new Set(s).add(keyword)), toast({ icon: "", title: "Sent to the task board", body: `Scout is researching “${keyword}”.` }), refresh()),
+  });
   const watch = useMutation({ mutationFn: () => api.post("/radar/niches", { keyword: newNiche }), onSuccess: () => (setNewNiche(""), refresh()) });
 
   if (!data) return null;
@@ -144,7 +148,7 @@ export function TrendRadar({ settings }: { settings: Settings }) {
         <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-sm font-semibold">Today's ideas</h4>
           <div className={`flex items-center gap-3 text-xs ${muted}`}>
-            {settings.radar.autoDaily ? `Best ${settings.radar.dailyIdeas} each morning · pick one to make` : "Auto off"}
+            {settings.radar.autoDaily ? `Best ${settings.radar.dailyIdeas} each morning · send the one you want to the task board` : "Auto off"}
             {!data.daily?.pickedId && (
               <button className="btn-soft inline-flex items-center gap-1.5 !px-2.5 !py-1 text-xs" onClick={() => daily.mutate(!!data.daily?.items.length)} disabled={daily.isPending || !data.aiReady}>
                 {data.daily?.items.length ? <Icon name="refresh" size={13} /> : <Icon name="sparkles" size={13} />}
@@ -205,11 +209,12 @@ export function TrendRadar({ settings }: { settings: Settings }) {
                     </span>
                   ) : data.daily!.pickedId ? (
                     <button className={`shrink-0 text-xs underline-offset-2 hover:underline ${muted}`} onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
-                      Make this too
+                      Send this too
                     </button>
                   ) : (
                     <button className={`${n === 0 ? "btn-primary" : "btn-soft"} shrink-0 !px-2.5 !py-1 text-xs`} onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
-                      Make this today
+                      <Icon name="arrowRight" size={13} />
+                      Send to task board
                     </button>
                   )}
                 </li>
@@ -266,7 +271,7 @@ export function TrendRadar({ settings }: { settings: Settings }) {
                       <Dot className={n.source === "ai" ? "bg-zinc-400" : "bg-emerald-500"} />
                       {n.source === "ai" ? "AI estimate" : n.lastScanned ? timeAgo(n.lastScanned) : "Live"}
                       {n.origin === "you" ? " · yours" : ""}
-                      {n.lastSuggested ? " · tried" : ""}
+                      {n.lastSuggested ? " · sent before" : ""}
                     </span>
                   </td>
                   <td className="w-32 px-3 py-2.5">
@@ -280,9 +285,17 @@ export function TrendRadar({ settings }: { settings: Settings }) {
                   <td className="px-3 py-2.5 text-right tabular-nums">{n.medianPricePence ? formatGBP(n.medianPricePence) : <span className="text-zinc-400">—</span>}</td>
                   <UndercutCell medianPence={n.medianPricePence} undercutPercent={settings.radar.undercutPercent} floorPence={floor} />
                   <td className="px-3 py-2.5 text-right">
-                    <button className="btn-soft !px-2.5 !py-1 text-xs" onClick={() => research.mutate(n.keyword)} disabled={research.isPending}>
-                      Research
-                    </button>
+                    {sent.has(n.keyword) ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                        <Icon name="check" size={13} />
+                        On the board
+                      </span>
+                    ) : (
+                      <button className="btn-soft !px-2.5 !py-1 text-xs" onClick={() => research.mutate(n.keyword)} disabled={research.isPending && research.variables === n.keyword}>
+                        <Icon name="arrowRight" size={13} />
+                        {research.isPending && research.variables === n.keyword ? "Sending…" : "Send to task board"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
