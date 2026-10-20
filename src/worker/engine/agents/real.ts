@@ -418,12 +418,22 @@ async function planPrint(ctx: RealContext): Promise<StepResult> {
   };
 }
 
+/** The files buyers download (each one of this product's own uploads, with a tidy name). */
+function deliverablesFrom(product: ProductRow, data: Record<string, unknown> | undefined) {
+  const raw = Array.isArray(data?.deliverables) ? (data!.deliverables as unknown[]) : [];
+  return raw
+    .filter((x): x is { key: string; name: string } => !!x && typeof (x as { key?: unknown }).key === "string" && typeof (x as { name?: unknown }).name === "string")
+    .filter((x) => x.key.startsWith(`products/${product.id}/`) && /^[\w .()&+-]{1,80}\.(pdf|xlsx|zip)$/i.test(x.name))
+    .slice(0, 5);
+}
+
 function acceptPrintFiles(_task: TaskRow, product: ProductRow, data: Record<string, unknown> | undefined) {
   const zipKey = typeof data?.zipKey === "string" ? data.zipKey : "";
   if (!zipKey.startsWith(`products/${product.id}/`)) return { error: "Build the print files first (tap “Build print files”)." };
   const files = Array.isArray(data?.files) ? (data!.files as unknown[]).filter((f): f is string => typeof f === "string").slice(0, 50) : [];
   const zip = zipKey.split("/").pop()!;
-  return { productData: { zipKey, files, zip } };
+  const deliverables = deliverablesFrom(product, data);
+  return { productData: { zipKey, files, zip, ...(deliverables.length ? { deliverables } : {}) } };
 }
 
 
@@ -578,7 +588,8 @@ function acceptSheetFiles(_task: TaskRow, product: ProductRow, data: Record<stri
   const own = (k: unknown) => (typeof k === "string" && k.startsWith(`products/${product.id}/`) ? k : undefined);
   const raw = (data?.screens ?? {}) as Record<string, unknown>;
   const screens = { table: own(raw.table), dash: own(raw.dash), page: own(raw.page) };
-  return { productData: { zipKey, files, zip: zipKey.split("/").pop()!, keptImages: previews, screens } };
+  const deliverables = deliverablesFrom(product, data);
+  return { productData: { zipKey, files, zip: zipKey.split("/").pop()!, keptImages: previews, screens, ...(deliverables.length ? { deliverables } : {}) } };
 }
 
 // ───────────── Stylist: mockups from your kept art ─────────────

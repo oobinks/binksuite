@@ -34,3 +34,12 @@ export async function uploadProductFile(productId: string, name: string, body: B
   }
   return ((await res.json()) as { key: string }).key;
 }
+
+/** A tidy file name buyers see on Etsy, e.g. "The Ultimate Budget - Printable A4.pdf". */
+export const buyerFileName = (title: string, suffix: string, ext: string) =>
+  `${title.replace(/[^\w .()&+-]/g, "").replace(/\s+/g, " ").trim().slice(0, 60) || "Download"}${suffix ? ` - ${suffix}` : ""}.${ext}`;
+
+export interface Deliverable {
+  key: string;
+  name: string;
+}

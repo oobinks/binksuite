@@ -31,7 +31,7 @@ export const printReview: ReviewDef = {
         const { buildPrintPack } = await import("../../lib/print"); // PDF + ZIP tools load only when needed
         const p = await buildPrintPack(task.productId!, task.productTitle, keys, (label, f) => setStep({ label, f }), slogan.trim() || null);
         setPack(p);
-        setData({ zipKey: p.zipKey, files: p.files });
+        setData({ zipKey: p.zipKey, files: p.files, deliverables: p.deliverables });
         setReady(true);
       } catch (e) {
         setError(e);

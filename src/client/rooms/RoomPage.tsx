@@ -15,6 +15,7 @@ import { ComingSoon } from "./shared/ComingSoon";
 import { SuggestionBox } from "./research/SuggestionBox";
 import { TrendRadar } from "./research/TrendRadar";
 import { BundleBuilder } from "./launch/BundleBuilder";
+import { OrdersDesk } from "./orders/OrdersDesk";
 import { darkFloor } from "../hq/HQMap";
 
 /** Rooms whose agents do real work for real products in Phase 2. */
@@ -66,7 +67,13 @@ export function RoomPage() {
         <Suspense fallback={<p className="py-10 text-center font-bold">Unlocking the vault… 🔐</p>}>
           <FinanceRoom />
         </Suspense>
-      ) : room.demoInteractive ? <PipelineRoom roomId={room.id} /> : <ComingSoon roomId={room.id} />}
+      ) : room.id === "orders" ? (
+        <OrdersDesk />
+      ) : room.demoInteractive ? (
+        <PipelineRoom roomId={room.id} />
+      ) : (
+        <ComingSoon roomId={room.id} />
+      )}
     </div>
   );
 }

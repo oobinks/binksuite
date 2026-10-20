@@ -25,9 +25,15 @@ export const fileRoutes = newApp()
   })
   .put("/files/products/:productId/:name", async (c) => {
     const { productId, name } = c.req.param();
-    // Print packs (.zip) and spreadsheet preview pictures (.jpg).
-    const type = name.endsWith(".zip") ? "application/zip" : name.endsWith(".jpg") ? "image/jpeg" : null;
-    if (!SAFE_NAME.test(name) || !type) throw new HttpError(400, "Only .zip packs and .jpg previews can be uploaded.");
+    // Packs (.zip), listing photos (.jpg), and the files buyers download (.xlsx, .pdf).
+    const TYPES: Record<string, string> = {
+      zip: "application/zip",
+      jpg: "image/jpeg",
+      pdf: "application/pdf",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    };
+    const type = TYPES[name.split(".").pop()?.toLowerCase() ?? ""] ?? null;
+    if (!SAFE_NAME.test(name) || !type) throw new HttpError(400, "Only .zip, .jpg, .pdf and .xlsx files can be uploaded.");
     const product = await c.get("db").select({ id: products.id }).from(products).where(eq(products.id, productId)).get();
     if (!product) throw new HttpError(404, "No such product");
     const size = Number(c.req.header("content-length") ?? 0);

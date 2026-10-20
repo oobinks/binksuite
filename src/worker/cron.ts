@@ -13,6 +13,8 @@ import { etsyClient } from "./providers/etsy";
 import { vaultSecret } from "./lib/vault";
 import { radarTick } from "./engine/trends";
 import { priceWatchTick } from "./engine/priceWatch";
+import { shopClient } from "./providers/etsyShop";
+import { syncOrders } from "./engine/orders";
 
 const KEEP_LOGS_DAYS = 45;
 
@@ -27,6 +29,9 @@ export async function runCron(env: Env) {
   // 📡 Trend Radar + 🎯 today's ideas + 👀 Price Watch (a few Etsy calls per run).
   await radarTick(db, settings, { etsy, ai, budget: 6 }).catch((e) => console.error("radar", e));
   await priceWatchTick(db, settings, etsy, new Date(), 6).catch((e) => console.error("price watch", e));
+  // 🧾 New Etsy orders (every 15 minutes, once your shop is connected).
+  const shop = key ? await shopClient(db, env, key).catch(() => null) : null;
+  if (shop) await syncOrders(db, settings, shop).catch((e) => console.error("orders", e));
   const cutoff = new Date(Date.now() - KEEP_LOGS_DAYS * 86_400_000).toISOString();
   await db.delete(activity).where(lt(activity.createdAt, cutoff));
   await db.delete(notifications).where(lt(notifications.createdAt, cutoff));

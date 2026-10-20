@@ -3,7 +3,7 @@
 // sizes at 300 DPI, make one PDF per size, zip everything, upload to R2.
 import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
-import { fileUrl, loadImageSrc } from "./files";
+import { buyerFileName, fileUrl, loadImageSrc, uploadProductFile, type Deliverable } from "./files";
 import { PRINT_SIZES, pixelsFor } from "./printSizes";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "print";
@@ -77,6 +77,8 @@ export async function loadSloganFont() {
 export interface PrintPack {
   zipKey: string;
   files: string[];
+  /** One PDF per size, saved on their own for sending to Etsy (max 5). */
+  deliverables: Deliverable[];
   bytes: number;
 }
 
@@ -107,6 +109,7 @@ export async function buildPrintPack(
     files.push(name);
   }
 
+  const pdfs: { name: string; bytes: Uint8Array }[] = [];
   const total = PRINT_SIZES.length * images.length;
   let done = 0;
   for (const size of PRINT_SIZES) {
@@ -124,8 +127,10 @@ export async function buildPrintPack(
       await new Promise((r) => setTimeout(r, 0)); // let the page breathe
     }
     const name = `${base}-${size.name.replace(/\s+/g, "")}.pdf`;
-    zip.file(name, await pdf.save());
+    const bytes = await pdf.save();
+    zip.file(name, bytes);
     files.push(name);
+    pdfs.push({ name: buyerFileName(title, size.name, "pdf"), bytes });
   }
 
   onProgress("Zipping…", 0.92);
@@ -143,6 +148,11 @@ export async function buildPrintPack(
     throw new Error(msg?.error ?? `Upload failed (${res.status})`);
   }
   const { key } = (await res.json()) as { key: string };
+  onProgress("Saving the downloads for Etsy…", 0.98);
+  const stamp = Date.now().toString(36);
+  const deliverables: Deliverable[] = [];
+  for (const [i, f] of pdfs.slice(0, 5).entries())
+    deliverables.push({ key: await uploadProductFile(productId, `${base}-file-${i + 1}-${stamp}.pdf`, new Blob([f.bytes as BlobPart], { type: "application/pdf" }), "application/pdf"), name: f.name });
   onProgress("Done!", 1);
-  return { zipKey: key, files, bytes: blob.size };
+  return { zipKey: key, files, deliverables, bytes: blob.size };
 }

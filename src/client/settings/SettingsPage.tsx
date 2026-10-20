@@ -26,6 +26,7 @@ export function SettingsPage() {
         <ProductKinds s={snap.settings} />
         <ClaudeCode s={snap.settings} />
         <EtsyRadar s={snap.settings} />
+        <EtsyShop />
         <AiEngine s={snap.settings} />
         <Demo s={snap.settings} />
         <Fees s={snap.settings} />
@@ -618,6 +619,81 @@ function AiEngine({ s }: { s: Settings }) {
   );
 }
 
+interface EtsyStatus {
+  apiKey: boolean;
+  shop: { shopId: number; shopName: string; connectedAt: string } | null;
+  callbackUrl: string;
+}
+
+/** 🛍️ Connect your own shop so finished products can be sent to Etsy as drafts. */
+function EtsyShop() {
+  const qc = useQueryClient();
+  const toast = useUi((x) => x.toast);
+  const { data } = useQuery({ queryKey: ["etsy"], queryFn: () => api.get<EtsyStatus>("/etsy") });
+  // Back from Etsy: say how it went, once.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const result = q.get("etsy");
+    if (!result) return;
+    if (result === "connected") toast({ icon: "🛍️", title: `Connected to ${q.get("shop") ?? "your Etsy shop"}`, body: "Finished products can now go to Etsy as drafts." });
+    else toast({ icon: "⚠️", title: "Etsy didn't connect", body: q.get("reason") ?? undefined });
+    window.history.replaceState(null, "", "/settings#etsy");
+    qc.invalidateQueries({ queryKey: ["etsy"] });
+  }, [qc, toast]);
+  const connect = useMutation({
+    mutationFn: () => api.post<{ url: string }>("/etsy/connect"),
+    onSuccess: (r) => (window.location.href = r.url),
+  });
+  const disconnect = useMutation({
+    mutationFn: () => api.post("/etsy/disconnect"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["etsy"] }),
+  });
+  return (
+    <Section title="Your Etsy shop (publishing)" icon="🛍️" right={<span className="chip">{data?.shop ? `🟢 ${data.shop.shopName}` : "🟡 not connected"}</span>}>
+      <div id="etsy" className="space-y-3 text-sm">
+        <p>
+          Connect your shop once and the Launch Pad can send each finished product to Etsy as a <b>draft</b>, with title, tags, description, price, listing photos and the
+          download files. You check the draft on Etsy and press <b>Publish</b> yourself: BinkSuite never publishes.
+        </p>
+        {!data?.apiKey ? (
+          <p className="rounded-xl bg-honey/15 p-2">Add your Etsy API key above first.</p>
+        ) : data.shop ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 p-2 dark:bg-emerald-900/25">
+            <span>
+              ✅ Connected to <b>{data.shop.shopName}</b> · {timeAgo(data.shop.connectedAt)}
+            </span>
+            <span className="flex gap-2">
+              <button className="btn-soft !py-1 text-xs" onClick={() => connect.mutate()} disabled={connect.isPending}>
+                Reconnect
+              </button>
+              <button className="btn-soft !py-1 text-xs" onClick={() => confirm("Disconnect your Etsy shop from BinkSuite?") && disconnect.mutate()} disabled={disconnect.isPending}>
+                Disconnect
+              </button>
+            </span>
+          </div>
+        ) : (
+          <ol className="space-y-2">
+            <li>
+              <b>1.</b> On Etsy, open <b>Your account → Developers → Your apps</b>, edit your app, and add this as a <b>Callback URL</b>:
+              <span className="mt-1 flex items-center gap-2">
+                <code className="min-w-0 flex-1 break-all rounded-lg bg-black/5 px-2 py-1 text-xs dark:bg-white/10">{data.callbackUrl}</code>
+                <CopyButton text={data.callbackUrl} />
+              </span>
+            </li>
+            <li>
+              <b>2.</b> Tap Connect, sign in to Etsy if asked, and tap <b>Grant access</b>. You'll come straight back here.
+              <button className="btn-primary mt-1 w-full" onClick={() => connect.mutate()} disabled={connect.isPending}>
+                {connect.isPending ? "Opening Etsy…" : "🛍️ Connect my Etsy shop"}
+              </button>
+            </li>
+          </ol>
+        )}
+        <ErrorNote error={connect.error ?? disconnect.error} />
+      </div>
+    </Section>
+  );
+}
+
 function EtsyRadar({ s }: { s: Settings }) {
   const qc = useQueryClient();
   const save = useSaved();
@@ -696,7 +772,7 @@ function EtsyRadar({ s }: { s: Settings }) {
         {num("priceTolerancePercent", "Alert when above market by", "%")}
       </div>
       <label className="mt-3 flex items-center justify-between gap-2 text-sm font-semibold">
-        Send today's ideas to Scout automatically each morning
+        Line up today's best ideas automatically each morning
         <Toggle checked={s.radar.autoDaily} onChange={(v) => save.saveNow({ radar: { autoDaily: v } })} label="Automatic daily ideas" />
       </label>
       <button className="btn-soft mt-3" onClick={() => watchNow.mutate()} disabled={watchNow.isPending}>

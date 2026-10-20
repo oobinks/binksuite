@@ -33,7 +33,7 @@ export const sheetReview: ReviewDef = {
         const { buildSheetPack } = await import("../../lib/sheet"); // Excel + PDF tools load only when needed
         const p = await buildSheetPack(task.productId!, o.sheet, o.format, (label, f) => setStep({ label, f }));
         setPack(p);
-        setData({ zipKey: p.zipKey, files: p.files, previews: p.previews, screens: p.screens });
+        setData({ zipKey: p.zipKey, files: p.files, previews: p.previews, screens: p.screens, deliverables: p.deliverables });
         setReady(true);
       } catch (e) {
         setError(e);

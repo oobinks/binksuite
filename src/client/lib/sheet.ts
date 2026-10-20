@@ -8,7 +8,7 @@ import ExcelJS from "exceljs";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import JSZip from "jszip";
 import fontkit from "@pdf-lib/fontkit";
-import { uploadProductFile } from "./files";
+import { buyerFileName, uploadProductFile, type Deliverable } from "./files";
 import type { ProductFormat } from "../../shared/format";
 import { addCharts, fixInternalLinks, type ChartSpec } from "./xlsxCharts";
 import { buildListingPhotos } from "./listingPhotos";
@@ -890,6 +890,8 @@ export interface SheetPack {
   files: string[];
   previews: string[];
   screens: { table?: string; dash?: string; page?: string };
+  /** The files buyers download (for sending to Etsy). */
+  deliverables: Deliverable[];
   bytes: number;
 }
 
@@ -899,17 +901,23 @@ export async function buildSheetPack(productId: string, raw: SheetSpec, format: 
   const base = slug(spec.title);
   const zip = new JSZip();
   const files: string[] = [];
+  // The files buyers download, each also saved on its own for sending to Etsy.
+  const buyer: { blob: Blob; ext: string; name: string; type: string }[] = [];
   if (format === "excel") {
     onProgress("Building the Excel workbook…", 0.1);
     const name = `${base}.xlsx`;
-    zip.file(name, await buildWorkbook(spec));
+    const xlsx = await buildWorkbook(spec);
+    zip.file(name, xlsx);
     files.push(name);
+    buyer.push({ blob: new Blob([xlsx]), ext: "xlsx", name: buyerFileName(spec.title, "", "xlsx"), type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   }
   for (const [i, size] of PAGE_SIZES.entries()) {
     onProgress(`Making the printable PDF (${size.name})…`, 0.25 + i * 0.1);
     const name = `${base}-printable-${size.name}.pdf`;
-    zip.file(name, await buildPdf(spec, size, format));
+    const pdf = await buildPdf(spec, size, format);
+    zip.file(name, pdf);
     files.push(name);
+    buyer.push({ blob: new Blob([pdf as BlobPart]), ext: "pdf", name: buyerFileName(spec.title, `Printable ${size.name === "USLetter" ? "US Letter" : size.name}`, "pdf"), type: "application/pdf" });
   }
   onProgress("Drawing the listing pictures…", 0.5);
   const pictures = await buildListingPhotos(spec, format);
@@ -923,11 +931,13 @@ export async function buildSheetPack(productId: string, raw: SheetSpec, format: 
   onProgress("Uploading…", 0.82);
   const stamp = Date.now().toString(36);
   const zipKey = await uploadProductFile(productId, `${base}-pack-${stamp}.zip`, blob, "application/zip");
+  const deliverables: Deliverable[] = [];
+  for (const [i, f] of buyer.entries()) deliverables.push({ key: await uploadProductFile(productId, `${base}-file-${i + 1}-${stamp}.${f.ext}`, f.blob, f.type), name: f.name });
   const previews: string[] = [];
   for (const [i, p] of pictures.listing.entries()) previews.push(await uploadProductFile(productId, `${base}-listing-${i + 1}-${stamp}.jpg`, p, "image/jpeg"));
   onProgress("Saving the mockup screens…", 0.94);
   const screens: SheetPack["screens"] = {};
   for (const [k, b] of Object.entries(pictures.screens)) if (b) screens[k as keyof SheetPack["screens"]] = await uploadProductFile(productId, `${base}-screen-${k}-${stamp}.jpg`, b, "image/jpeg");
   onProgress("Done!", 1);
-  return { zipKey, files, previews, screens, bytes: blob.size };
+  return { zipKey, files, previews, screens, deliverables, bytes: blob.size };
 }
