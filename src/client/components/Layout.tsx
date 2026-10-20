@@ -5,6 +5,7 @@ import { useSnapshot, applyTheme } from "../lib/hooks";
 import { useUi } from "../lib/store";
 import { formatGBP } from "../lib/format";
 import { ProgressBar, Modal } from "./ui";
+import { BUILD_INFO } from "../lib/buildInfo";
 import { Logo } from "./Logo";
 import { ClaudeBar } from "./ClaudeBar";
 import { BriefingModal } from "../game/BriefingModal";
@@ -33,6 +34,12 @@ export function Layout({ children }: { children: ReactNode }) {
           <Link to="/" className="flex items-center gap-1.5 text-lg font-black tracking-tight" aria-label="BinkSuite HQ">
             <Logo size={30} className="shrink-0 drop-shadow-sm" />
             <span className="hidden sm:inline">BinkSuite</span>
+            <span
+              className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] font-bold tracking-normal text-cocoa dark:bg-white/10 dark:text-stone-300"
+              title={`Version ${BUILD_INFO.version}${BUILD_INFO.change ? `: ${BUILD_INFO.change}` : ""}`}
+            >
+              v{BUILD_INFO.version}
+            </span>
           </Link>
           {snap?.settings.demoMode && (
             <span className="chip whitespace-nowrap bg-honey/25 text-amber-800 dark:text-amber-200" title="Demo mode is on">
