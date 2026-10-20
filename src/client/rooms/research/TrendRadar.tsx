@@ -37,7 +37,25 @@ interface RadarResp {
   watching: number;
   scannedLive: number;
   niches: Niche[];
-  daily: { date: string; at: string; items: { productId: string; keyword: string; idea: string; angle: string; format?: ProductFormat; stage: string; verdict: string | null; overall: number | null }[] } | null;
+  daily: {
+    date: string;
+    at: string;
+    pickedId?: string;
+    items: {
+      id?: string;
+      productId?: string;
+      keyword: string;
+      idea: string;
+      angle: string;
+      why?: string;
+      score?: number;
+      market?: { totalListings: number | null; medianPricePence: number | null; favsPerDay: number | null } | null;
+      format?: ProductFormat;
+      stage: string | null;
+      verdict: string | null;
+      overall: number | null;
+    }[];
+  } | null;
   settings: Settings["radar"];
 }
 
@@ -51,8 +69,24 @@ export function TrendRadar({ settings }: { settings: Settings }) {
   const refresh = () => qc.invalidateQueries();
   const scan = useMutation({ mutationFn: () => api.post<{ scanned: number; error: string | null }>("/radar/scan"), onSuccess: (r) => (toast({ icon: "📡", title: `Scanned ${r.scanned} niches`, body: r.error }), refresh()) });
   const daily = useMutation({
-    mutationFn: () => api.post<{ items: unknown[]; pending?: boolean }>("/radar/daily"),
-    onSuccess: (r) => (toast(r.pending ? { icon: "✨", title: "Added to Claude's to-do list", body: "Today's ideas arrive when Claude's session finishes." } : { icon: "🎯", title: `${r.items.length} new ideas sent to Scout` }), refresh()),
+    mutationFn: (refresh: boolean) => api.post<{ items: unknown[]; pending?: boolean }>("/radar/daily", { refresh }),
+    onSuccess: (r) => (toast(r.pending ? { icon: "✨", title: "Added to Claude's to-do list", body: "Today's ideas arrive when Claude's session finishes." } : { icon: "🎯", title: `Today's ${r.items.length} best ideas are ready`, body: "Pick the one to make today." }), refresh()),
+  });
+  const pick = useMutation({
+    mutationFn: async (id: string) => {
+      try {
+        return await api.post<{ productId: string }>("/radar/daily/pick", { id });
+      } catch (e) {
+        // Already picked today's product: make another one only if you mean it.
+        if ((e as { status?: number }).status === 409 && confirm("You've already picked today's product. Make this one too?")) return api.post<{ productId: string }>("/radar/daily/pick", { id, force: true });
+        if ((e as { status?: number }).status === 409) return null;
+        throw e;
+      }
+    },
+    onSuccess: (r) => {
+      if (r) toast({ icon: "🎯", title: "Today's product picked", body: "Scout is researching it now." });
+      refresh();
+    },
   });
   const research = useMutation({ mutationFn: (keyword: string) => api.post("/radar/research", { keyword }), onSuccess: () => (toast({ icon: "🔬", title: "Sent to Scout" }), refresh()) });
   const watch = useMutation({ mutationFn: () => api.post("/radar/niches", { keyword: newNiche }), onSuccess: () => (setNewNiche(""), refresh()) });
@@ -93,30 +127,59 @@ export function TrendRadar({ settings }: { settings: Settings }) {
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h4 className="font-black">🎯 Today's ideas</h4>
           <div className="flex items-center gap-2 text-xs text-cocoa dark:text-stone-400">
-            {settings.radar.autoDaily ? `Arrive each morning · ${settings.radar.dailyIdeas} a day` : "Auto off"}
-            <button className="btn-soft !py-1 text-xs" onClick={() => daily.mutate()} disabled={daily.isPending || !data.aiReady}>
-              {daily.isPending ? "Thinking…" : data.daily ? "➕ More ideas now" : "🎯 Get today's ideas now"}
-            </button>
+            {settings.radar.autoDaily ? `The best ${settings.radar.dailyIdeas} each morning · you pick one to make` : "Auto off"}
+            {!data.daily?.pickedId && (
+              <button className="btn-soft !py-1 text-xs" onClick={() => daily.mutate(!!data.daily?.items.length)} disabled={daily.isPending || !data.aiReady}>
+                {daily.isPending ? "Thinking…" : data.daily?.items.length ? "🔄 Fresh ideas" : "🎯 Get today's ideas now"}
+              </button>
+            )}
           </div>
         </div>
         {data.daily?.items.length ? (
-          <ul className="space-y-1.5">
-            {data.daily.items.map((i) => (
-              <li key={i.productId} className="flex items-start gap-2 rounded-xl bg-white p-2 text-sm dark:bg-night-3">
-                <span className="text-lg">{i.verdict ? VERDICT[i.verdict] : "🔎"}</span>
-                <span className="min-w-0 flex-1">
-                  <FormatBadge format={i.format ?? "art"} /> <b>{i.idea}</b>
-                  <span className="block text-xs text-cocoa dark:text-stone-400">
-                    📡 {i.keyword} · {i.angle}
-                  </span>
-                </span>
-                <span className="chip shrink-0">{i.verdict ? `${i.verdict.toUpperCase()} ${i.overall}` : i.stage === "research" ? "Scout's on it" : i.stage}</span>
-              </li>
-            ))}
+          <ul className="space-y-2">
+            {data.daily.items.map((i, n) => {
+              const picked = !!i.productId;
+              const isToday = data.daily!.pickedId ? i.id === data.daily!.pickedId : false;
+              return (
+                <li key={i.id ?? i.productId ?? n} className={`rounded-xl p-2.5 text-sm ${isToday ? "bg-emerald-50 ring-2 ring-emerald-400 dark:bg-emerald-900/25" : "bg-white dark:bg-night-3"}`}>
+                  <div className="flex items-start gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-100 text-sm font-black text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" title="Scout's score out of 10">
+                      {i.score ?? (i.verdict ? VERDICT[i.verdict] : "🔎")}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <FormatBadge format={i.format ?? "art"} /> <b>{i.idea}</b>
+                      <span className="block text-xs text-cocoa dark:text-stone-400">
+                        📡 {i.keyword} · {i.angle}
+                      </span>
+                      {i.why && <span className="block text-xs text-cocoa dark:text-stone-400">💡 {i.why}</span>}
+                      {i.market && (
+                        <span className="mt-0.5 block text-[11px] text-cocoa dark:text-stone-400">
+                          {i.market.totalListings != null && `${i.market.totalListings.toLocaleString("en-GB")} competitors`}
+                          {i.market.medianPricePence ? ` · usually ${formatGBP(i.market.medianPricePence)}` : ""}
+                          {i.market.favsPerDay != null ? ` · ${i.market.favsPerDay} ♥/day on new listings` : ""}
+                        </span>
+                      )}
+                    </span>
+                    {picked ? (
+                      <span className="chip shrink-0">{i.verdict ? `${VERDICT[i.verdict]} ${i.verdict.toUpperCase()} ${i.overall}` : i.stage === "research" ? "Scout's on it" : (i.stage ?? "Started")}</span>
+                    ) : data.daily!.pickedId ? (
+                      <button className="shrink-0 text-xs text-cocoa underline dark:text-stone-400" onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
+                        Make this too
+                      </button>
+                    ) : (
+                      <button className="btn-primary shrink-0 !py-1 text-xs" onClick={() => pick.mutate(i.id!)} disabled={pick.isPending || !i.id}>
+                        {n === 0 ? "⭐ Make this today" : "Make this today"}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
-          <p className="text-sm text-cocoa dark:text-stone-400">No ideas yet today. They arrive each morning, or tap the button.</p>
+          <p className="text-sm text-cocoa dark:text-stone-400">No ideas yet today. The best {settings.radar.dailyIdeas} arrive each morning, or tap the button.</p>
         )}
+        {data.daily?.pickedId && <p className="mt-2 text-xs text-cocoa dark:text-stone-400">✅ Today's product is picked. Fresh ideas arrive tomorrow morning.</p>}
       </div>
 
       {/* Trending niches */}
@@ -203,7 +266,7 @@ export function TrendRadar({ settings }: { settings: Settings }) {
           + Watch
         </button>
       </form>
-      <ErrorNote error={scan.error ?? daily.error ?? research.error ?? watch.error} />
+      <ErrorNote error={scan.error ?? daily.error ?? pick.error ?? research.error ?? watch.error} />
     </Section>
   );
 }

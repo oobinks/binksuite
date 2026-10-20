@@ -127,7 +127,8 @@ export const agentRoutes = newApp()
     // Put the answer to use straight away.
     const settings = c.get("settings");
     if (job.taskId) await settle(c);
-    else if (job.id.startsWith("daily:")) await makeDailyIdeas(db, settings, aiFor(c)!).catch(() => null);
+    // (A refreshed batch is numbered 1, 2…: apply it as a refresh.)
+    else if (job.id.startsWith("daily:")) await makeDailyIdeas(db, settings, aiFor(c)!, new Date(), { refresh: Number(job.id.split(":")[2] ?? 0) > 0 }).catch(() => null);
     else if (job.id.startsWith("estimate:")) await radarTick(db, settings, { etsy: await etsyFor(c), ai: aiFor(c), budget: 0 }).catch(() => null);
 
     const after = await db.select().from(claudeJobs).where(eq(claudeJobs.id, job.id)).get();

@@ -242,31 +242,70 @@ export async function radarTick(db: DB, settings: Settings, deps: RadarDeps): Pr
   return result;
 }
 
+/** One of today's ideas: a niche on the move plus Scout's twist, scored so the best come first. */
+export interface DailyIdea {
+  id: string;
+  keyword: string;
+  idea: string;
+  angle: string;
+  why?: string;
+  format?: ProductFormat;
+  /** Scout's 1-10: demand, beatable competition, profit and how premium we can make it. */
+  score?: number;
+  market?: { totalListings: number | null; medianPricePence: number | null; favsPerDay: number | null } | null;
+  /** Set once you pick it (or for older days, when every idea was started automatically). */
+  productId?: string;
+}
+
 export interface DailyIdeas {
   date: string;
   at: string;
-  items: { productId: string; keyword: string; idea: string; angle: string; format?: ProductFormat }[];
+  items: DailyIdea[];
+  /** How many fresh batches today ("Refresh ideas"). */
+  batch?: number;
+  /** The idea you chose to make today. */
+  pickedId?: string;
 }
 
 const ideasSchema = z.object({
-  ideas: z.array(z.object({ keyword: z.string(), idea: z.string(), angle: z.string(), why: z.string(), format: z.string().optional() })),
+  ideas: z.array(z.object({ keyword: z.string(), idea: z.string(), angle: z.string(), why: z.string(), format: z.string().optional(), score: z.number().optional() })),
 });
 
-/** Turn the top niches into fresh, competitive product ideas and send them to Scout. */
-export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices, now = new Date()) {
+const SHOWN_RECENTLY_DAYS = 3;
+
+/**
+ * Today's ideas: Scout invents an idea for each of the top niches, scores them, and the
+ * best few are kept for you to choose from. Nothing is started until you pick one
+ * (one product a day). "Refresh" swaps them for a fresh batch, until you've picked.
+ */
+export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices, now = new Date(), opts: { refresh?: boolean } = {}) {
+  const date = now.toISOString().slice(0, 10);
+  const today = await kvGet<DailyIdeas>(db, `daily:${date}`);
+  if (today?.pickedId) return today.items;
+  if (today?.items.length && !opts.refresh) return today.items;
   const cutoff = new Date(now.getTime() - SUGGEST_COOLDOWN_MS).toISOString();
   const candidates = await db
     .select()
     .from(trendNiches)
     .where(and(sql`${trendNiches.score} > 0`, or(isNull(trendNiches.lastSuggested), lt(trendNiches.lastSuggested, cutoff)), await liveOnly(db)))
     .orderBy(desc(trendNiches.score))
-    .limit(settings.radar.dailyIdeas * 4)
+    .limit(60)
     .all();
+  // Fresh each day: a refresh never repeats today's; niches shown in the last few days come last.
+  const todays = new Set<string>(today?.items.map((i) => i.keyword) ?? []);
+  const shown = new Set<string>();
+  for (let d = 1; d <= SHOWN_RECENTLY_DAYS; d++) {
+    const day = new Date(now.getTime() - d * 86_400_000).toISOString().slice(0, 10);
+    for (const i of (await kvGet<DailyIdeas>(db, `daily:${day}`))?.items ?? []) shown.add(i.keyword);
+  }
+  const keep = settings.radar.dailyIdeas;
   // Prefer niches where we can undercut the median and still clear the minimum profit.
   const floor = minimumPriceFor(settings.minProfitPence, 10, settings.fees);
   const roomToUndercut = (n: NicheRow) => (n.medianPricePence ?? 0) > floor;
-  const wanted = candidates.filter((n) => nicheWanted(n, settings.formats));
-  const top = [...wanted.filter(roomToUndercut), ...wanted.filter((n) => !roomToUndercut(n))].slice(0, settings.radar.dailyIdeas);
+  const wanted = candidates.filter((n) => nicheWanted(n, settings.formats) && !todays.has(n.keyword));
+  const pool = [...wanted.filter((n) => !shown.has(n.keyword)), ...wanted.filter((n) => shown.has(n.keyword))];
+  // Twice as many as you'll see, so Scout's scores pick the best of them.
+  const top = [...pool.filter(roomToUndercut), ...pool.filter((n) => !roomToUndercut(n))].slice(0, keep * 2);
   const formats = enabledFormats(settings.formats);
   const formatHelp: Record<ProductFormat, string> = {
     art: '"art" (printable wall art)',
@@ -278,15 +317,13 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     (n) =>
       `- ${n.keyword}: [${pickFormat(nicheFormat(n.keyword, n.category), settings.formats)}] ${n.source === "etsy" ? `${n.totalListings?.toLocaleString()} competing listings, new listings getting ${n.favsPerDay} favourites/day, median price £${((n.medianPricePence ?? 0) / 100).toFixed(2)}` : `AI estimate${n.note ? `: ${n.note}` : ""}`}`,
   );
-  // One batch per press: "More ideas now" asks for a fresh batch rather than reusing this morning's.
-  const date = now.toISOString().slice(0, 10);
-  const earlier = (await kvGet<DailyIdeas>(db, `daily:${date}`))?.items ?? [];
+  const batch = (today?.batch ?? 0) + (today ? 1 : 0);
   const r = await ai.json({
-    key: `daily:${date}:${earlier.length}`,
-    label: `🎯 Today's ideas (${top.length})`,
+    key: `daily:${date}:${batch}`,
+    label: `🎯 Today's ideas`,
     system:
-      "You are Scout, the creative lead of a UK Etsy shop selling AI-assisted digital printables. Your job: beat competitors with fresh, specific, sellable ideas: a clear twist, not a copy. No brands, characters, celebrities or song lyrics.",
-    prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital download that could outsell what's already there. Formats (the shop only makes these right now): ${formats.map((f) => formatHelp[f]).join(", ")}. The format in [brackets] is the usual one for that niche; pick another of these if it would sell better. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence), format.`,
+      "You are Scout, the creative lead of a UK Etsy shop selling AI-assisted digital downloads. Your job: beat competitors with fresh, specific, sellable ideas: a clear twist, not a copy. Be a tough judge: the owner makes only one product a day, so only the very best should score high. No brands, characters, celebrities or song lyrics.",
+    prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital download that could outsell what's already there. Formats (the shop only makes these right now): ${formats.map((f) => formatHelp[f]).join(", ")}. The format in [brackets] is the usual one for that niche; pick another of these if it would sell better.\nThen score each idea 1-10 (decimals fine) for how good a bet it is today: real demand right now, competition we can beat, room for a healthy price, and how premium we can make it. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence), format, score.`,
     schema: ideasSchema,
     jsonSchema: {
       type: "object",
@@ -295,36 +332,77 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
           type: "array",
           items: {
             type: "object",
-            properties: { keyword: { type: "string" }, idea: { type: "string" }, angle: { type: "string" }, why: { type: "string" }, format: { type: "string", enum: [...formats] } },
-            required: ["keyword", "idea", "angle", "why", "format"],
+            properties: {
+              keyword: { type: "string" },
+              idea: { type: "string" },
+              angle: { type: "string" },
+              why: { type: "string" },
+              format: { type: "string", enum: [...formats] },
+              score: { type: "number" },
+            },
+            required: ["keyword", "idea", "angle", "why", "format", "score"],
           },
         },
       },
       required: ["ideas"],
     },
-    maxTokens: 1200,
+    maxTokens: 2000,
   });
-  const items: DailyIdeas["items"] = [];
+  const scored: DailyIdea[] = [];
   const unused = [...r.ideas];
-  for (const niche of top) {
+  for (const [rank, niche] of top.entries()) {
     const at = unused.findIndex((i) => i.keyword.trim().toLowerCase() === niche.keyword);
-    const [idea] = unused.splice(at >= 0 ? at : 0, 1);
-    if (!idea) continue;
-    const market = niche.source === "etsy" ? marketOf(niche) : null;
-    const notes = `Today's idea from Trend Radar (${niche.keyword}). Twist: ${idea.angle} Why: ${idea.why}`;
-    const format = pickFormat(isFormat(idea.format) ? idea.format : nicheFormat(niche.keyword, niche.category), settings.formats);
-    const p = await suggestIdea(db, settings, idea.idea.slice(0, 120), notes.slice(0, 1000), true, { market, trendKeyword: niche.keyword, origin: "daily", format });
-    await db.update(trendNiches).set({ lastSuggested: nowIso(now) }).where(eq(trendNiches.keyword, niche.keyword));
-    items.push({ productId: p.id, keyword: niche.keyword, idea: idea.idea.slice(0, 120), angle: idea.angle.slice(0, 300), format });
+    if (at < 0) continue;
+    const [idea] = unused.splice(at, 1);
+    const market = niche.source === "etsy" ? { totalListings: niche.totalListings, medianPricePence: niche.medianPricePence, favsPerDay: niche.favsPerDay } : null;
+    scored.push({
+      id: `${date}-${batch}-${rank}`,
+      keyword: niche.keyword,
+      idea: idea.idea.slice(0, 120),
+      angle: idea.angle.slice(0, 300),
+      why: idea.why.slice(0, 300),
+      format: pickFormat(isFormat(idea.format) ? idea.format : nicheFormat(niche.keyword, niche.category), settings.formats),
+      score: Math.max(1, Math.min(10, Math.round((Number(idea.score) || 5) * 10) / 10)),
+      market,
+    });
   }
-  // "More ideas now" adds to today's list rather than replacing it.
-  const daily: DailyIdeas = { date, at: nowIso(now), items: [...earlier, ...items] };
-  await kvSet(db, `daily:${daily.date}`, daily);
+  // The best few, best first (the niche's own heat breaks ties).
+  const items = scored.sort((x, y) => (y.score ?? 0) - (x.score ?? 0)).slice(0, keep);
+  const daily: DailyIdeas = { date, at: nowIso(now), items, batch };
+  await kvSet(db, `daily:${date}`, daily);
   if (items.length) {
-    await notify(db, "quest", `🎯 Today's ${items.length} ideas are in`, "Scout is researching them now. Check the Research Lab.", false);
-    await logActivity(db, "scout", "research", "new", `🎯 Trend Radar picked today's ${items.length} ideas`, false);
+    await notify(db, "quest", `🎯 Today's ${items.length} ideas are ready`, "Pick the one to make today in the Research Lab.", false);
+    await logActivity(db, "scout", "research", "new", `🎯 Trend Radar lined up today's ${items.length} best ideas. Pick one!`, false);
   }
   return items;
+}
+
+/** You chose today's product: it goes to Scout for full research. One a day unless you insist. */
+export async function pickDailyIdea(db: DB, settings: Settings, id: string, opts: { force?: boolean; realAi: boolean; now?: Date }) {
+  const now = opts.now ?? new Date();
+  const date = now.toISOString().slice(0, 10);
+  const daily = await kvGet<DailyIdeas>(db, `daily:${date}`);
+  const item = daily?.items.find((i) => i.id === id);
+  if (!daily || !item) throw new Error("That idea isn't on today's list any more.");
+  if (item.productId) return { productId: item.productId, already: true };
+  if (daily.pickedId && !opts.force) {
+    const chosen = daily.items.find((i) => i.id === daily.pickedId);
+    return { needsConfirm: true, chosen: chosen?.idea ?? "another idea" };
+  }
+  const niche = await db.select().from(trendNiches).where(eq(trendNiches.keyword, item.keyword)).get();
+  const notes = `Today's pick from Trend Radar (${item.keyword}). Twist: ${item.angle}${item.why ? ` Why: ${item.why}` : ""}`;
+  const p = await suggestIdea(db, settings, item.idea, notes.slice(0, 1000), opts.realAi, {
+    market: niche?.source === "etsy" ? marketOf(niche) : null,
+    trendKeyword: item.keyword,
+    origin: "daily",
+    format: item.format,
+  });
+  await db.update(trendNiches).set({ lastSuggested: nowIso(now) }).where(eq(trendNiches.keyword, item.keyword));
+  item.productId = p.id;
+  daily.pickedId ??= item.id;
+  await kvSet(db, `daily:${date}`, daily);
+  await logActivity(db, "scout", "research", "new", `🎯 You picked today's product: “${item.idea}”. Scout is on it!`, false);
+  return { productId: p.id };
 }
 
 export type NicheRow = typeof trendNiches.$inferSelect;

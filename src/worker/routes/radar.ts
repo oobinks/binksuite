@@ -8,7 +8,7 @@ import { vaultSecret } from "../lib/vault";
 import { etsyClient } from "../providers/etsy";
 import { isAiLimit } from "../providers/ai";
 import { isClaudePending } from "../providers/claudeCode";
-import { liveOnly, makeDailyIdeas, marketOf, nicheFormat, nicheWanted, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
+import { liveOnly, makeDailyIdeas, pickDailyIdea, marketOf, nicheFormat, nicheWanted, radarTick, scanNiche, watchNiche, ensureSeeds, type DailyIdeas } from "../engine/trends";
 import { priceWatchTick } from "../engine/priceWatch";
 import { listSuggestions, suggestIdea } from "../engine/queue";
 
@@ -42,7 +42,13 @@ export const radarRoutes = newApp()
       // Only the kinds of product you're making (Settings → Products we make).
       niches: niches.filter((n) => nicheWanted(n, c.get("settings").formats)).slice(0, 20).map((n) => ({ ...n, format: nicheFormat(n.keyword, n.category) })),
       daily: daily
-        ? { ...daily, items: daily.items.map((i) => ({ ...i, stage: stages.get(i.productId)?.stage ?? "research", verdict: stages.get(i.productId)?.verdict ?? null, overall: stages.get(i.productId)?.overall ?? null })) }
+        ? {
+            ...daily,
+            items: daily.items.map((i) => {
+              const st = i.productId ? stages.get(i.productId) : undefined;
+              return { ...i, stage: i.productId ? (st?.stage ?? "research") : null, verdict: st?.verdict ?? null, overall: st?.overall ?? null };
+            }),
+          }
         : null,
       settings: c.get("settings").radar,
     });
@@ -53,17 +59,29 @@ export const radarRoutes = newApp()
     return c.json(r);
   })
   .post("/radar/daily", async (c) => {
-    // "Give me today's ideas now" (doesn't wait for the morning run).
+    // "Give me today's ideas now" (doesn't wait for the morning run), or a fresh batch.
+    const b = await body(c, z.object({ refresh: z.boolean().optional() }));
     const ai = aiFor(c);
     if (!ai) throw new HttpError(400, "Switch on real AI in Settings first.");
     try {
-      const items = await makeDailyIdeas(c.get("db"), c.get("settings"), ai);
+      const items = await makeDailyIdeas(c.get("db"), c.get("settings"), ai, new Date(), { refresh: !!b.refresh });
       if (!items.length) throw new HttpError(400, "No scored niches yet. Tap “Scan now” first.");
       return c.json({ ok: true, items });
     } catch (e) {
       if (e instanceof HttpError) throw e;
       if (isClaudePending(e)) return c.json({ ok: true, pending: true, items: [] }, 202);
       throw new HttpError(isAiLimit(e) ? 429 : 502, e instanceof Error ? e.message : "Couldn't make ideas just now.");
+    }
+  })
+  .post("/radar/daily/pick", async (c) => {
+    // You chose today's product: Scout researches it next. One a day unless you confirm.
+    const b = await body(c, z.object({ id: z.string().min(1).max(60), force: z.boolean().optional() }));
+    try {
+      const r = await pickDailyIdea(c.get("db"), c.get("settings"), b.id, { force: !!b.force, realAi: !!aiFor(c) });
+      if ("needsConfirm" in r) return c.json({ ok: false, needsConfirm: true, chosen: r.chosen }, 409);
+      return c.json({ ok: true, productId: r.productId });
+    } catch (e) {
+      throw new HttpError(404, e instanceof Error ? e.message : "Couldn't pick that idea.");
     }
   })
   .post("/radar/niches", async (c) => {

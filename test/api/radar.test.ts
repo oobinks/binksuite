@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { getDb } from "../../src/worker/db";
-import { getSettings, kvGet } from "../../src/worker/lib/store";
-import { radarTick, makeDailyIdeas, SEED_NICHES } from "../../src/worker/engine/trends";
+import { getSettings } from "../../src/worker/lib/store";
+import { radarTick, makeDailyIdeas, pickDailyIdea, SEED_NICHES } from "../../src/worker/engine/trends";
 import { priceWatchTick } from "../../src/worker/engine/priceWatch";
 import { approveTask, rejectTask, tick } from "../../src/worker/engine/queue";
 import { etsyClient } from "../../src/worker/providers/etsy";
@@ -40,7 +40,8 @@ const fakeAi = (): AiServices => ({
     const keys = Object.keys((req.jsonSchema as { properties: object }).properties);
     if (keys.includes("ideas")) {
       const kws = [...req.prompt.matchAll(/^- ([^:]+):/gm)].map((m) => m[1]);
-      return req.schema.parse({ ideas: kws.map((k) => ({ keyword: k, idea: `Fresh ${k} idea`, angle: "a cosy twist", why: "rising favourites" })) });
+      // Scout scores the mushroom idea best, so it should come first.
+      return req.schema.parse({ ideas: kws.map((k) => ({ keyword: k, idea: `Fresh ${k} idea`, angle: "a cosy twist", why: "rising favourites", score: k.includes("mushroom") ? 9.5 : 6 })) });
     }
     if (keys.includes("scores"))
       return req.schema.parse({
@@ -86,30 +87,42 @@ describe("Trend Radar", () => {
     expect(total.n).toBeGreaterThanOrEqual(SEED_NICHES.length);
   });
 
-  it("makes today's ideas from top niches and Scout researches them with live data", async () => {
+  it("lines up today's best ideas, starts nothing until you pick one, and researches the pick with live data", async () => {
     const { db, settings } = await setup();
     const etsy = etsyClient("key:secret", 0.79, fakeFetch([]));
     await env.DB.prepare("INSERT OR IGNORE INTO trend_niches (keyword, category, origin, score) VALUES ('mushroom wall art','wall art','seed',0)").run();
     await radarTick(db, { ...settings, radar: { ...settings.radar, autoDaily: false } }, { etsy, ai: null, now, budget: 8 });
     const ai = fakeAi();
+    const researching = async () => (await env.DB.prepare("SELECT count(*) n FROM tasks WHERE kind = 'niche_score'").first<any>()).n;
+    const before = await researching();
     const items = await makeDailyIdeas(db, settings, ai, now);
     expect(items.length).toBeGreaterThan(0);
     expect(items.length).toBeLessThanOrEqual(5);
-    expect(items[0].idea).toMatch(/^Fresh/);
-    const daily = await kvGet<any>(db, `daily:${now.toISOString().slice(0, 10)}`);
-    expect(daily.items).toHaveLength(items.length);
-    // Same niches aren't suggested again straight away.
-    const more = await makeDailyIdeas(db, settings, ai, now);
-    expect(more.map((i) => i.keyword)).not.toContain(items[0].keyword);
-    // "More ideas now" adds to today's list instead of replacing it.
-    expect((await kvGet<any>(db, `daily:${now.toISOString().slice(0, 10)}`)).items).toHaveLength(items.length + more.length);
+    // Best first, with the live numbers attached, and nothing started yet.
+    expect(items[0]).toMatchObject({ keyword: "mushroom wall art", score: 9.5, idea: "Fresh mushroom wall art idea" });
+    expect(items[0].market?.totalListings).toBe(4000);
+    expect(items.every((i) => !i.productId)).toBe(true);
+    expect(await researching()).toBe(before);
+    // Asking again keeps today's list; a refresh brings fresh niches.
+    expect((await makeDailyIdeas(db, settings, ai, now)).map((i) => i.id)).toEqual(items.map((i) => i.id));
+    const fresh = await makeDailyIdeas(db, settings, ai, now, { refresh: true });
+    expect(fresh.map((i) => i.keyword)).not.toContain("mushroom wall art");
+    expect(fresh.length).toBeLessThanOrEqual(5);
 
-    // Scout's report uses the real Etsy prices, not the AI's guess (£1–£99).
-    const mush = items.find((i) => i.keyword.includes("mushroom"))!;
+    // You pick one: it goes to Scout. A second pick needs your OK.
+    const first = await pickDailyIdea(db, settings, fresh[0].id, { realAi: true, now });
+    expect(first).toHaveProperty("productId");
+    expect(await pickDailyIdea(db, settings, fresh[1].id, { realAi: true, now })).toMatchObject({ needsConfirm: true });
+    expect(await pickDailyIdea(db, settings, fresh[1].id, { realAi: true, now, force: true })).toHaveProperty("productId");
+    // Once picked, today's list stays put.
+    expect((await makeDailyIdeas(db, settings, ai, now, { refresh: true })).map((i) => i.id)).toEqual(fresh.map((i) => i.id));
+
+    // Scout's report on the pick uses the real Etsy prices, not the AI's guess (£1–£99).
+    const productId = (first as { productId: string }).productId;
     await tick(db, settings, { interactive: false, ai, files: env.FILES });
     await env.DB.prepare("UPDATE tasks SET started_at = '2000-01-01T00:00:00.000Z' WHERE state = 'working'").run();
     await tick(db, settings, { interactive: false, ai, files: env.FILES });
-    const t = await env.DB.prepare("SELECT output FROM tasks WHERE product_id = ? AND kind = 'niche_score'").bind(mush.productId).first<any>();
+    const t = await env.DB.prepare("SELECT output FROM tasks WHERE product_id = ? AND kind = 'niche_score'").bind(productId).first<any>();
     const report = JSON.parse(t.output);
     expect(report.sources).toMatch(/Live Etsy data/);
     expect(report.priceRangePence[1]).toBeLessThan(1000);
