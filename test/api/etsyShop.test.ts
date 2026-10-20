@@ -2,8 +2,8 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { getDb } from "../../src/worker/db";
-import { getSettings, kvGet } from "../../src/worker/lib/store";
-import { connectUrl, finishConnect, findTaxonomy, shopClient, TAXONOMY_PATHS } from "../../src/worker/providers/etsyShop";
+import { getSettings, kvGet, kvSet } from "../../src/worker/lib/store";
+import { connectUrl, finishConnect, findTaxonomy, shopClient, shopInfo, TAXONOMY_PATHS } from "../../src/worker/providers/etsyShop";
 import { sendDraft } from "../../src/worker/engine/etsyPublish";
 import { syncOrders, ordersList } from "../../src/worker/engine/orders";
 import { setUpOwner } from "./helpers";
@@ -50,6 +50,9 @@ describe("Etsy shop (publishing and orders)", () => {
     const settings = await getSettings(db);
     const log: { method: string; url: string; body?: unknown }[] = [];
     const fetcher = fakeEtsy(log);
+    // Price Watch's own shop note must not look like a connection.
+    await kvSet(db, "etsyShop", { name: "BinkSuite", shopId: 99 });
+    expect(await shopInfo(db)).toBeNull();
 
     // 1. Connect: a proper PKCE link, then the code is swapped for tokens and the shop is found.
     const raw = await connectUrl(db, KEY, ORIGIN);
@@ -109,7 +112,7 @@ describe("Etsy shop (publishing and orders)", () => {
     const sale = await env.DB.prepare("SELECT * FROM ledger WHERE kind = 'sale' AND product_id = 'pe'").all<any>();
     expect(sale.results).toHaveLength(1);
     expect(sale.results[0].amount_pence).toBe(449);
-    expect(await kvGet(db, "etsyShop")).toMatchObject({ shopName: "BinkSuite" });
+    expect(await kvGet(db, "etsyConnectedShop")).toMatchObject({ shopName: "BinkSuite" });
   });
 
   it("finds the right Etsy category for each kind of product", () => {
