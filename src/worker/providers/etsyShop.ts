@@ -17,6 +17,8 @@ const TOKEN = "https://api.etsy.com/v3/public/oauth/token";
 /** Read and write listings, read the shop and its orders. */
 export const ETSY_SCOPES = ["listings_r", "listings_w", "shops_r", "transactions_r"];
 const VAULT_ID = "etsy-oauth";
+/** (Price Watch keeps its own "etsyShop" note, so the connection lives under its own key.) */
+const SHOP_KEY = "etsyConnectedShop";
 
 export interface EtsyShopInfo {
   shopId: number;
@@ -87,16 +89,20 @@ export async function finishConnect(db: DB, env: Env, apiKey: string, origin: st
   const s = "shop_id" in shop ? shop : shop.results?.[0];
   if (!s) throw new EtsyError("Connected, but this Etsy account has no shop.", 404);
   const info: EtsyShopInfo = { shopId: s.shop_id, shopName: s.shop_name, userId, connectedAt: nowIso() };
-  await kvSet(db, "etsyShop", info);
+  await kvSet(db, SHOP_KEY, info);
   return info;
 }
 
 export async function disconnect(db: DB) {
   await db.delete(vault).where(eq(vault.provider, VAULT_ID));
-  await kvSet(db, "etsyShop", null);
+  await kvSet(db, SHOP_KEY, null);
 }
 
-export const shopInfo = (db: DB) => kvGet<EtsyShopInfo>(db, "etsyShop");
+/** Your connected shop (only a real, completed connection counts). */
+export async function shopInfo(db: DB): Promise<EtsyShopInfo | null> {
+  const s = await kvGet<EtsyShopInfo>(db, SHOP_KEY);
+  return s && s.shopId && s.shopName && s.userId && s.connectedAt ? s : null;
+}
 
 export interface DraftListing {
   title: string;
