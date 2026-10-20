@@ -9,12 +9,10 @@ import { formatGBP, toPence } from "../../lib/format";
 import { calculateFees, minimumPriceFor } from "../../../shared/fees";
 import type { FinanceSummary, LedgerEntry } from "../../../shared/api";
 import { ErrorNote, ProgressBar, Section, Toggle } from "../../components/ui";
+import { Icon } from "../../components/Icon";
 
-// Validated categorical palette (dataviz reference slots 1–3), light + dark steps.
-const SERIES = {
-  light: { sales: "#2a78d6", fees: "#eb6834", costs: "#1baf7a" },
-  dark: { sales: "#3987e5", fees: "#d95926", costs: "#199e70" },
-};
+// Series colours shared with the rest of the app: indigo, emerald, amber, rose.
+const SERIES = { sales: "#4f46e5", net: "#10b981", fees: "#f59e0b", costs: "#e11d48", loss: "#e11d48" };
 
 function useIsDark() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
@@ -33,11 +31,11 @@ export function FinanceRoom() {
   return (
     <div className="space-y-4">
       {s && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Tile label="Sales" value={formatGBP(s.totals.salesPence)} icon="🛍️" />
-          <Tile label="Etsy fees" value={formatGBP(s.totals.feesPence)} icon="🏷️" />
-          <Tile label="Costs (inc. AI)" value={formatGBP(s.totals.costsPence)} icon="📝" />
-          <Tile label="Net profit = coins" value={formatGBP(s.totals.netPence)} icon="💰" strong />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Tile label="Sales" value={formatGBP(s.totals.salesPence)} />
+          <Tile label="Etsy fees" value={formatGBP(s.totals.feesPence)} />
+          <Tile label="Costs (inc. AI)" value={formatGBP(s.totals.costsPence)} />
+          <Tile label="Net profit" value={formatGBP(s.totals.netPence)} strong />
         </div>
       )}
       <div className="grid gap-4 lg:grid-cols-5">
@@ -55,13 +53,11 @@ export function FinanceRoom() {
   );
 }
 
-function Tile({ label, value, icon, strong }: { label: string; value: string; icon: string; strong?: boolean }) {
+function Tile({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`card p-3 ${strong ? "ring-2 ring-amber-300" : ""}`}>
-      <div className="label">
-        <span aria-hidden>{icon}</span> {label}
-      </div>
-      <div className="text-2xl font-black tabular-nums">{value}</div>
+    <div className="card p-5">
+      <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</div>
+      <div className={`mt-2 text-[28px] leading-none font-semibold tracking-tight tabular-nums ${strong ? "text-accent dark:text-indigo-400" : ""}`}>{value}</div>
     </div>
   );
 }
@@ -96,7 +92,7 @@ function FeeCalculator() {
         offsiteAds: ads,
       }),
     onSuccess: () => {
-      toast({ icon: "💰", title: "Sale recorded", body: "Added to your ledger with its fees" });
+      toast({ icon: "", title: "Sale recorded", body: "Added to your ledger with its fees" });
       qc.invalidateQueries();
     },
   });
@@ -104,11 +100,11 @@ function FeeCalculator() {
   const floor = minimumPriceFor(settings.minProfitPence, toPence(cost), settings.fees);
   const meets = result.netPence >= settings.minProfitPence * (Number(qty) || 1);
   return (
-    <Section title="Fee calculator" icon="🔢" right={<span className="chip">Etsy UK · live</span>}>
+    <Section title="Fee calculator" right={<span className="chip">Etsy UK · live</span>}>
       <div className="grid gap-3 sm:grid-cols-3" onChange={touch}>
         <label>
           <span className="label">Price (£)</span>
-          <input className="input text-lg font-bold" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Price in pounds" />
+          <input className="input text-base font-medium tabular-nums" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} aria-label="Price in pounds" />
         </label>
         <label>
           <span className="label">Quantity</span>
@@ -119,7 +115,7 @@ function FeeCalculator() {
           <input className="input" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} />
         </label>
       </div>
-      <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold">
+      <div className="mt-4 flex flex-wrap gap-4 text-sm text-zinc-700 dark:text-zinc-300">
         <label className="flex items-center gap-2">
           <Toggle checked={ads} onChange={(v) => (setAds(v), touch())} label="Offsite Ads sale" /> Offsite Ads sale
         </label>
@@ -128,45 +124,46 @@ function FeeCalculator() {
         </label>
       </div>
       <table className="mt-4 w-full text-sm">
-        <tbody>
+        <tbody className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
           {result.lines.map((l) => (
-            <tr key={l.key} className="border-b border-black/5 dark:border-white/5">
-              <td className="py-1">{l.label}</td>
-              <td className="py-1 text-right tabular-nums">{formatGBP(l.pence)}</td>
+            <tr key={l.key}>
+              <td className="py-1.5 text-zinc-600 dark:text-zinc-400">{l.label}</td>
+              <td className="py-1.5 text-right tabular-nums">{formatGBP(l.pence)}</td>
             </tr>
           ))}
-          <tr className="border-b border-black/5 dark:border-white/5">
-            <td className="py-1">VAT on fees ({Math.round(settings.fees.vatRate * 100)}%)</td>
-            <td className="py-1 text-right tabular-nums">{formatGBP(result.vatPence)}</td>
+          <tr>
+            <td className="py-1.5 text-zinc-600 dark:text-zinc-400">VAT on fees ({Math.round(settings.fees.vatRate * 100)}%)</td>
+            <td className="py-1.5 text-right tabular-nums">{formatGBP(result.vatPence)}</td>
           </tr>
-          <tr className="font-bold">
-            <td className="py-1">Total Etsy fees</td>
-            <td className="py-1 text-right tabular-nums">{formatGBP(result.totalFeesPence)}</td>
+          <tr className="font-medium">
+            <td className="py-1.5">Total Etsy fees</td>
+            <td className="py-1.5 text-right tabular-nums">{formatGBP(result.totalFeesPence)}</td>
           </tr>
           <tr>
-            <td className="py-1">Your costs</td>
-            <td className="py-1 text-right tabular-nums">{formatGBP(result.costPence)}</td>
+            <td className="py-1.5 text-zinc-600 dark:text-zinc-400">Your costs</td>
+            <td className="py-1.5 text-right tabular-nums">{formatGBP(result.costPence)}</td>
           </tr>
         </tbody>
       </table>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-50 p-3 dark:bg-emerald-900/25">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[0.03]">
         <div>
-          <div className="text-xs font-bold uppercase">You keep</div>
-          <div className="text-3xl font-black tabular-nums" data-testid="net">
+          <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">You keep</div>
+          <div className="mt-1 text-[28px] leading-none font-semibold tracking-tight tabular-nums" data-testid="net">
             {formatGBP(result.netPence)}
           </div>
-          <div className="text-xs font-semibold">{Math.round(result.margin * 100)}% of the sale</div>
+          <div className="mt-1 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">{Math.round(result.margin * 100)}% of the sale</div>
         </div>
         <div className="text-right text-sm">
-          <div className={`font-bold ${meets ? "text-emerald-700 dark:text-emerald-300" : "text-rose-600"}`}>
-            {meets ? "✅ Meets" : "⚠️ Below"} your {formatGBP(settings.minProfitPence)} minimum
+          <div className={`flex items-center justify-end gap-1.5 font-medium ${meets ? "text-emerald-700 dark:text-emerald-300" : "text-rose-600 dark:text-rose-400"}`}>
+            <Icon name={meets ? "check" : "alert"} size={15} />
+            {meets ? "Meets" : "Below"} your {formatGBP(settings.minProfitPence)} minimum
           </div>
-          <div className="text-xs">Lowest price that does: {formatGBP(floor)}</div>
+          <div className="mt-0.5 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">Lowest price that does: {formatGBP(floor)}</div>
         </div>
       </div>
       <ErrorNote error={record.error} />
       <button className="btn-soft mt-3 w-full" onClick={() => record.mutate()} disabled={record.isPending || toPence(price) <= 0}>
-        📝 Record this as a real sale
+        Record this as a real sale
       </button>
     </Section>
   );
@@ -178,20 +175,20 @@ function SpendCaps({ s }: { s: FinanceSummary }) {
     ["This month", s.spend.monthPence, s.spend.monthlyCapPence],
   ] as const;
   return (
-    <Section title="AI spend caps" icon="🛑">
+    <Section title="AI spend caps">
       <div className="space-y-3">
         {rows.map(([label, used, cap]) => (
           <div key={label}>
-            <div className="flex justify-between text-sm font-bold">
-              <span>{label}</span>
-              <span className="tabular-nums">
+            <div className="mb-1 flex justify-between text-sm">
+              <span className="text-zinc-700 dark:text-zinc-300">{label}</span>
+              <span className="font-medium tabular-nums">
                 {formatGBP(used)} / {formatGBP(cap)}
               </span>
             </div>
-            <ProgressBar value={cap ? used / cap : 1} color={used >= cap ? "#e0607e" : "#5bbf9a"} label={`${label} spend`} />
+            <ProgressBar value={cap ? used / cap : 1} color={used >= cap ? "#e11d48" : "#4f46e5"} label={`${label} spend`} />
           </div>
         ))}
-        <p className="text-xs text-cocoa dark:text-stone-400">Agents stop with ⛔ when a cap is reached. Change caps in Settings.</p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">Agents stop when a cap is reached. Change caps in Settings.</p>
       </div>
     </Section>
   );
@@ -201,15 +198,15 @@ function TradingAllowance({ s }: { s: FinanceSummary }) {
   const t = s.taxYear;
   const pct = t.grossPence / t.allowancePence;
   return (
-    <Section title={`Trading allowance ${t.label}`} icon="💷">
-      <div className="flex justify-between text-sm font-bold">
-        <span>Gross trading income</span>
-        <span className="tabular-nums">
+    <Section title={`Trading allowance ${t.label}`}>
+      <div className="mb-1 flex justify-between text-sm">
+        <span className="text-zinc-700 dark:text-zinc-300">Gross trading income</span>
+        <span className="font-medium tabular-nums">
           {formatGBP(t.grossPence)} / {formatGBP(t.allowancePence)}
         </span>
       </div>
-      <ProgressBar value={pct} color={pct >= 1 ? "#e0607e" : pct >= 0.8 ? "#f2b35b" : "#5bbf9a"} label="Trading allowance used" />
-      <p className="mt-2 text-xs text-cocoa dark:text-stone-400">
+      <ProgressBar value={pct} color={pct >= 1 ? "#e11d48" : pct >= 0.8 ? "#f59e0b" : "#10b981"} label="Trading allowance used" />
+      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
         {pct >= 1
           ? "You've passed £1,000 gross this tax year — you'll likely need to register for Self Assessment."
           : `£${((t.allowancePence - t.grossPence) / 100).toFixed(2)} left before the £1,000 allowance.`}{" "}
@@ -221,9 +218,9 @@ function TradingAllowance({ s }: { s: FinanceSummary }) {
 
 function Charts({ s }: { s: FinanceSummary }) {
   const dark = useIsDark();
-  const c = dark ? SERIES.dark : SERIES.light;
-  const ink = dark ? "#c3c2b7" : "#52514e";
-  const grid = dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.07)";
+  const c = SERIES;
+  const ink = dark ? "#a1a1aa" : "#71717a";
+  const grid = dark ? "rgba(255,255,255,.08)" : "#e4e4e7";
   const data = s.monthly.map((m) => ({
     month: new Date(m.month + "-01T00:00:00Z").toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
     Sales: m.salesPence / 100,
@@ -233,13 +230,13 @@ function Charts({ s }: { s: FinanceSummary }) {
   }));
   const tooltip = {
     formatter: (v: unknown) => `£${Number(v).toFixed(2)}`,
-    contentStyle: { borderRadius: 12, border: "none", background: dark ? "#2a2632" : "#fff", color: dark ? "#f0efec" : "#0b0b0b" },
-    cursor: { fill: dark ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.04)" },
+    contentStyle: { borderRadius: 8, border: `1px solid ${dark ? "rgba(255,255,255,.1)" : "#e4e4e7"}`, boxShadow: "0 4px 12px rgba(16,24,40,.08)", fontSize: 12, background: dark ? "#18181b" : "#fff", color: dark ? "#f4f4f5" : "#18181b" },
+    cursor: { fill: dark ? "rgba(255,255,255,.04)" : "#f4f4f5" },
   };
-  const axis = { tick: { fill: ink, fontSize: 12 }, axisLine: false, tickLine: false } as const;
+  const axis = { tick: { fill: ink, fontSize: 11 }, axisLine: false, tickLine: false } as const;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Section title="Net profit by month" icon="📈">
+      <Section title="Net profit by month">
         <div className="h-60">
           <ResponsiveContainer>
             <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
@@ -249,14 +246,14 @@ function Charts({ s }: { s: FinanceSummary }) {
               <Tooltip {...tooltip} />
               <Bar dataKey="Net" radius={[4, 4, 0, 0]} maxBarSize={36}>
                 {data.map((d) => (
-                  <Cell key={d.month} fill={d.Net >= 0 ? c.sales : c.fees} />
+                  <Cell key={d.month} fill={d.Net >= 0 ? c.net : c.loss} />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       </Section>
-      <Section title="Sales, fees and costs" icon="📊">
+      <Section title="Sales, fees and costs">
         <div className="h-60">
           <ResponsiveContainer>
             <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }} barGap={2}>
@@ -295,7 +292,6 @@ function Ledger({ entries }: { entries: LedgerEntry[] }) {
   return (
     <Section
       title="Ledger"
-      icon="📒"
       right={
         <div className="flex flex-wrap gap-2">
           <select className="input !w-auto !py-1" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Filter ledger">
@@ -304,10 +300,10 @@ function Ledger({ entries }: { entries: LedgerEntry[] }) {
             <option value="demo">Demo only</option>
           </select>
           <button className="btn-soft !py-1" onClick={() => setAdding((v) => !v)}>
-            ➕ Cost
+            Add cost
           </button>
           <button className="btn-soft !py-1" onClick={exportCsv}>
-            ⬇️ CSV
+            Export CSV
           </button>
         </div>
       }
@@ -315,33 +311,34 @@ function Ledger({ entries }: { entries: LedgerEntry[] }) {
       {adding && <AddCost onDone={() => setAdding(false)} />}
       <div className="max-h-[420px] overflow-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-white text-left text-xs uppercase text-cocoa dark:bg-night-2 dark:text-stone-400">
+          <thead className="sticky top-0 border-b border-zinc-200 bg-white text-left text-[11px] font-semibold tracking-[0.06em] text-zinc-500 uppercase dark:border-white/10 dark:bg-night-2 dark:text-zinc-400">
             <tr>
-              <th className="py-1.5">Date</th>
-              <th>What</th>
-              <th className="hidden sm:table-cell">Category</th>
+              <th className="py-2 pr-3">Date</th>
+              <th className="pr-3">What</th>
+              <th className="hidden pr-3 sm:table-cell">Category</th>
               <th className="text-right">Amount</th>
-              <th className="w-8" />
+              <th className="w-10" />
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
             {shown.map((e) => (
-              <tr key={e.id} className="border-t border-black/5 dark:border-white/5">
-                <td className="py-1.5 whitespace-nowrap">{new Date(e.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</td>
-                <td className="max-w-[180px] truncate">
-                  {e.demo && <span className="chip mr-1 bg-honey/25 text-[10px]">demo</span>}
+              <tr key={e.id} className="group">
+                <td className="py-2 pr-3 whitespace-nowrap text-zinc-500 tabular-nums dark:text-zinc-400">{new Date(e.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</td>
+                <td className="max-w-[180px] truncate pr-3">
+                  {e.demo && <span className="chip mr-1.5 !px-1.5 !py-0 text-[10px]">Demo</span>}
                   {e.description}
                 </td>
-                <td className="hidden text-cocoa sm:table-cell dark:text-stone-400">{e.category}</td>
-                <td className={`text-right font-bold tabular-nums ${e.amountPence >= 0 ? "text-emerald-700 dark:text-emerald-300" : ""}`}>{formatGBP(e.amountPence)}</td>
+                <td className="hidden pr-3 text-zinc-500 sm:table-cell dark:text-zinc-400">{e.category}</td>
+                <td className={`text-right font-medium tabular-nums ${e.amountPence >= 0 ? "text-emerald-700 dark:text-emerald-300" : ""}`}>{formatGBP(e.amountPence)}</td>
                 <td className="text-right">
                   {e.kind !== "fee" && (
                     <button
-                      className="opacity-40 hover:opacity-100"
+                      className="rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-rose-600 dark:hover:bg-white/10 dark:hover:text-rose-400"
                       aria-label="Delete entry"
+                      title="Delete entry"
                       onClick={() => confirm(`Delete “${e.description}”${e.kind === "sale" ? " and its fees" : ""}?`) && del.mutate(e.id)}
                     >
-                      🗑️
+                      <Icon name="trash" size={14} />
                     </button>
                   )}
                 </td>
@@ -349,7 +346,7 @@ function Ledger({ entries }: { entries: LedgerEntry[] }) {
             ))}
             {shown.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-6 text-center text-cocoa">
+                <td colSpan={5} className="py-6 text-center text-zinc-500 dark:text-zinc-400">
                   No entries yet.
                 </td>
               </tr>
@@ -376,7 +373,7 @@ function AddCost({ onDone }: { onDone: () => void }) {
   });
   return (
     <form
-      className="mb-3 grid gap-2 rounded-xl bg-black/5 p-3 sm:grid-cols-5 dark:bg-white/5"
+      className="mb-4 grid gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 sm:grid-cols-5 dark:border-white/10 dark:bg-white/[0.03]"
       onSubmit={(e) => {
         e.preventDefault();
         add.mutate();
