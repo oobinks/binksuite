@@ -37,7 +37,7 @@ const isSuggested = (o: unknown) => !!(o as Out | null)?.suggested;
 export const researchReview: ReviewDef = {
   approveLabel: (t) => (isSuggested(t.output) ? "Make it → brief" : "Approve niche → brief"),
   rejectLabel: (t) => (isSuggested(t.output) ? "Research again" : "Re-score"),
-  dropLabel: "Drop idea",
+  dropLabel: "Drop for now",
   startsReady: true,
   Body: ({ task }) => {
     const o = task.output as unknown as Out;
