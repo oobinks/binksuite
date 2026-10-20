@@ -14,6 +14,7 @@ import { isAiLimit, type AiServices } from "../providers/ai";
 import { isClaudePending } from "../providers/claudeCode";
 import { SHOP_CONTEXT } from "./agents/real";
 import { logActivity } from "./queue";
+import { queuePush } from "./push";
 
 const DAY = 86_400_000;
 export const REPORTS_KEY = "strategyReports";
@@ -325,6 +326,7 @@ async function finish(db: DB, ai: AiServices, pending: Pending): Promise<Strateg
   await kvSet(db, REPORTS_KEY, reports.slice(0, KEEP_REPORTS));
   await kvSet(db, PENDING_KEY, null);
   await logActivity(db, "manager", "strategy", "finish", `Weekly report ready: ${report.headline}`, false);
+  if (report.auto) await queuePush(db, "reports", { title: "Your weekly report is ready", body: report.headline.slice(0, 160), url: "/room/strategy", tag: "report" });
   return report;
 }
 

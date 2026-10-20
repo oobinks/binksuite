@@ -18,6 +18,7 @@ import { syncOrders } from "./engine/orders";
 import { renewalTick } from "./engine/renewals";
 import { strategyTick } from "./engine/strategy";
 import { reviewsTick } from "./engine/care";
+import { flushPushes } from "./engine/push";
 
 const KEEP_LOGS_DAYS = 45;
 
@@ -40,6 +41,8 @@ export async function runCron(env: Env) {
   // Customer Care: new shop reviews (every 6 hours).
   if (shop) await reviewsTick(db, shop).catch((e) => console.error("reviews", e));
   await strategyTick(db, settings, ai).catch((e) => console.error("strategy", e));
+  // Phone notifications from this run.
+  await flushPushes(db, env).catch((e) => console.error("push", e));
   const cutoff = new Date(Date.now() - KEEP_LOGS_DAYS * 86_400_000).toISOString();
   await db.delete(activity).where(lt(activity.createdAt, cutoff));
   await db.delete(notifications).where(lt(notifications.createdAt, cutoff));

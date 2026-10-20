@@ -9,6 +9,8 @@ import { kvGet, kvSet, nowIso } from "../lib/store";
 import { toGbpPence } from "../providers/etsy";
 import type { ShopClient } from "../providers/etsyShop";
 import { logActivity, recordSale } from "./queue";
+import { queuePush } from "./push";
+import { formatGBP } from "../../shared/fees";
 
 export interface OrderItem {
   title: string;
@@ -81,6 +83,14 @@ export async function syncOrders(db: DB, settings: Settings, shop: ShopClient, o
   if (added) {
     await kvSet(db, "etsyOrders", orders.slice(0, KEEP_ORDERS));
     await logActivity(db, "crafter", "orders", "new", `🧾 ${added} new Etsy order${added === 1 ? "" : "s"}`, false);
+    const fresh = orders.slice(0, added);
+    const total = fresh.reduce((a, o) => a + o.totalPence, 0);
+    await queuePush(db, "sales", {
+      title: added === 1 ? `New sale: ${formatGBP(total)}` : `${added} new sales: ${formatGBP(total)}`,
+      body: fresh.flatMap((o) => o.items.map((i) => i.title)).slice(0, 3).join(", ").slice(0, 160) || "A new Etsy order came in.",
+      url: "/room/orders",
+      tag: "sales",
+    });
   }
   return added;
 }

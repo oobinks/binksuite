@@ -10,6 +10,7 @@ import { kvGet, kvSet, nowIso } from "../lib/store";
 import type { ShopClient } from "../providers/etsyShop";
 import type { EtsyDraftInfo } from "./etsyPublish";
 import { logActivity } from "./queue";
+import { queuePush } from "./push";
 
 export const REVIEW_DAYS = 7;
 const CHECK_EVERY_MS = 6 * 3600_000;
@@ -143,5 +144,6 @@ async function raiseReview(db: DB, p: typeof products.$inferSelect, etsy: EtsyDr
   });
   await db.insert(approvals).values({ id: newId("a_"), taskId: id, kind: "review", summary: `Keep or retire: ${p.title}`, status: "pending", demo: false, createdAt: at });
   await logActivity(db, null, "launch", "finish", `⏳ “${p.title}” expires on Etsy in ${review.daysLeft} day${review.daysLeft === 1 ? "" : "s"}: keep or retire?`, false);
+  await queuePush(db, "renewals", { title: `Expires in ${review.daysLeft} day${review.daysLeft === 1 ? "" : "s"}: keep or retire?`, body: p.title.slice(0, 120), url: "/room/launch", tag: `renew-${p.id}` });
   return true;
 }

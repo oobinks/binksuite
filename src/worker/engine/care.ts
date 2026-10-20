@@ -3,6 +3,7 @@
 // each draft into Etsy yourself.
 import { z } from "zod";
 import type { DB } from "../db";
+import { queuePush } from "./push";
 import type { AiServices } from "../providers/ai";
 import type { EtsyReview, ShopClient } from "../providers/etsyShop";
 import { kvGet, kvSet, nowIso } from "../lib/store";
@@ -175,6 +176,7 @@ export const reviewKey = (r: Pick<EtsyReview, "transaction_id" | "listing_id" | 
 
 /** Fetch the latest reviews from Etsy and remember them. */
 export async function syncReviews(db: DB, shop: Pick<ShopClient, "shop" | "reviews">): Promise<ReviewCache> {
+  const before = await kvGet<ReviewCache>(db, REVIEWS_KEY);
   const res = await shop.reviews(25);
   const reviews: CareReview[] = (res.results ?? []).map((r) => ({
     key: reviewKey(r),
@@ -188,6 +190,18 @@ export async function syncReviews(db: DB, shop: Pick<ShopClient, "shop" | "revie
   reviews.sort((a, b) => b.at.localeCompare(a.at));
   const cache = { shopId: shop.shop.shopId, at: nowIso(), reviews };
   await kvSet(db, REVIEWS_KEY, cache);
+  // A ping for new low-star reviews (not on the very first check, which loads the backlog).
+  if (before?.shopId === cache.shopId) {
+    const seen = new Set(before.reviews.map((r) => r.key));
+    const low = reviews.filter((r) => !seen.has(r.key) && r.rating > 0 && r.rating <= 3);
+    if (low.length)
+      await queuePush(db, "reviews", {
+        title: low.length === 1 ? `New ${low[0].rating}-star review` : `${low.length} new low reviews`,
+        body: (low[0].review || "No written review, just a rating.").slice(0, 160),
+        url: "/room/care",
+        tag: "reviews",
+      });
+  }
   return cache;
 }
 

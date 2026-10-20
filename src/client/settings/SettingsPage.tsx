@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Notifications } from "./Notifications";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useSnapshot, useSaveSettings, applyTheme } from "../lib/hooks";
@@ -39,6 +40,7 @@ export function SettingsPage() {
         <ClaudeCode s={snap.settings} />
         <EtsyRadar s={snap.settings} />
         <EtsyShop />
+        <Notifications />
         <AiEngine s={snap.settings} />
         <Demo s={snap.settings} />
         <Fees s={snap.settings} />
