@@ -61,7 +61,8 @@ describe("research suggestion box", () => {
     const task = (await c.get("/api/rooms/research")).data.tasks.find((t: any) => t.productId === r.data.productId);
     expect((await c.post(`/api/tasks/${task.id}/drop`, { note: "trademark" })).status).toBe(200);
     const list = (await c.get("/api/research/suggestions")).data.suggestions;
-    expect(list[0].stage).toBe("dropped");
+    // Dropped for now: it leaves the list (and can be suggested again later).
+    expect(list.some((s: any) => s.productId === r.data.productId)).toBe(false);
   });
 
   it("validates the idea", async () => {
