@@ -25,7 +25,7 @@ export const PHOTO_W = 2000;
 export const PHOTO_H = 1500;
 const INK = "#2f2724";
 const MUTED = "#7a6a60";
-const SERIF = '"DM Serif Display", Georgia, serif';
+export const SERIF = '"DM Serif Display", Georgia, serif';
 const SANS = "Nunito, sans-serif";
 const EXCEL_GREEN = "#1f7a4d";
 

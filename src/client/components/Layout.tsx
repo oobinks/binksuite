@@ -5,8 +5,8 @@ import { useSnapshot, applyTheme } from "../lib/hooks";
 import { useUi } from "../lib/store";
 import { formatGBP } from "../lib/format";
 import { BUILD_INFO } from "../lib/buildInfo";
-import { BUSINESS, LATER, PIPELINE, ROOM_ICON, ROOM_LABEL, ROOM_TONE } from "../lib/rooms";
-import { ROOM_BY_ID, type RoomId } from "../../shared/registry";
+import { BUSINESS, GROW, PIPELINE, ROOM_ICON, ROOM_LABEL, ROOM_TONE } from "../lib/rooms";
+import type { RoomId } from "../../shared/registry";
 import type { Snapshot } from "../../shared/api";
 import { Icon, type IconName } from "./Icon";
 import { Logo } from "./Logo";
@@ -168,9 +168,9 @@ function Sidebar({ snap, onClose }: { snap: Snapshot | undefined; onClose?: () =
             <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} iconClass={ROOM_TONE[id].icon} label={ROOM_LABEL[id]} needs={count(id)?.needsYou} />
           ))}
         </NavGroup>
-        <NavGroup title="Coming later">
-          {LATER.map((id) => (
-            <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} label={ROOM_LABEL[id]} muted note={`Phase ${ROOM_BY_ID[id].phase}`} />
+        <NavGroup title="Grow">
+          {GROW.map((id) => (
+            <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} iconClass={ROOM_TONE[id].icon} label={ROOM_LABEL[id]} needs={count(id)?.needsYou} />
           ))}
         </NavGroup>
       </nav>

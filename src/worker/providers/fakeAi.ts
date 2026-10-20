@@ -100,7 +100,31 @@ export const fakeAi: AiServices = {
       out = kws.length
         ? { ideas: kws.map((k) => ({ keyword: k, idea: `${k.replace(/\b\w/g, (c) => c.toUpperCase())}: cosy twist`, angle: "(Local test) a fresh cosy twist", why: "(Local test) favourites rising" })) }
         : { ideas: [{ idea: "Cottagecore toadstool prints", why: "(Local test) steady autumn demand" }, { idea: "Frog reading nook posters", why: "(Local test) cute and giftable" }] };
-    } else if (keys.includes("niches"))
+    } else if (keys.includes("titles"))
+      out = {
+        titles: ["(Local test) Budget Planner Spreadsheet | Simple Monthly Money Tracker", "Monthly Budget Tracker for Excel and Google Sheets", "Easy Household Budget Spreadsheet"],
+        description: "(Local test) Take control of your money with a ready-made monthly budget spreadsheet. Works in Excel and Google Sheets, instant download. #budgetplanner #moneytips",
+        boards: ["Budget planning", "Printable planners"],
+      };
+    else if (keys.includes("days")) {
+      const ids = [...req.prompt.matchAll(/^- id (\S+):/gm)].map((m) => m[1]);
+      const channels = ["Pinterest", "Instagram", "TikTok"];
+      out = { days: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ day: d + 1, channel: channels[d % 3], productId: ids[d % Math.max(1, ids.length)] ?? null, idea: `(Local test) Day ${d + 1} post idea`, caption: "(Local test) A ready-made planner to make the week easier. Link in bio." })) };
+    } else if (keys.includes("nextSteps"))
+      out = {
+        headline: "(Local test) A quiet week: the priority is getting more products live.",
+        wentWell: ["(Local test) Spreadsheets brought in most of the sales"],
+        didnt: ["(Local test) No new products went live"],
+        nextSteps: [
+          { text: "Send one of today's ideas to the task board", room: "research" },
+          { text: "Review the listings that expire soon", room: "launch" },
+          { text: "Make Pinterest pins for your best seller", room: "marketing" },
+        ],
+      };
+    else if (keys.includes("reply"))
+      out = { reply: "Hello! Thank you so much for your message.\n\n(Local test) Your files are in Etsy under You > Purchases and reviews > Download files.\n\nWarm wishes" };
+    else if (keys.includes("response")) out = { response: "(Local test) Thank you for taking the time to leave a review. We're sorry it wasn't perfect and we'd love to help: please send us a message." };
+    else if (keys.includes("niches"))
       out = {
         niches: ["mushroom wall art", "christmas gift tags", "habit tracker", "frog print", "autumn print", "advent calendar printable"].map((k, i) => ({
           keyword: k,

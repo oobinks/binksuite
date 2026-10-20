@@ -27,6 +27,9 @@ const REAL_AI_ROOMS: RoomId[] = ["research", "studio", "mockups", "listing", "co
 
 // Charts are heavy — only load them when you open the vault.
 const FinanceRoom = lazy(() => import("./finance/FinanceRoom").then((m) => ({ default: m.FinanceRoom })));
+const CareDesk = lazy(() => import("./care/CareDesk").then((m) => ({ default: m.CareDesk })));
+const MarketingRoom = lazy(() => import("./marketing/MarketingRoom").then((m) => ({ default: m.MarketingRoom })));
+const StrategyRoom = lazy(() => import("./strategy/StrategyRoom").then((m) => ({ default: m.StrategyRoom })));
 
 export function RoomPage() {
   const { id } = useParams();
@@ -58,6 +61,10 @@ export function RoomPage() {
         </Suspense>
       ) : room.id === "orders" ? (
         <OrdersDesk />
+      ) : room.id === "care" || room.id === "marketing" || room.id === "strategy" ? (
+        <Suspense fallback={<p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}>
+          {room.id === "care" ? <CareDesk /> : room.id === "marketing" ? <MarketingRoom /> : <StrategyRoom />}
+        </Suspense>
       ) : room.demoInteractive ? (
         <PipelineRoom roomId={room.id} />
       ) : (

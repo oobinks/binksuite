@@ -181,6 +181,10 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
     async receipts(minCreatedSec: number, limit = 50) {
       return call<{ count: number; results: EtsyReceipt[] }>("GET", `/shops/${shop.shopId}/receipts?was_paid=true&min_created=${minCreatedSec}&limit=${limit}&sort_on=created&sort_order=asc`);
     },
+    /** Your shop's most recent reviews (read only: responses are posted on Etsy by you). */
+    async reviews(limit = 25) {
+      return call<{ count: number; results: EtsyReview[] }>("GET", `/shops/${shop.shopId}/reviews?limit=${limit}`);
+    },
   };
 }
 
@@ -193,6 +197,20 @@ export interface EtsyReceipt {
   message_from_buyer?: string | null;
   grandtotal?: { amount: number; divisor: number; currency_code: string };
   transactions: { transaction_id: number; listing_id: number; title: string; quantity: number; price: { amount: number; divisor: number; currency_code: string } }[];
+}
+
+export interface EtsyReview {
+  shop_id: number;
+  listing_id: number;
+  transaction_id?: number | null;
+  buyer_user_id?: number | null;
+  rating: number;
+  review?: string | null;
+  language?: string | null;
+  image_url_fullxfull?: string | null;
+  create_timestamp: number;
+  created_timestamp?: number;
+  update_timestamp?: number;
 }
 
 // ───────────── Etsy categories ─────────────

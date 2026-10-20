@@ -14,6 +14,9 @@ import { agentRoutes } from "./routes/agent";
 import { claudeRoutes } from "./routes/claude";
 import { bundleRoutes } from "./routes/bundles";
 import { etsyRoutes } from "./routes/etsy";
+import { careRoutes } from "./routes/care";
+import { marketingRoutes } from "./routes/marketing";
+import { strategyRoutes } from "./routes/strategy";
 import { runCron } from "./cron";
 
 const app = newApp();
@@ -62,6 +65,9 @@ app.route("/api", radarRoutes);
 app.route("/api", claudeRoutes);
 app.route("/api", bundleRoutes);
 app.route("/api", etsyRoutes);
+app.route("/api", careRoutes);
+app.route("/api", marketingRoutes);
+app.route("/api", strategyRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
