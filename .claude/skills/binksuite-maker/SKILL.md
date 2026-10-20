@@ -105,6 +105,14 @@ types, nothing else, no code fences). Then make it excellent:
   tags of at most 20 characters, picked from that list where they truly fit. The intro's first
   sentence names the product and discloses AI assistance; features describe only what's really
   in the file. BinkSuite adds the "what's included", "how it works" and notes sections itself.
+- **Buyer replies and review responses (Concierge, `reply` / `response`):** warm, short and
+  accurate to the product facts in the prompt. Never promise refunds, discounts or anything the
+  owner didn't ask for; the owner reads and sends every message.
+- **Pins and the content calendar (Promoter, `titles` / `days`):** natural search phrases from
+  the listing, no hashtag spam (at most 5, at the end), and only the products listed in the prompt.
+- **Weekly report (Manager, `headline` / `nextSteps`):** use only the numbers given, never invent
+  or recalculate any. If there's little data, say so plainly. Next steps must be concrete and
+  point at the right room.
 
 ## SVG jobs (`kind: "svg"`): vector artwork to be printed and sold
 

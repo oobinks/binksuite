@@ -17,6 +17,7 @@ import { shopClient } from "./providers/etsyShop";
 import { syncOrders } from "./engine/orders";
 import { renewalTick } from "./engine/renewals";
 import { strategyTick } from "./engine/strategy";
+import { reviewsTick } from "./engine/care";
 
 const KEEP_LOGS_DAYS = 45;
 
@@ -36,6 +37,8 @@ export async function runCron(env: Env) {
   if (shop) await syncOrders(db, settings, shop).catch((e) => console.error("orders", e));
   // ⏳ Expiry countdowns and keep-or-retire reviews (every 6 hours).
   if (shop) await renewalTick(db, shop).catch((e) => console.error("renewals", e));
+  // Customer Care: new shop reviews (every 6 hours).
+  if (shop) await reviewsTick(db, shop).catch((e) => console.error("reviews", e));
   await strategyTick(db, settings, ai).catch((e) => console.error("strategy", e));
   const cutoff = new Date(Date.now() - KEEP_LOGS_DAYS * 86_400_000).toISOString();
   await db.delete(activity).where(lt(activity.createdAt, cutoff));

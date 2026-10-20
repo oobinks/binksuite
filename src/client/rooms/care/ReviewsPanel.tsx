@@ -35,7 +35,7 @@ function Stars({ rating }: { rating: number }) {
     <span className="inline-flex items-center gap-1.5" aria-label={`${rating} out of 5 stars`}>
       <span className="flex gap-0.5" aria-hidden>
         {[1, 2, 3, 4, 5].map((i) => (
-          <span key={i} className={`h-2 w-2 rounded-full ${i <= rating ? (rating <= 3 ? "bg-amber-500" : "bg-emerald-500") : "bg-zinc-200 dark:bg-white/15"}`} />
+          <Icon key={i} name="star" size={13} strokeWidth={1.5} className={i <= rating ? "fill-amber-400 text-amber-400" : "fill-zinc-200 text-zinc-200 dark:fill-white/15 dark:text-white/15"} />
         ))}
       </span>
       <span className="text-xs font-semibold tabular-nums">{rating}/5</span>

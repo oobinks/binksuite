@@ -209,3 +209,18 @@ export async function markResponded(db: DB, key: string, responded: boolean) {
 }
 
 export const needsReply = (r: { rating: number }, responded: boolean) => r.rating > 0 && r.rating <= 3 && !responded;
+
+const REVIEWS_EVERY_MS = 6 * 3_600_000;
+
+/** The scheduler's review check: at most every 6 hours, once your shop is connected. */
+export async function reviewsTick(db: DB, shop: Pick<ShopClient, "shop" | "reviews">, now = new Date()) {
+  const c = await kvGet<ReviewCache>(db, REVIEWS_KEY);
+  if (c && c.shopId === shop.shop.shopId && now.getTime() - new Date(c.at).getTime() < REVIEWS_EVERY_MS) return null;
+  return syncReviews(db, shop);
+}
+
+/** Low-star reviews still waiting for your response (for the sidebar count). */
+export async function unansweredReviews(db: DB): Promise<number> {
+  const [cache, done] = await Promise.all([kvGet<ReviewCache>(db, REVIEWS_KEY), respondedMap(db)]);
+  return (cache?.reviews ?? []).filter((r) => needsReply(r, !!done[r.key])).length;
+}

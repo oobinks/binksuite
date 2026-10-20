@@ -1,12 +1,11 @@
 // Pinterest pins, drawn on your device at 1000 × 1500 px (Pinterest's 2:3), from the
 // product's listing photos, in the same look as the listing photo set.
-import { canvas, check, clip, eyebrow, INK, loadPhotoFonts, MUTED, rr, SANS, serifTitle, shadowed, tint, toJpeg } from "./listingPhotos";
+import { canvas, check, clip, eyebrow, INK, loadPhotoFonts, MUTED, rr, SANS, SERIF, serifTitle, shadowed, tint, toJpeg } from "./listingPhotos";
 import { loadImageSrc } from "./files";
 import type { ProductFormat } from "../../shared/format";
 
 export const PIN_W = 1000;
 export const PIN_H = 1500;
-const SERIF = '"DM Serif Display", Georgia, serif';
 const DEFAULT_ACCENT = "#4f46e5";
 
 export const PIN_LAYOUTS = [
@@ -181,7 +180,7 @@ function drawCollage(ctx: CanvasRenderingContext2D, p: PinInput, accent: string)
   ctx.fill();
   eyebrow(ctx, KIND[p.format], PIN_W / 2, py + 72);
   const titleY = py + 92;
-  if (p.title.length <= 28) serifTitle(ctx, p.title, PIN_W / 2, titleY + 110, PIN_W - 140, 96);
+  if (p.title.length <= 28 && !/^the\s/i.test(p.title)) serifTitle(ctx, p.title, PIN_W / 2, titleY + 110, PIN_W - 140, 96);
   else headline(ctx, p.title, PIN_W / 2, titleY, PIN_W - 140, 76, 2);
   ctx.fillStyle = accent;
   ctx.font = `800 28px ${SANS}`;

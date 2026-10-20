@@ -1,6 +1,7 @@
 // Builds the one big "state of the HQ" payload the map polls every few seconds.
 import { and, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import type { DB } from "../db";
+import { unansweredReviews } from "./care";
 import { handoffs, products, tasks, ledger, events, activity } from "../db/schema";
 import { AGENTS, ROOMS, type AgentId, type RoomId } from "../../shared/registry";
 import { levelProgress } from "../../shared/game";
@@ -53,13 +54,15 @@ export async function buildSnapshot(
     if (t.state === "working" && t.startedAt) t.progress = Math.min(0.99, (now.getTime() - new Date(t.startedAt).getTime()) / Math.max(1, t.durationMs));
   }
 
+  // Customer Care: low-star reviews you haven't responded to yet.
+  const careWaiting = await unansweredReviews(db);
   const rooms: RoomSnapshot[] = ROOMS.map((r) => {
     const mine = live.filter((t) => t.room === r.id);
     return {
       id: r.id,
       queued: mine.filter((t) => t.state === "queued").length,
       working: mine.filter((t) => t.state === "working").length,
-      needsYou: mine.filter((t) => t.state === "needs_approval").length,
+      needsYou: mine.filter((t) => t.state === "needs_approval").length + (r.id === "care" ? careWaiting : 0),
       blocked: mine.filter((t) => t.state === "blocked").length,
     };
   });
