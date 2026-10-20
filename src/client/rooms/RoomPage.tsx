@@ -19,7 +19,7 @@ import { BundleBuilder } from "./launch/BundleBuilder";
 import { OrdersDesk } from "./orders/OrdersDesk";
 import { LiveProducts } from "./launch/LiveProducts";
 import { PageHeader } from "../components/PageHeader";
-import { ROOM_ICON, ROOM_LABEL } from "../lib/rooms";
+import { ROOM_ICON, ROOM_LABEL, ROOM_TONE } from "../lib/rooms";
 import { plain } from "../lib/format";
 
 /** Rooms whose agents do real work for real products in Phase 2. */
@@ -46,6 +46,7 @@ export function RoomPage() {
         title={ROOM_LABEL[room.id]}
         subtitle={plain(room.blurb)}
         icon={ROOM_ICON[room.id]}
+        tone={ROOM_TONE[room.id].tile}
         back="/"
         crumb="Dashboard"
         right={aiNote && <span className="chip" title={aiNote === "Real AI" ? "Real AI works on your ideas; demo products stay pretend." : `Real AI arrives in Phase ${room.phase}.`}>{aiNote}</span>}

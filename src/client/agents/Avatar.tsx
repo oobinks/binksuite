@@ -1,5 +1,6 @@
-// Agents are shown as a quiet monogram with a status dot.
+// Agents are shown as a monogram in their room's colour, with a status dot.
 import type { AgentDef } from "../../shared/registry";
+import { ROOM_TONE } from "../lib/rooms";
 import type { AgentStatus } from "../../shared/tasks";
 
 interface Props {
@@ -23,7 +24,7 @@ export function Avatar({ agent, status = "idle", size = 56, className = "" }: Pr
   const off = status === "off";
   return (
     <span
-      className={`relative inline-grid shrink-0 place-items-center rounded-full border border-zinc-200 bg-zinc-100 font-semibold text-zinc-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-zinc-200 ${off ? "opacity-50" : ""} ${className}`}
+      className={`relative inline-grid shrink-0 place-items-center rounded-full font-semibold ${ROOM_TONE[agent.room].tile} ${off ? "opacity-50" : ""} ${className}`}
       style={{ width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.36)) }}
       role="img"
       aria-label={`${agent.name}, ${agent.role}`}

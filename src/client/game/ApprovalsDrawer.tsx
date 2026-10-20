@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { plain, timeAgo } from "../lib/format";
 import { Modal } from "../components/ui";
 import { Icon } from "../components/Icon";
-import { ROOM_ICON, ROOM_LABEL } from "../lib/rooms";
+import { ROOM_ICON, ROOM_LABEL, ROOM_TONE } from "../lib/rooms";
 import type { TaskView } from "../../shared/api";
 
 export function ApprovalsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -24,7 +24,7 @@ export function ApprovalsDrawer({ open, onClose }: { open: boolean; onClose: () 
                   onClick={onClose}
                   className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-zinc-50 dark:hover:bg-white/[0.04]"
                 >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-700 dark:bg-white/[0.06] dark:text-zinc-200" aria-hidden>
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${ROOM_TONE[t.room].tile}`} aria-hidden>
                     <Icon name={ROOM_ICON[t.room]} size={16} />
                   </span>
                   <span className="min-w-0 flex-1">

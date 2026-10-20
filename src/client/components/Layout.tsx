@@ -5,7 +5,7 @@ import { useSnapshot, applyTheme } from "../lib/hooks";
 import { useUi } from "../lib/store";
 import { formatGBP } from "../lib/format";
 import { BUILD_INFO } from "../lib/buildInfo";
-import { BUSINESS, LATER, PIPELINE, ROOM_ICON, ROOM_LABEL } from "../lib/rooms";
+import { BUSINESS, LATER, PIPELINE, ROOM_ICON, ROOM_LABEL, ROOM_TONE } from "../lib/rooms";
 import { ROOM_BY_ID, type RoomId } from "../../shared/registry";
 import type { Snapshot } from "../../shared/api";
 import { Icon, type IconName } from "./Icon";
@@ -156,16 +156,16 @@ function Sidebar({ snap, onClose }: { snap: Snapshot | undefined; onClose?: () =
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5" aria-label="Main">
         <div className="space-y-0.5">
-          <NavItem to="/" icon="dashboard" label="Dashboard" end />
+          <NavItem to="/" icon="dashboard" label="Dashboard" end iconClass="text-indigo-500 dark:text-indigo-400" />
         </div>
         <NavGroup title="Pipeline">
           {PIPELINE.map((id) => (
-            <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} label={ROOM_LABEL[id]} needs={count(id)?.needsYou} busy={(count(id)?.working ?? 0) > 0} />
+            <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} iconClass={ROOM_TONE[id].icon} label={ROOM_LABEL[id]} needs={count(id)?.needsYou} busy={(count(id)?.working ?? 0) > 0} />
           ))}
         </NavGroup>
         <NavGroup title="Business">
           {BUSINESS.map((id) => (
-            <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} label={ROOM_LABEL[id]} needs={count(id)?.needsYou} />
+            <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} iconClass={ROOM_TONE[id].icon} label={ROOM_LABEL[id]} needs={count(id)?.needsYou} />
           ))}
         </NavGroup>
         <NavGroup title="Coming later">
@@ -192,7 +192,7 @@ function NavGroup({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function NavItem({ to, icon, label, needs = 0, busy = false, muted = false, note, end }: { to: string; icon: IconName; label: string; needs?: number; busy?: boolean; muted?: boolean; note?: string; end?: boolean }) {
+function NavItem({ to, icon, iconClass = "", label, needs = 0, busy = false, muted = false, note, end }: { to: string; icon: IconName; iconClass?: string; label: string; needs?: number; busy?: boolean; muted?: boolean; note?: string; end?: boolean }) {
   return (
     <NavLink
       to={to}
@@ -207,7 +207,7 @@ function NavItem({ to, icon, label, needs = 0, busy = false, muted = false, note
         }`
       }
     >
-      <Icon name={icon} size={17} className="opacity-80" />
+      <Icon name={icon} size={17} className={iconClass || "opacity-80"} />
       <span className="flex-1 truncate">{label}</span>
       {busy && !needs && <span className="anim-glow h-1.5 w-1.5 rounded-full bg-accent dark:bg-indigo-400" title="Working" />}
       {needs > 0 && (

@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Icon, type IconName } from "./Icon";
 
 /** The title block at the top of every page. */
-export function PageHeader({ title, subtitle, icon, back, crumb, right }: { title: string; subtitle?: ReactNode; icon?: IconName; back?: string; crumb?: string; right?: ReactNode }) {
+export function PageHeader({ title, subtitle, icon, tone, back, crumb, right }: { title: string; subtitle?: ReactNode; icon?: IconName; tone?: string; back?: string; crumb?: string; right?: ReactNode }) {
   return (
     <header className="space-y-3">
       {back && (
@@ -14,7 +14,7 @@ export function PageHeader({ title, subtitle, icon, back, crumb, right }: { titl
       )}
       <div className="flex flex-wrap items-start gap-4">
         {icon && (
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-white/10 dark:bg-night-2 dark:text-zinc-200">
+          <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${tone ?? "border border-zinc-200 bg-white text-zinc-700 shadow-[0_1px_2px_rgba(16,24,40,0.04)] dark:border-white/10 dark:bg-night-2 dark:text-zinc-200"}`}>
             <Icon name={icon} size={20} />
           </span>
         )}
