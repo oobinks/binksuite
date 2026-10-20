@@ -101,7 +101,7 @@ const reportJsonSchema = {
   required: ["scores", "summary", "reasons", "risks", "angles", "keywords", "priceLowGBP", "priceHighGBP", "seasonality"],
 };
 
-const SHOP_CONTEXT =
+export const SHOP_CONTEXT =
   "You work for a small UK Etsy shop that sells AI-assisted digital downloads: wall art prints, printable planners and trackers (PDF), and ready-made spreadsheets (Excel, which also open in Google Sheets). Use British spelling. Be honest and practical; never invent statistics or name real competitor shops.";
 
 /** What the product is, in words the AI understands. */
