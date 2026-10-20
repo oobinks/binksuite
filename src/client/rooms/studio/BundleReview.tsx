@@ -25,7 +25,7 @@ export const bundleReview: ReviewDef = {
         const { buildBundlePack } = await import("../../lib/bundle");
         const p = await buildBundlePack(task.productId!, task.productTitle, bundle, (label, f) => setStep({ label, f }));
         setPack(p);
-        setData({ zipKey: p.zipKey, files: p.files, previews: p.previews });
+        setData({ zipKey: p.zipKey, files: p.files, previews: p.previews, deliverables: p.deliverables });
         setReady(true);
       } catch (e) {
         setError(e);

@@ -13,6 +13,7 @@ import { radarRoutes } from "./routes/radar";
 import { agentRoutes } from "./routes/agent";
 import { claudeRoutes } from "./routes/claude";
 import { bundleRoutes } from "./routes/bundles";
+import { etsyRoutes } from "./routes/etsy";
 import { runCron } from "./cron";
 
 const app = newApp();
@@ -60,6 +61,7 @@ app.route("/api", fileRoutes);
 app.route("/api", radarRoutes);
 app.route("/api", claudeRoutes);
 app.route("/api", bundleRoutes);
+app.route("/api", etsyRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

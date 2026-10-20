@@ -8,6 +8,10 @@ import { formatGBP } from "../../lib/format";
 import { downloadImage, fileUrl } from "../../lib/files";
 import { ArtImage } from "../../components/ArtImage";
 import { seoCheck, type KeywordResearch } from "../../../shared/seo";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
+import { api } from "../../lib/api";
+import { ErrorNote } from "../../components/ui";
 
 interface Pack {
   listing?: { title: string; tags: string[]; description: string };
@@ -30,7 +34,7 @@ export const launchReview: ReviewDef = {
     const l = p.listing ?? { title: task.productTitle, tags: [], description: "" };
     return (
       <div className="space-y-4">
-        <p className="rounded-xl bg-honey/20 p-2 text-sm font-semibold">Open Etsy → Shop Manager → Listings → Add a listing, then copy each piece across. Etsy API publishing arrives in Phase 4.</p>
+        {task.productId && <SendToEtsy productId={task.productId} />}
         {p.bundle && (
           <div className="rounded-xl bg-honey/20 p-3 text-sm">
             <div className="font-black">
@@ -166,5 +170,72 @@ function ListingCheck({ listing, research }: { listing: { title: string; tags: s
         </div>
       )}
     </details>
+  );
+}
+
+interface EtsyDraft {
+  listingId: number;
+  editUrl: string;
+  at: string;
+  photos: number;
+  files: string[];
+  category: string;
+}
+
+/** 🛍️ Send the product to your Etsy shop as a draft; you publish it on Etsy yourself. */
+function SendToEtsy({ productId }: { productId: string }) {
+  const qc = useQueryClient();
+  const status = useQuery({ queryKey: ["etsy"], queryFn: () => api.get<{ shop: { shopName: string } | null; apiKey: boolean }>("/etsy") });
+  const product = useQuery({ queryKey: ["product", productId], queryFn: () => api.get<{ etsy: EtsyDraft | null; downloads: number }>(`/products/${productId}`) });
+  const send = useMutation({
+    mutationFn: (again: boolean) => api.post<{ draft: EtsyDraft }>(`/products/${productId}/etsy-draft`, { again }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["product", productId] }),
+  });
+  const draft = product.data?.etsy;
+  if (!status.data) return null;
+  if (!status.data.shop)
+    return (
+      <p className="rounded-xl bg-honey/20 p-2 text-sm font-semibold">
+        🛍️ <Link to="/settings#etsy" className="underline">Connect your Etsy shop</Link> to send this straight to Etsy as a draft. Or copy each piece across below (Etsy → Shop Manager → Listings → Add a listing).
+      </p>
+    );
+  return (
+    <div className="space-y-2 rounded-2xl bg-orange-50 p-3 text-sm dark:bg-orange-900/20">
+      {draft ? (
+        <>
+          <div className="font-black">✅ Draft on Etsy ({status.data.shop.shopName})</div>
+          <p>
+            {draft.photos} photo{draft.photos === 1 ? "" : "s"} and {draft.files.length} download file{draft.files.length === 1 ? "" : "s"} ({draft.files.join(", ")}), in {draft.category}.
+          </p>
+          <ol className="list-decimal space-y-0.5 pl-5">
+            <li>Open the draft, check everything (and the photos' order).</li>
+            <li>
+              In Etsy's listing editor, tick the <b>made with AI / designed by</b> details if asked, then press <b>Publish</b>.
+            </li>
+            <li>Come back and tap “I've listed it on Etsy” below.</li>
+          </ol>
+          <div className="flex flex-wrap gap-2">
+            <a className="btn-primary" href={draft.editUrl} target="_blank" rel="noreferrer">
+              Open the draft on Etsy ↗
+            </a>
+            <button className="btn-soft text-xs" onClick={() => confirm("Send a second draft to Etsy? (Delete the old one there.)") && send.mutate(true)} disabled={send.isPending}>
+              {send.isPending ? "Sending…" : "Send again"}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="font-black">🛍️ Send to {status.data.shop.shopName} as a draft</div>
+          <p>
+            Creates the listing on Etsy with the title, tags, description, price, listing photos and{" "}
+            {product.data?.downloads ? `${product.data.downloads} download file${product.data.downloads === 1 ? "" : "s"}` : "the download ZIP"}. Buyers can't see it until you press Publish on Etsy.
+          </p>
+          <button className="btn-primary w-full" onClick={() => send.mutate(false)} disabled={send.isPending}>
+            {send.isPending ? "Sending to Etsy… (about a minute)" : "🚀 Send to Etsy as a draft"}
+          </button>
+        </>
+      )}
+      <ErrorNote error={send.error} />
+    </div>
   );
 }

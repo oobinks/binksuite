@@ -147,7 +147,7 @@ export const ROOMS: RoomDef[] = [
     floor: "#f6ecdc",
     phase: 4,
     demoInteractive: false,
-    blurb: "Crafter handles personalised orders from Etsy.",
+    blurb: "Your real Etsy orders land here. Crafter flags buyers' notes.",
     furniture: ["📦", "🏷️", "✂️"],
     map: { x: 25.5, y: 43, w: 23.5, h: 26 },
   },

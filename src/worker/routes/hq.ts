@@ -177,7 +177,7 @@ export const hqRoutes = newApp()
   .get("/products/:id", async (c) => {
     const p = await c.get("db").select().from(products).where(eq(products.id, c.req.param("id"))).get();
     if (!p) throw new HttpError(404, "No such product");
-    const d = p.data as { competitors?: CompetitorPrice[]; report?: { priceRangePence?: [number, number]; keywords?: string[] } };
+    const d = p.data as { competitors?: CompetitorPrice[]; report?: { priceRangePence?: [number, number]; keywords?: string[] }; etsy?: unknown; deliverables?: unknown[] };
     return c.json({
       id: p.id,
       title: p.title,
@@ -186,6 +186,9 @@ export const hqRoutes = newApp()
       competitors: d.competitors ?? [],
       marketRangePence: d.report?.priceRangePence ?? null,
       keywords: d.report?.keywords ?? [],
+      // 🛍️ The Etsy draft, once sent, and how many download files are ready for it.
+      etsy: d.etsy ?? null,
+      downloads: d.deliverables?.length ?? 0,
     });
   })
   .put("/products/:id/competitors", async (c) => {

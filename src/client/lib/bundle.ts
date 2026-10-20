@@ -1,7 +1,7 @@
 // 🎁 Puts a bundle together on your device: one ZIP with each product in its own
 // folder (plus a read-me), and a set of bundle listing photos.
 import JSZip from "jszip";
-import { loadImageSrc, fileUrl, uploadProductFile } from "./files";
+import { buyerFileName, loadImageSrc, fileUrl, uploadProductFile, type Deliverable } from "./files";
 import { FORMAT_INFO } from "../../shared/format";
 import type { BundleSpec } from "../../shared/bundle";
 import {
@@ -29,6 +29,8 @@ const ACCENT = "#c4703f";
 
 export interface BundlePack {
   zipKey: string;
+  /** The bundle ZIP is what buyers download. */
+  deliverables: Deliverable[];
   files: string[];
   previews: string[];
   bytes: number;
@@ -229,5 +231,5 @@ export async function buildBundlePack(productId: string, name: string, bundle: B
   const previews: string[] = [];
   for (const [i, p] of photos.entries()) previews.push(await uploadProductFile(productId, `${base}-listing-${i + 1}-${stamp}.jpg`, p, "image/jpeg"));
   onProgress("Done!", 1);
-  return { zipKey, files, previews, bytes: blob.size };
+  return { zipKey, files, previews, deliverables: [{ key: zipKey, name: buyerFileName(name, "", "zip") }], bytes: blob.size };
 }
