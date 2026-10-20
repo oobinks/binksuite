@@ -76,7 +76,7 @@ export const launchReview: ReviewDef = {
               {p.images.map((k, i) => (
                 <button key={k} className="group relative" onClick={() => downloadImage(k, `${task.productFormat === "art" ? "art" : "listing-photo"}-${i + 1}.jpg`)} title="Download">
                   <ArtImage imageKey={k} className="h-20 w-20 rounded-lg border border-zinc-200 dark:border-white/10" />
-                  <span className="absolute inset-x-0 bottom-0 rounded-b-lg bg-zinc-950/60 py-0.5 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">Save</span>
+                  <span className="absolute inset-x-0 bottom-0 rounded-b-lg bg-zinc-950/60 py-0.5 text-[10px] font-medium text-white transition [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100">Save</span>
                 </button>
               ))}
             </div>
