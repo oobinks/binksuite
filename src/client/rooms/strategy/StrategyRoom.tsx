@@ -8,6 +8,7 @@ import { formatGBP, plain, timeAgo } from "../../lib/format";
 import { ErrorNote, Section, Spinner } from "../../components/ui";
 import { Icon, type IconName } from "../../components/Icon";
 import { ProfitChart } from "./ProfitChart";
+import { ListingPerformance } from "./ListingPerformance";
 import { ReportView, weekLabel } from "./ReportView";
 import { FORMAT_NAME, type ReportsResp, type ShopNumbers, type StrategyReport } from "./types";
 
@@ -83,6 +84,8 @@ export function StrategyRoom() {
           )}
         </div>
       </Section>
+
+      <ListingPerformance />
 
       {n && (
         <div className="grid gap-4 lg:grid-cols-2">

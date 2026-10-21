@@ -15,6 +15,7 @@ import { isClaudePending } from "../providers/claudeCode";
 import { SHOP_CONTEXT } from "./agents/real";
 import { logActivity } from "./queue";
 import { queuePush } from "./push";
+import { listingPerformance, performanceFacts } from "./performance";
 
 const DAY = 86_400_000;
 export const REPORTS_KEY = "strategyReports";
@@ -55,6 +56,8 @@ export interface ShopNumbers {
   expiringSoon: { productId: string; title: string; endsAt: string; daysLeft: number }[];
   /** Net profit per week (Monday start), oldest first, current week last. */
   weekly: { weekStart: string; week: string; netPence: number; revenuePence: number; sales: number }[];
+  /** How each Etsy listing is doing (views, favourites, sales), as plain lines for the report. */
+  listingFacts?: string;
 }
 
 /** ISO week label, e.g. 2026-W43. */
@@ -197,6 +200,7 @@ export async function shopNumbers(db: DB, demoMode: boolean, now = new Date()): 
     liveListings: prods.filter((p) => p.stage === "live").length,
     expiringSoon,
     weekly,
+    listingFacts: performanceFacts(await listingPerformance(db, now)),
   };
 }
 
@@ -279,6 +283,7 @@ export function factsText(n: ShopNumbers): string {
       ? `Listings expiring on Etsy within ${EXPIRY_WINDOW_DAYS} days: ${n.expiringSoon.length} (${n.expiringSoon.map((e) => `"${e.title}" in ${e.daysLeft} days`).join("; ")})`
       : `Listings expiring on Etsy within ${EXPIRY_WINDOW_DAYS} days: none known`,
     `Net profit per week, oldest first: ${n.weekly.map((w) => `w/c ${w.weekStart} ${gbp(w.netPence)}`).join("; ")}`,
+    ...(n.listingFacts ? [n.listingFacts] : []),
   ].join("\n");
 }
 

@@ -1,5 +1,6 @@
 // Promoter: Pinterest pin copy for finished products, and a 7-day content calendar.
 // Drafts only. Nothing here posts anywhere; the owner downloads, copies and posts.
+import { listingPerformance } from "./performance";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { DB } from "../db";
@@ -88,7 +89,9 @@ export async function promotableProducts(db: DB): Promise<PromoProduct[]> {
       pins: { ...EMPTY_PINS, ...((await kvGet<PinRecord>(db, pinsKey(p.id))) ?? {}) },
     });
   }
-  return out.sort((a, b) => Number(b.live) - Number(a.live));
+  // Live ones first; among those, the ones selling (Strategy → Listing performance) lead.
+  const perf = new Map((await listingPerformance(db)).map((l) => [l.productId, l.verdict === "star" ? 2 : l.verdict === "steady" ? 1 : 0]));
+  return out.sort((a, b) => Number(b.live) - Number(a.live) || (perf.get(b.id) ?? 0) - (perf.get(a.id) ?? 0));
 }
 
 export async function promotableProduct(db: DB, id: string): Promise<PromoProduct | null> {

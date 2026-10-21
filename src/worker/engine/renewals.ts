@@ -11,6 +11,7 @@ import type { ShopClient } from "../providers/etsyShop";
 import type { EtsyDraftInfo } from "./etsyPublish";
 import { logActivity } from "./queue";
 import { queuePush } from "./push";
+import { recordListingStats } from "./performance";
 
 export const REVIEW_DAYS = 7;
 const CHECK_EVERY_MS = 6 * 3600_000;
@@ -82,6 +83,7 @@ export async function renewalTick(db: DB, shop: ShopClient, opts: { now?: Date; 
       checkedAt: nowIso(now),
       url: l.url,
     };
+    await recordListingStats(db, p.id, live, now);
     // Published on Etsy → live here; expired on Etsy → retired here.
     const stage = live.state === "active" ? "live" : live.state === "expired" || live.state === "inactive" ? "expired" : p.stage;
     await db
