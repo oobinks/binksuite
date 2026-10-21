@@ -10,6 +10,9 @@
 //   node scripts/claude-jobs.mjs preview <svg> [png] render an SVG to PNG to look at it
 //   node scripts/claude-jobs.mjs wait [seconds]     wait for new jobs (default 240 s)
 //   node scripts/claude-jobs.mjs done <count> [note] tell BinkSuite the session is finished
+//   node scripts/claude-jobs.mjs usage              send your Claude plan's limits to BinkSuite
+//                                                   (check and done do this too)
+import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -51,6 +54,43 @@ async function list() {
   return data.jobs.length;
 }
 
+/**
+ * Your Claude plan's session and weekly limits. Claude Code reports them alongside
+ * every reply, so ask for the tiniest possible one and keep the report lines.
+ */
+function readUsageEvents() {
+  return new Promise((resolve) => {
+    const events = [];
+    let buf = "";
+    let p;
+    try {
+      p = spawn("claude", ["-p", "Reply with just: ok", "--output-format", "stream-json", "--verbose", "--model", "haiku"], { stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return resolve(events);
+    }
+    const stop = setTimeout(() => p.kill(), 90_000);
+    p.stdout.on("data", (d) => {
+      buf += d;
+      for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 1);
+        if (line.includes('"rate_limit_event"')) events.push(line.slice(0, 4000));
+      }
+    });
+    p.on("error", () => (clearTimeout(stop), resolve(events)));
+    p.on("close", () => (clearTimeout(stop), resolve(events)));
+  });
+}
+
+async function reportUsage() {
+  const events = await readUsageEvents();
+  if (!events.length) return console.log("Couldn't read the Claude plan limits this time (that's fine, carry on).");
+  const { status, data } = await call("POST", "/usage", { events: events.slice(-5) });
+  if (status === 200 && data.usage)
+    console.log(`Claude plan: session ${data.usage.session ? `${data.usage.session.usedPercent}%` : "?"} used, weekly ${data.usage.weekly ? `${data.usage.weekly.usedPercent}%` : "?"} used.`);
+  else console.log(`Couldn't send the plan limits (${status}).`);
+}
+
 async function preview(svgPath, pngPath = svgPath.replace(/\.svg$/i, "") + ".png") {
   let chromium;
   try {
@@ -72,8 +112,12 @@ switch (cmd) {
   case "check": {
     const { status, data } = await call("GET", "/jobs");
     console.log(status === 200 ? `Connected ✓ ${data.jobs.length} job(s) waiting.` : `Not connected (${status}): ${data.error ?? ""}`);
+    if (status === 200) await reportUsage();
     process.exit(status === 200 ? 0 : 1);
   }
+  case "usage":
+    await reportUsage();
+    break;
   case "list":
     await list();
     break;
@@ -109,13 +153,14 @@ switch (cmd) {
   case "done": {
     const { status } = await call("POST", "/done", { answered: Number(args[0] ?? 0), note: args.slice(1).join(" ") || undefined });
     console.log(status === 200 ? "Reported to BinkSuite." : `Couldn't report (${status}).`);
+    await reportUsage();
     break;
   }
   case "lint-sheet":
     await lintSheet(args[0]);
     break;
   default:
-    console.log("Commands: check | list | claim <id> | answer <id> <file> | preview <svg> [png] | lint-sheet <file> | wait [s] | done <n> [note]");
+    console.log("Commands: check | list | claim <id> | answer <id> <file> | preview <svg> [png] | lint-sheet <file> | wait [s] | done <n> [note] | usage");
 }
 
 /**

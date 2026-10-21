@@ -1,6 +1,7 @@
 // ✨ The door for Claude Code sessions (your subscription) to work through Claude's
 // to-do list. Not for people: it uses a connection key (Settings → Claude Code),
 // sent as "Authorization: Bearer …", instead of your login.
+import { CLAUDE_USAGE_KEY, usageFromStreamLine, type ClaudeUsage } from "../../shared/claudeUsage";
 import { and, eq, inArray, lt, or, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { newApp, body, HttpError, aiFor, type Ctx } from "../app";
@@ -136,6 +137,23 @@ export const agentRoutes = newApp()
     if (after && after.status === "waiting") return c.json({ ok: false, problem: after.error, jobsWaiting: waiting?.n ?? 0 }, 422);
     const task = job.taskId ? await db.select({ state: tasks.state, title: tasks.title }).from(tasks).where(eq(tasks.id, job.taskId)).get() : null;
     return c.json({ ok: true, task, jobsWaiting: waiting?.n ?? 0 });
+  })
+  // Your Claude plan's limits, read by the session (raw report lines; parsed here).
+  .post("/usage", async (c) => {
+    const b = await body(c, z.object({ events: z.array(z.string().max(4000)).min(1).max(5) }));
+    const readings = b.events.map((l) => usageFromStreamLine(l)).filter((u): u is ClaudeUsage => !!u);
+    if (!readings.length) return c.json({ ok: false, usage: null });
+    const db = c.get("db");
+    const latest = readings[readings.length - 1];
+    // Keep each window's newest reading (one report line may only carry one window).
+    const usage: ClaudeUsage = {
+      at: latest.at,
+      status: latest.status,
+      session: [...readings].reverse().find((r) => r.session)?.session ?? null,
+      weekly: [...readings].reverse().find((r) => r.weekly)?.weekly ?? null,
+    };
+    await kvSet(db, CLAUDE_USAGE_KEY, usage);
+    return c.json({ ok: true, usage });
   })
   .post("/done", async (c) => {
     const b = await body(c, z.object({ answered: z.number().int().min(0).max(1000), note: z.string().max(500).optional() }));

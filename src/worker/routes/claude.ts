@@ -9,6 +9,7 @@ import { kvGet, kvSet, nowIso, saveSettings } from "../lib/store";
 import { vaultSecret } from "../lib/vault";
 import { secretsStatus } from "../env";
 import { sha256Hex } from "./agent";
+import { CLAUDE_USAGE_KEY, usagePause, type ClaudeUsage } from "../../shared/claudeUsage";
 
 const ROUTINE_URL = /^https:\/\/api\.anthropic\.com\/v1\/claude_code\/routines\/[A-Za-z0-9_-]{4,80}\/fire$/;
 /** Don't start a second session while one is probably still working. */
@@ -62,6 +63,7 @@ export const claudeRoutes = newApp()
       jobs: list,
       run: run ?? null,
       running,
+      usage: await kvGet<ClaudeUsage>(db, CLAUDE_USAGE_KEY),
     });
   })
   // A new connection key for Claude sessions. Shown once; only its fingerprint is stored.
@@ -95,6 +97,9 @@ export const claudeRoutes = newApp()
     const busy = await db.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(claudeJobs).where(and(eq(claudeJobs.status, "working"))).get();
     if (isRunning(run, busy?.n ?? 0)) return c.json({ started: false, running: true, reason: "A Claude session is already working on it." });
     if (b.auto && run?.error && Date.now() - new Date(run.at).getTime() < RUN_COOLDOWN_MS) return c.json({ started: false, reason: run.error });
+    // Near a plan limit: don't start by itself (you can still press Start).
+    const pause = b.auto ? usagePause(await kvGet<ClaudeUsage>(db, CLAUDE_USAGE_KEY)) : null;
+    if (pause) return c.json({ started: false, reason: `Claude's ${pause.window} limit is nearly used up${pause.resetsAt ? `. It resets ${new Date(pause.resetsAt).toLocaleString("en-GB", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "Europe/London" })}` : ""}.` });
     const secret = await vaultSecret(db, c.env, "claude-routine");
     if (!secret) throw new HttpError(400, "Connect Claude Code first: Settings → Claude Code.");
     const { url, token } = JSON.parse(secret) as { url: string; token: string };
