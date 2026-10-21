@@ -31,6 +31,9 @@ describe("my shop", () => {
       .run();
     await kvSet(getDb(env.DB), "etsyOrders", [{ receiptId: 1, at: new Date().toISOString(), totalPence: 539, note: null, items: [{ title: "Trip", listingId: 777, productId: "ps1", quantity: 1, pricePence: 539 }] }, { receiptId: 2, at: new Date().toISOString(), totalPence: 100, note: null, items: [{ title: "Other", listingId: 1, productId: null, quantity: 1, pricePence: 100 }] }]);
 
+    // Demo mode counts its pretend live products too; with it off, only real ones.
+    expect((await c.get("/api/state")).data.liveProducts).toBeGreaterThan(1);
+    await c.put("/api/settings", { demoMode: false });
     expect((await c.get("/api/state")).data.liveProducts).toBe(1);
     const list = (await c.get("/api/shop/listings")).data;
     expect(list.connected).toBe(false);
