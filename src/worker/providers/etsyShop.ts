@@ -142,7 +142,25 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
   return {
     shop,
     /** A new listing in your shop as a draft (not visible to buyers). */
-    async createDraft(l: DraftListing): Promise<{ listingId: number }> {
+    async createDraft(l: DraftListing, now = new Date()): Promise<{ listingId: number }> {
+      // "When was it made": a recent-years bucket, not "made_to_order" (which tells buyers the files
+      // only arrive after you complete the order, instead of an instant download). Etsy moves the
+      // bucket's end year each year, so try this year's first and step back if it's refused.
+      const year = now.getUTCFullYear();
+      const buckets = [`2020_${year}`, `2020_${year - 1}`, `2020_${year + 1}`];
+      let lastError: unknown;
+      for (const whenMade of buckets) {
+        try {
+          return await this.createDraftAs(l, whenMade);
+        } catch (e) {
+          lastError = e;
+          // A refused year bucket is a 400; anything else (sign-in, rate limit) stops here.
+          if (!(e instanceof EtsyError) || e.status !== 400) throw e;
+        }
+      }
+      throw lastError;
+    },
+    async createDraftAs(l: DraftListing, whenMade: string): Promise<{ listingId: number }> {
       // Form-encoded, like Etsy's own examples; list fields (tags) are comma-separated.
       const form = new URLSearchParams({
         quantity: "999",
@@ -150,7 +168,7 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
         description: l.description,
         price: (Math.round(l.pricePence) / 100).toFixed(2),
         who_made: "i_did",
-        when_made: "made_to_order",
+        when_made: whenMade,
         taxonomy_id: String(l.taxonomyId),
         type: "download",
         is_supply: "false",
