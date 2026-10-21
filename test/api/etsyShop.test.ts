@@ -11,7 +11,7 @@ import { setUpOwner } from "./helpers";
 const KEY = "keystring123:secret";
 const ORIGIN = "https://binksuite.test";
 
-function fakeEtsy(log: { method: string; url: string; body?: unknown }[]) {
+function fakeEtsy(log: { method: string; url: string; body?: unknown }[], refuseWhenMade: string[] = []) {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -24,7 +24,11 @@ function fakeEtsy(log: { method: string; url: string; body?: unknown }[]) {
     if (url.includes("/users/4242/shops")) return Response.json({ shop_id: 99, shop_name: "BinkSuite" });
     if (url.includes("/seller-taxonomy/nodes"))
       return Response.json({ results: [{ id: 1, name: "Paper & Party Supplies", children: [{ id: 2, name: "Paper", children: [{ id: 3, name: "Calendars & Planners" }] }] }] });
-    if (url.endsWith("/shops/99/listings") && method === "POST") return Response.json({ listing_id: 555 });
+    if (url.endsWith("/shops/99/listings") && method === "POST") {
+      const when = (body as Record<string, string>).when_made;
+      if (refuseWhenMade.includes(when)) return Response.json({ error: `when_made must be one of: made_to_order, 2020_2025` }, { status: 400 });
+      return Response.json({ listing_id: 555 });
+    }
     if (url.includes("/listings/555/images") || url.includes("/listings/555/files")) return Response.json({ ok: true });
     if (url.includes("/shops/99/receipts"))
       return Response.json({
@@ -95,7 +99,7 @@ describe("Etsy shop (publishing and orders)", () => {
     expect(draft).toMatchObject({ listingId: 555, photos: 2, files: ["Gift Tracker.xlsx", "Gift Tracker - Printable A4.pdf"], category: "Paper & Party Supplies › Paper › Calendars & Planners" });
     expect(draft.editUrl).toBe("https://www.etsy.com/your/shops/me/listing-editor/edit/555");
     const create = log.find((l) => l.url.endsWith("/shops/99/listings"))!;
-    expect(create.body).toMatchObject({ title: data.listing.title, price: "4.49", type: "download", who_made: "i_did", when_made: "made_to_order", taxonomy_id: "3", quantity: "999", is_supply: "false", should_auto_renew: "false", tags: "gift tracker,christmas budget" });
+    expect(create.body).toMatchObject({ title: data.listing.title, price: "4.49", type: "download", who_made: "i_did", when_made: `2020_${new Date().getUTCFullYear()}`, taxonomy_id: "3", quantity: "999", is_supply: "false", should_auto_renew: "false", tags: "gift tracker,christmas budget" });
     expect(log.filter((l) => l.url.includes("/images")).map((l) => (l.body as any).rank)).toEqual(["1", "2"]);
     expect(log.filter((l) => l.url.includes("/files")).map((l) => (l.body as any).name)).toEqual(["Gift Tracker.xlsx", "Gift Tracker - Printable A4.pdf"]);
     // Sending again returns the same draft unless you ask for a second one.
@@ -123,5 +127,23 @@ describe("Etsy shop (publishing and orders)", () => {
     expect(findTaxonomy(tree, TAXONOMY_PATHS.art)?.id).toBe(11);
     expect(findTaxonomy(tree, TAXONOMY_PATHS.excel)?.id).toBe(21);
     expect(findTaxonomy(tree, TAXONOMY_PATHS.pdf)?.path).toBe("Paper & Party Supplies › Paper › Calendars & Planners");
+  });
+
+  it("marks drafts as made recently (an instant download), stepping back a year if Etsy hasn't moved its range on", async () => {
+    await setUpOwner();
+    const db = getDb(env.DB);
+    const year = new Date().getUTCFullYear();
+    const log: { method: string; url: string; body?: unknown }[] = [];
+    const fetcher = fakeEtsy(log, [`2020_${year}`]);
+    await kvSet(db, "etsyConnectedShop", { shopId: 99, shopName: "BinkSuite", userId: "4242", connectedAt: new Date().toISOString() });
+    const { encryptSecret } = await import("../../src/worker/lib/crypto");
+    const { ciphertext, iv } = await encryptSecret(JSON.stringify({ access: "4242.a", refresh: "r", expiresAt: Date.now() + 3600_000 }), (env as any).VAULT_MASTER_KEY);
+    await env.DB.prepare("INSERT INTO vault (provider, ciphertext, iv, last4, updated_at) VALUES ('etsy-oauth', ?, ?, 'abcd', ?)").bind(ciphertext, iv, new Date().toISOString()).run();
+    const shop = (await shopClient(db, env as any, KEY, fetcher))!;
+    const r = await shop.createDraft({ title: "Budget Planner", description: "x", pricePence: 499, tags: ["budget"], taxonomyId: 3 });
+    expect(r.listingId).toBe(555);
+    const tries = log.filter((l) => l.url.endsWith("/shops/99/listings")).map((l) => (l.body as Record<string, string>).when_made);
+    expect(tries).toEqual([`2020_${year}`, `2020_${year - 1}`]);
+    expect(tries).not.toContain("made_to_order");
   });
 });
