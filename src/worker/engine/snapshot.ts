@@ -6,7 +6,7 @@ import { handoffs, products, tasks, ledger, events, activity } from "../db/schem
 import { AGENTS, ROOMS, type AgentId, type RoomId } from "../../shared/registry";
 import { levelProgress } from "../../shared/game";
 import { hashString } from "../../shared/rng";
-import type { AgentStatus } from "../../shared/tasks";
+import { isClaudeWaiting, type AgentStatus } from "../../shared/tasks";
 import type { AgentSnapshot, Briefing, RoomSnapshot, Snapshot } from "../../shared/api";
 import type { Settings } from "../../shared/settings";
 import { kvGet, nowIso, sum, visible } from "../lib/store";
@@ -61,9 +61,9 @@ export async function buildSnapshot(
     return {
       id: r.id,
       queued: mine.filter((t) => t.state === "queued").length,
-      working: mine.filter((t) => t.state === "working").length,
+      working: mine.filter((t) => t.state === "working" || (t.state === "blocked" && isClaudeWaiting(t.error))).length,
       needsYou: mine.filter((t) => t.state === "needs_approval").length + (r.id === "care" ? careWaiting : 0),
-      blocked: mine.filter((t) => t.state === "blocked").length,
+      blocked: mine.filter((t) => t.state === "blocked" && !isClaudeWaiting(t.error)).length,
     };
   });
 
@@ -72,7 +72,8 @@ export async function buildSnapshot(
     const mine = live.filter((t) => t.agent === a.id);
     const needs = mine.find((t) => t.state === "needs_approval");
     const working = mine.find((t) => t.state === "working");
-    const blocked = mine.find((t) => t.state === "blocked");
+    const withClaude = mine.find((t) => t.state === "blocked" && isClaudeWaiting(t.error));
+    const blocked = mine.find((t) => t.state === "blocked" && !isClaudeWaiting(t.error));
     const enabled = settings.agentsEnabled[a.id] !== false;
     let status: AgentStatus = "idle";
     let bubble = a.idleLines[Math.floor(now.getTime() / 20_000 + hashString(a.id)) % a.idleLines.length];
@@ -91,6 +92,10 @@ export async function buildSnapshot(
       bubble = a.workLines[Math.floor(working.progress * a.workLines.length * 0.999)];
       taskTitle = working.title;
       prog = working.progress;
+    } else if (withClaude) {
+      status = "claude";
+      bubble = "Claude is on this. It'll be ready when Claude's session finishes.";
+      taskTitle = withClaude.title;
     } else if (blocked) {
       status = "blocked";
       bubble = blocked.error ?? "Blocked";

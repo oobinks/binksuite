@@ -14,6 +14,7 @@ interface Props {
 
 const DOT: Partial<Record<AgentStatus, string>> = {
   working: "bg-accent dark:bg-indigo-400",
+  claude: "bg-violet-500",
   needs_you: "bg-amber-500",
   blocked: "bg-rose-500",
   done: "bg-emerald-500",
@@ -32,7 +33,7 @@ export function Avatar({ agent, status = "idle", size = 56, className = "" }: Pr
       {agent.name.slice(0, 2)}
       {dot && (
         <span
-          className={`absolute right-0 bottom-0 rounded-full ring-2 ring-white dark:ring-night-2 ${dot} ${status === "working" ? "anim-glow" : ""}`}
+          className={`absolute right-0 bottom-0 rounded-full ring-2 ring-white dark:ring-night-2 ${dot} ${status === "working" || status === "claude" ? "anim-glow" : ""}`}
           style={{ width: Math.max(7, size * 0.24), height: Math.max(7, size * 0.24) }}
         />
       )}

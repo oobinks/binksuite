@@ -23,6 +23,7 @@ export function ProgressBar({ value, color = "#4f46e5", className = "", label }:
 const STATUS_TONE: Record<AgentStatus, { pill: string; dot: string }> = {
   idle: { pill: "text-zinc-600 dark:text-zinc-400", dot: "bg-zinc-400" },
   working: { pill: "text-indigo-700 dark:text-indigo-300", dot: "bg-indigo-500 anim-glow" },
+  claude: { pill: "text-violet-700 dark:text-violet-300", dot: "bg-violet-500 anim-glow" },
   needs_you: { pill: "text-amber-700 dark:text-amber-300", dot: "bg-amber-500" },
   blocked: { pill: "text-rose-700 dark:text-rose-300", dot: "bg-rose-500" },
   done: { pill: "text-emerald-700 dark:text-emerald-300", dot: "bg-emerald-500" },
