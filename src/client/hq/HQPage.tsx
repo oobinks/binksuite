@@ -26,13 +26,14 @@ export function HQPage() {
     <div className="space-y-8">
       <PageHeader title="Dashboard" subtitle={today} />
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-5">
         <Kpi icon="trend" tone="bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300" label="Profit this month" value={formatGBP(snap.game.monthProfitPence)} foot={`of ${formatGBP(goal)} goal`}>
           <ProgressBar value={goal ? snap.game.monthProfitPence / goal : 0} color="#10b981" className="mt-3" label="Monthly profit goal" />
         </Kpi>
         <Kpi icon="inbox" tone="bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300" label="Waiting for you" value={String(snap.approvalsWaiting)} foot={snap.approvalsWaiting === 1 ? "approval to review" : "approvals to review"} highlight={snap.approvalsWaiting > 0} />
         <Kpi icon="activity" tone="bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300" label="In the pipeline" value={String(inProgress)} foot="tasks queued or running" />
         <Kpi icon="finance" tone="bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300" label="Net profit to date" value={formatGBP(snap.game.coinsPence)} foot="after fees and costs" />
+        <Kpi to="/shop" icon="store" tone="bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300" label="Live products" value={String(snap.liveProducts)} foot="on Etsy now" />
       </div>
 
       <section>
@@ -100,9 +101,9 @@ function SectionTitle({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
-function Kpi({ icon, tone, label, value, foot, highlight = false, children }: { icon: IconName; tone: string; label: string; value: string; foot: string; highlight?: boolean; children?: ReactNode }) {
-  return (
-    <div className="card p-4 sm:p-5">
+function Kpi({ icon, tone, label, value, foot, highlight = false, to, children }: { icon: IconName; tone: string; label: string; value: string; foot: string; highlight?: boolean; to?: string; children?: ReactNode }) {
+  const body = (
+    <>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</span>
         <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${tone}`}>
@@ -112,7 +113,14 @@ function Kpi({ icon, tone, label, value, foot, highlight = false, children }: { 
       <div className={`mt-1 text-2xl leading-none font-semibold tracking-tight tabular-nums sm:text-[28px] ${highlight ? "text-amber-600 dark:text-amber-400" : ""}`}>{value}</div>
       <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{foot}</div>
       {children}
-    </div>
+    </>
+  );
+  return to ? (
+    <Link to={to} className="card block p-4 transition hover:border-zinc-300 sm:p-5 dark:hover:border-white/15">
+      {body}
+    </Link>
+  ) : (
+    <div className="card p-4 sm:p-5">{body}</div>
   );
 }
 
