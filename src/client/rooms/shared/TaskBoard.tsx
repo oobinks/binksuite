@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { AGENT_BY_ID } from "../../../shared/registry";
 import { Icon } from "../../components/Icon";
 import type { TaskView } from "../../../shared/api";
+import { isClaudeWaiting } from "../../../shared/tasks";
 import { Avatar } from "../../agents/Avatar";
 import { ProgressBar } from "../../components/ui";
 import { plain, timeAgo } from "../../lib/format";
@@ -18,7 +19,9 @@ export function TaskBoard({ tasks, onOpen, onRetry }: { tasks: TaskView[]; onOpe
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {COLUMNS.map((col) => {
-        const list = tasks.filter((t) => col.states.includes(t.state)).slice(0, col.key === "done" ? 8 : 20);
+        // A task waiting on Claude is busy, not stuck: it shows under Running.
+        const column = (t: TaskView) => (t.state === "blocked" && isClaudeWaiting(t.error) ? "working" : t.state);
+        const list = tasks.filter((t) => col.states.includes(column(t))).slice(0, col.key === "done" ? 8 : 20);
         return (
           <div key={col.key} className="rounded-xl bg-zinc-50 p-2.5 dark:bg-white/[0.02]">
             <h4 className="mb-2.5 flex items-center gap-2 px-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
@@ -59,7 +62,14 @@ function TaskCard({ task, onOpen, onRetry }: { task: TaskView; onOpen: (t: TaskV
         {needs && <span className="anim-glow mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-label="Needs you" />}
       </div>
       {task.state === "working" && <ProgressBar value={task.progress} className="mt-2.5" label="Progress" />}
-      {task.state === "blocked" && <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">{task.error}</p>}
+      {task.state === "blocked" &&
+        (isClaudeWaiting(task.error) ? (
+          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-violet-700 dark:text-violet-300">
+            <Icon name="sparkles" size={12} className="anim-glow" /> With Claude: ready when Claude's session finishes
+          </p>
+        ) : (
+          <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">{plain(task.error ?? "Blocked")}</p>
+        ))}
       {task.state === "failed" && (
         <p className="mt-1.5 text-xs text-rose-600 dark:text-rose-400">
           {task.error ?? "Failed"}{" "}

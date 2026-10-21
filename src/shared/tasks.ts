@@ -62,11 +62,15 @@ export function canTransition(from: TaskState, event: TaskEvent): boolean {
   return TABLE[from][event] !== undefined;
 }
 
-export type AgentStatus = "idle" | "working" | "needs_you" | "blocked" | "done" | "off";
+export type AgentStatus = "idle" | "working" | "claude" | "needs_you" | "blocked" | "done" | "off";
+
+/** A task parked while Claude (your Claude Code session) does its thinking: busy, not stuck. */
+export const isClaudeWaiting = (error: string | null | undefined) => !!error && error.includes("Waiting for Claude");
 
 export const STATUS_EMOJI: Record<AgentStatus, string> = {
   idle: "💤",
   working: "⚙️",
+  claude: "✨",
   needs_you: "❗",
   blocked: "⛔",
   done: "✅",
@@ -76,6 +80,7 @@ export const STATUS_EMOJI: Record<AgentStatus, string> = {
 export const STATUS_LABEL: Record<AgentStatus, string> = {
   idle: "Idle",
   working: "Working",
+  claude: "With Claude",
   needs_you: "Needs you",
   blocked: "Blocked",
   done: "Just finished",

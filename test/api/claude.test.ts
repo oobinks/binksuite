@@ -166,4 +166,15 @@ describe("Claude Code engine", () => {
     expect(auto.data.started).toBe(false);
     expect(auto.data.reason).toMatch(/session limit is nearly used up/);
   });
+
+  it("shows an agent whose job is with Claude as 'With Claude', not blocked", async () => {
+    const { owner, db, settings, ai } = await setup();
+    await suggestIdea(db, settings, "Frog teacher posters", undefined, true);
+    for (let i = 0; i < 2; i++) await tick(db, settings, { interactive: false, ai, files: env.FILES });
+    const snap = (await owner.get("/api/state")).data;
+    expect(snap.agents.find((a: any) => a.id === "scout").status).toBe("claude");
+    const research = snap.rooms.find((r: any) => r.id === "research");
+    expect(research.blocked).toBe(0);
+    expect(research.working).toBeGreaterThan(0);
+  });
 });
