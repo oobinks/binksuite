@@ -3,8 +3,11 @@ import { newApp, aiFor, HttpError } from "../app";
 import { isAiLimit } from "../providers/ai";
 import { isClaudePending } from "../providers/claudeCode";
 import { collectPending, listReports, pendingReport, shopNumbers, writeReport } from "../engine/strategy";
+import { listingPerformance } from "../engine/performance";
 
 export const strategyRoutes = newApp()
+  // How each Etsy listing is doing. "Check Etsy now" is POST /live/check.
+  .get("/strategy/performance", async (c) => c.json({ listings: await listingPerformance(c.get("db")) }))
   .get("/strategy/numbers", async (c) => {
     return c.json(await shopNumbers(c.get("db"), c.get("settings").demoMode));
   })
