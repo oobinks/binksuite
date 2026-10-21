@@ -13,7 +13,7 @@ import { radarTick } from "../engine/trends";
 import { priceWatchTick } from "../engine/priceWatch";
 import { etsyFor } from "./radar";
 import { FORMATS, formatOf } from "../../shared/format";
-import { tick, approveTask, rejectTask, retryTask, dropTask, suggestIdea, listSuggestions, EngineError } from "../engine/queue";
+import { tick, approveTask, rejectTask, retryTask, reopenTask, dropTask, suggestIdea, listSuggestions, EngineError } from "../engine/queue";
 import { buildBriefing, buildSnapshot } from "../engine/snapshot";
 import { recordEvent, checkAchievements } from "../engine/game";
 import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared/registry";
@@ -202,6 +202,10 @@ export const hqRoutes = newApp()
       .set({ data: { ...p.data, competitors: b.competitors }, updatedAt: new Date().toISOString() })
       .where(eq(products.id, p.id));
     return c.json({ ok: true, competitors: b.competitors });
+  })
+  .post("/tasks/:id/reopen", async (c) => {
+    const t = await engineErrors(reopenTask(c.get("db"), c.req.param("id")));
+    return c.json({ ok: true, id: t.id, state: t.state });
   })
   .post("/tasks/:id/retry", async (c) => {
     const t = await engineErrors(retryTask(c.get("db"), c.req.param("id")));

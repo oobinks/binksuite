@@ -566,6 +566,55 @@ async function forgetDroppedIdea(db: DB, p: ProductRow) {
   await kvSet(db, key, daily);
 }
 
+/**
+ * Take a finished step back: the product returns to that room and the step waits for your
+ * approval again, with the same work in it. Anything already started for a later step is
+ * cancelled. The finished task stays in the history.
+ */
+export async function reopenTask(db: DB, id: string) {
+  const t = await getTask(db, id);
+  const step = STEP_BY_KIND[t.kind];
+  if (t.state !== "done" || !t.productId || !step || step.standalone || !t.needsApproval) throw new EngineError("Only finished steps you approved can be reopened.");
+  const product = await getProduct(db, t.productId);
+  const later = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.productId, t.productId), sql`${tasks.createdAt} > ${t.createdAt}`, inArray(tasks.state, ["queued", "working", "needs_approval", "blocked"])))
+    .all();
+  if (later.some((x) => x.state === "working")) throw new EngineError("An agent is working on the next step right now. Try again in a minute.");
+  for (const x of later) {
+    await transition(db, x, "discard", { error: `Cancelled: you reopened “${t.title}”` });
+    await db.update(approvals).set({ status: "discarded", decidedAt: nowIso() }).where(and(eq(approvals.taskId, x.id), eq(approvals.status, "pending")));
+  }
+  const now = nowIso();
+  const copy = {
+    id: newId("t_"),
+    productId: t.productId,
+    room: t.room,
+    agent: t.agent,
+    kind: t.kind,
+    title: t.title,
+    state: "needs_approval" as const,
+    progress: 1,
+    attempts: 0,
+    maxAttempts: t.maxAttempts,
+    needsApproval: true,
+    input: t.input ?? {},
+    output: t.output ?? null,
+    durationMs: 0,
+    demo: t.demo,
+    createdAt: now,
+    updatedAt: now,
+    finishedAt: now,
+  };
+  await db.insert(tasks).values(copy);
+  await db.insert(approvals).values({ id: newId("a_"), taskId: copy.id, kind: step.approvalKind, summary: t.title, status: "pending", demo: t.demo, createdAt: now });
+  await db.update(products).set({ stage: step.room, updatedAt: now }).where(eq(products.id, product.id));
+  await logActivity(db, t.agent as AgentId | null, t.room as RoomId, "rejected", `Reopened: ${t.title}`, t.demo);
+  await invalidateStats(db);
+  return getTask(db, copy.id);
+}
+
 export async function retryTask(db: DB, id: string) {
   const t = await getTask(db, id);
   await transition(db, t, "retry", { attempts: 0, error: null, progress: 0 });

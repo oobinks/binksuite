@@ -4,11 +4,12 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useSnapshot, logEvent } from "../lib/hooks";
+import { useUi } from "../lib/store";
 import { ROOM_BY_ID, agentsInRoom, type RoomId } from "../../shared/registry";
 import type { RoomDetail, TaskView } from "../../shared/api";
 import { AgentCard } from "../agents/AgentCard";
 import { ActivityLog } from "../agents/ActivityLog";
-import { Section } from "../components/ui";
+import { ErrorNote, Section } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { TaskBoard } from "./shared/TaskBoard";
 import { ReviewModal } from "./shared/ReviewModal";
@@ -81,6 +82,11 @@ function PipelineRoom({ roomId }: { roomId: RoomId }) {
   const { data } = useQuery({ queryKey: ["room", roomId], queryFn: () => api.get<RoomDetail>(`/rooms/${roomId}`), refetchInterval: 3000 });
   const [open, setOpen] = useState<TaskView | null>(null);
   const retry = useMutation({ mutationFn: (t: TaskView) => api.post(`/tasks/${t.id}/retry`), onSuccess: () => qc.invalidateQueries() });
+  const toast = useUi((s) => s.toast);
+  const reopen = useMutation({
+    mutationFn: (t: TaskView) => api.post(`/tasks/${t.id}/reopen`),
+    onSuccess: () => (toast({ icon: "", title: "Reopened", body: "It's back in Needs you, ready to review." }), qc.invalidateQueries()),
+  });
 
   // Deep link from the approvals drawer: /room/research?task=…
   const wanted = params.get("task");
@@ -113,7 +119,8 @@ function PipelineRoom({ roomId }: { roomId: RoomId }) {
       {roomId === "launch" && <LiveProducts />}
       {roomId === "launch" && <BundleBuilder />}
       <Section title="Task board">
-        {data ? <TaskBoard tasks={data.tasks} onOpen={setOpen} onRetry={(t) => retry.mutate(t)} /> : <p>Loading…</p>}
+        {data ? <TaskBoard tasks={data.tasks} onOpen={setOpen} onRetry={(t) => retry.mutate(t)} onReopen={(t) => reopen.mutate(t)} /> : <p>Loading…</p>}
+        <ErrorNote error={reopen.error} />
       </Section>
       <Section title="Activity">
         <ActivityLog items={data?.activity ?? []} />
