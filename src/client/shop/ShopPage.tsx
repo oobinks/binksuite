@@ -1,5 +1,6 @@
 // My shop: every listing sent to Etsy, at a glance. Click one to see and edit it.
-import { Link } from "react-router";
+import { lazy, Suspense } from "react";
+import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useUi } from "../lib/store";
@@ -40,7 +41,12 @@ export const STATE_LABEL: Record<string, { label: string; dot: string }> = {
   sold_out: { label: "Sold out", dot: "bg-rose-500" },
 };
 
+// Charts are heavy: load them only when the Analytics tab is opened.
+const ShopAnalytics = lazy(() => import("./ShopAnalytics").then((m) => ({ default: m.ShopAnalytics })));
+
 export function ShopPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "analytics" ? "analytics" : "listings";
   const qc = useQueryClient();
   const toast = useUi((s) => s.toast);
   const { data, error } = useQuery({ queryKey: ["shop"], queryFn: () => api.get<{ connected: boolean; listings: ShopListing[] }>("/shop/listings") });
@@ -66,67 +72,93 @@ export function ShopPage() {
           </button>
         }
       />
-      <ErrorNote error={error ?? check.error} />
-      {data && !data.connected && (
-        <p className="card p-4 text-sm">
-          Connect your Etsy shop in{" "}
-          <Link to="/settings#etsy" className="font-medium underline">
-            Settings → Your Etsy shop
-          </Link>{" "}
-          to see and edit your listings here.
-        </p>
-      )}
-      {data && data.connected && !list.length && (
-        <p className="card p-6 text-center text-sm text-zinc-500 dark:text-zinc-400">Nothing sent to Etsy yet. Products appear here once you send them from the Launch room.</p>
-      )}
-      {!!list.length && (
-        <div className="card overflow-hidden">
-          <div className="hidden grid-cols-[minmax(0,1fr)_90px_90px_90px_90px_110px_24px] gap-4 border-b border-zinc-100 px-4 py-2.5 text-[11px] font-semibold tracking-[0.06em] text-zinc-500 uppercase md:grid dark:border-white/[0.06]">
-            <span>Listing</span>
-            <span className="text-right">Price</span>
-            <span className="text-right">Views (30d)</span>
-            <span className="text-right">Favourites</span>
-            <span className="text-right">Sales</span>
-            <span className="text-right">Expires</span>
-            <span />
-          </div>
-          <ul className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
-            {list.map((l) => {
-              const st = STATE_LABEL[l.state] ?? { label: l.state, dot: "bg-zinc-400" };
-              return (
-                <li key={l.productId}>
-                  <Link to={`/shop/${l.productId}`} className="grid grid-cols-[minmax(0,1fr)_24px] items-center gap-4 px-4 py-3 transition-colors hover:bg-zinc-50 md:grid-cols-[minmax(0,1fr)_90px_90px_90px_90px_110px_24px] dark:hover:bg-white/[0.03]">
-                    <span className="flex min-w-0 items-center gap-3">
-                      <ArtImage imageKey={l.cover} className="h-12 w-16 shrink-0 rounded-md" label={l.title} />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{l.title}</span>
-                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
-                            {st.label}
-                          </span>
-                          <FormatBadge format={l.format} />
-                          {l.verdict && <span className={VERDICT_TONE[l.verdict].text}>{l.headline}</span>}
-                          <span className="md:hidden">
-                            {l.pricePence ? formatGBP(l.pricePence) : ""} · {l.views30 ?? l.views} views · {l.salesTotal} sales
+      <div className="flex gap-1 border-b border-zinc-200 dark:border-white/10" role="tablist">
+        {(
+          [
+            ["listings", "Listings"],
+            ["analytics", "Analytics"],
+          ] as const
+        ).map(([t, label]) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setParams(t === "listings" ? {} : { tab: t }, { replace: true })}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${tab === t ? "border-accent text-zinc-900 dark:border-indigo-400 dark:text-white" : "border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "analytics" ? (
+        <Suspense fallback={<p className="py-16 text-center text-sm text-zinc-500">Loading analytics…</p>}>
+          <ShopAnalytics />
+        </Suspense>
+      ) : (
+        <>
+          <ErrorNote error={error ?? check.error} />
+          {data && !data.connected && (
+            <p className="card p-4 text-sm">
+              Connect your Etsy shop in{" "}
+              <Link to="/settings#etsy" className="font-medium underline">
+                Settings → Your Etsy shop
+              </Link>{" "}
+              to see and edit your listings here.
+            </p>
+          )}
+          {data && data.connected && !list.length && (
+            <p className="card p-6 text-center text-sm text-zinc-500 dark:text-zinc-400">Nothing sent to Etsy yet. Products appear here once you send them from the Launch room.</p>
+          )}
+          {!!list.length && (
+            <div className="card overflow-hidden">
+              <div className="hidden grid-cols-[minmax(0,1fr)_90px_90px_90px_90px_110px_24px] gap-4 border-b border-zinc-100 px-4 py-2.5 text-[11px] font-semibold tracking-[0.06em] text-zinc-500 uppercase md:grid dark:border-white/[0.06]">
+                <span>Listing</span>
+                <span className="text-right">Price</span>
+                <span className="text-right">Views (30d)</span>
+                <span className="text-right">Favourites</span>
+                <span className="text-right">Sales</span>
+                <span className="text-right">Expires</span>
+                <span />
+              </div>
+              <ul className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
+                {list.map((l) => {
+                  const st = STATE_LABEL[l.state] ?? { label: l.state, dot: "bg-zinc-400" };
+                  return (
+                    <li key={l.productId}>
+                      <Link to={`/shop/${l.productId}`} className="grid grid-cols-[minmax(0,1fr)_24px] items-center gap-4 px-4 py-3 transition-colors hover:bg-zinc-50 md:grid-cols-[minmax(0,1fr)_90px_90px_90px_90px_110px_24px] dark:hover:bg-white/[0.03]">
+                        <span className="flex min-w-0 items-center gap-3">
+                          <ArtImage imageKey={l.cover} className="h-12 w-16 shrink-0 rounded-md" label={l.title} />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{l.title}</span>
+                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
+                                {st.label}
+                              </span>
+                              <FormatBadge format={l.format} />
+                              {l.verdict && <span className={VERDICT_TONE[l.verdict].text}>{l.headline}</span>}
+                              <span className="md:hidden">
+                                {l.pricePence ? formatGBP(l.pricePence) : ""} · {l.views30 ?? l.views} views · {l.salesTotal} sales
+                              </span>
+                            </span>
                           </span>
                         </span>
-                      </span>
-                    </span>
-                    <span className="hidden text-right text-sm tabular-nums md:block">{l.pricePence ? formatGBP(l.pricePence) : "—"}</span>
-                    <span className="hidden text-right text-sm tabular-nums md:block">{l.views30 ?? l.views}</span>
-                    <span className="hidden text-right text-sm tabular-nums md:block">{l.favourites}</span>
-                    <span className="hidden text-right text-sm tabular-nums md:block">{l.salesTotal}</span>
-                    <span className={`hidden text-right text-sm tabular-nums md:block ${l.state === "active" && l.daysLeft !== null && l.daysLeft <= 7 ? "font-semibold text-amber-600 dark:text-amber-400" : ""}`}>{l.state !== "active" ? st.label : l.daysLeft !== null ? `${l.daysLeft} days` : "—"}</span>
-                    <Icon name="chevronRight" size={16} className="text-zinc-400" />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+                        <span className="hidden text-right text-sm tabular-nums md:block">{l.pricePence ? formatGBP(l.pricePence) : "—"}</span>
+                        <span className="hidden text-right text-sm tabular-nums md:block">{l.views30 ?? l.views}</span>
+                        <span className="hidden text-right text-sm tabular-nums md:block">{l.favourites}</span>
+                        <span className="hidden text-right text-sm tabular-nums md:block">{l.salesTotal}</span>
+                        <span className={`hidden text-right text-sm tabular-nums md:block ${l.state === "active" && l.daysLeft !== null && l.daysLeft <= 7 ? "font-semibold text-amber-600 dark:text-amber-400" : ""}`}>{l.state !== "active" ? st.label : l.daysLeft !== null ? `${l.daysLeft} days` : "—"}</span>
+                        <Icon name="chevronRight" size={16} className="text-zinc-400" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+          {checked && <p className="text-xs text-zinc-400">Views and favourites last read from Etsy {timeAgo(checked)}. Etsy is checked every 6 hours.</p>}
+        </>
       )}
-      {checked && <p className="text-xs text-zinc-400">Views and favourites last read from Etsy {timeAgo(checked)}. Etsy is checked every 6 hours.</p>}
     </div>
   );
 }

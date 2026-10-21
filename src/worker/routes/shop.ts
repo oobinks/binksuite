@@ -9,6 +9,7 @@ import { nowIso } from "../lib/store";
 import { EtsyError } from "../providers/etsy";
 import { shopClient, shopInfo } from "../providers/etsyShop";
 import { listingPerformance } from "../engine/performance";
+import { etsyShopTotals, shopAnalytics } from "../engine/analytics";
 import { ordersList } from "../engine/orders";
 import { cachedReviews } from "../engine/care";
 import { logActivity } from "../engine/queue";
@@ -77,6 +78,14 @@ export const shopRoutes = newApp()
       })
       .sort((a, b) => (a.state === "active" ? 0 : 1) - (b.state === "active" ? 0 : 1) || a.title.localeCompare(b.title));
     return c.json({ connected: !!(await shopInfo(db)), listings });
+  })
+  // Whole-shop analytics for the last 7, 30, 90 or 365 days, against the period before.
+  .get("/shop/analytics", async (c) => {
+    const db = c.get("db");
+    const days = [7, 30, 90, 365].includes(Number(c.req.query("days"))) ? Number(c.req.query("days")) : 30;
+    const key = await vaultSecret(db, c.env, "etsy");
+    const shop = key ? await shopClient(db, c.env, key).catch(() => null) : null;
+    return c.json(await shopAnalytics(db, days, { etsy: await etsyShopTotals(db, shop) }));
   })
   .get("/shop/listings/:id", async (c) => {
     const db = c.get("db");
