@@ -7,6 +7,8 @@ import { RoomPage } from "./rooms/RoomPage";
 import { AgentPage } from "./agents/AgentPage";
 import { JournalPage } from "./game/JournalPage";
 import { SettingsPage } from "./settings/SettingsPage";
+import { ShopPage } from "./shop/ShopPage";
+import { ShopListingPage } from "./shop/ShopListingPage";
 import { LoginPage, SetupPage, useAuthStatus } from "./auth/AuthPages";
 
 function Gate() {
@@ -39,6 +41,8 @@ function Gate() {
         <Route path="/agent/:id" element={<AgentPage />} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/shop" element={<ShopPage />} />
+        <Route path="/shop/:id" element={<ShopListingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

@@ -18,6 +18,7 @@ import { careRoutes } from "./routes/care";
 import { marketingRoutes } from "./routes/marketing";
 import { strategyRoutes } from "./routes/strategy";
 import { pushRoutes } from "./routes/push";
+import { shopRoutes } from "./routes/shop";
 import { flushPushes } from "./engine/push";
 import { runCron } from "./cron";
 
@@ -82,6 +83,7 @@ app.route("/api", careRoutes);
 app.route("/api", marketingRoutes);
 app.route("/api", strategyRoutes);
 app.route("/api", pushRoutes);
+app.route("/api", shopRoutes);
 
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

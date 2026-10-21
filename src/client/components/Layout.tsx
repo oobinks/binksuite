@@ -164,6 +164,7 @@ function Sidebar({ snap, onClose }: { snap: Snapshot | undefined; onClose?: () =
           ))}
         </NavGroup>
         <NavGroup title="Business">
+          <NavItem to="/shop" icon="store" iconClass="text-emerald-600 dark:text-emerald-400" label="My shop" />
           {BUSINESS.map((id) => (
             <NavItem key={id} to={`/room/${id}`} icon={ROOM_ICON[id]} iconClass={ROOM_TONE[id].icon} label={ROOM_LABEL[id]} needs={count(id)?.needsYou} />
           ))}
