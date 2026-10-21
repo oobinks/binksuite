@@ -57,7 +57,23 @@ export const studioReview: ReviewDef = {
                 whileDrag={{ rotate: 4 }}
                 className="card absolute inset-0 cursor-grab touch-pan-y overflow-hidden p-2 active:cursor-grabbing"
               >
-                <ArtImage imageKey={current.key} seed={current.seed} className="pointer-events-none h-[220px] w-full rounded-lg" />
+                <ArtImage imageKey={current.key} seed={current.seed} className="pointer-events-none h-[220px] w-full rounded-lg" zoom={false} />
+                {current.key && (
+                  <button
+                    type="button"
+                    className="absolute top-4 right-4 grid h-8 w-8 place-items-center rounded-full bg-zinc-950/60 text-white hover:bg-zinc-950/80"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const img = (e.currentTarget.parentElement?.querySelector("img") as HTMLImageElement | null)?.src;
+                      if (img) window.dispatchEvent(new CustomEvent("bs:zoom", { detail: { src: img, alt: "Artwork" } }));
+                    }}
+                    aria-label="Enlarge"
+                    title="Enlarge"
+                  >
+                    <Icon name="enlarge" size={15} />
+                  </button>
+                )}
                 <div className="mt-2 flex items-center justify-between text-sm font-medium">
                   <span className="tabular-nums">{current.score == null ? "Your call" : `Score ${current.score}/10`}</span>
                   {current.issues.length ? (

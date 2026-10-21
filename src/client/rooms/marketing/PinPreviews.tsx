@@ -49,10 +49,10 @@ export function PinPreviews({ product }: { product: PromoProduct }) {
       </div>
     );
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-zoom-group="">
       {pins.map((p, i) => (
         <figure key={p.label} className="space-y-1.5">
-          <img src={p.url} alt={`Pin ${i + 1}: ${p.label}`} className="aspect-[2/3] w-full rounded-lg border border-zinc-200 object-cover dark:border-white/10" />
+          <img src={p.url} alt={`Pin ${i + 1}: ${p.label}`} className="aspect-[2/3] w-full cursor-zoom-in rounded-lg border border-zinc-200 object-cover dark:border-white/10" data-zoom="" />
           <figcaption className="flex items-center justify-between gap-2">
             <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{p.label}</span>
             <a className="btn-soft shrink-0 px-2.5 py-1 text-xs" href={p.url} download={pinFileName(title, i + 1)}>

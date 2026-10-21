@@ -11,6 +11,7 @@ import type { Snapshot } from "../../shared/api";
 import { Icon, type IconName } from "./Icon";
 import { Logo } from "./Logo";
 import { ClaudeBar } from "./ClaudeBar";
+import { Lightbox } from "./Lightbox";
 import { BriefingModal } from "../game/BriefingModal";
 import { ApprovalsDrawer } from "../game/ApprovalsDrawer";
 
@@ -113,6 +114,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
 
       <Toasts />
+      <Lightbox />
       <BriefingModal open={briefingOpen} onClose={() => setBriefingOpen(false)} />
       <ApprovalsDrawer open={approvalsOpen} onClose={() => setApprovalsOpen(false)} />
     </div>

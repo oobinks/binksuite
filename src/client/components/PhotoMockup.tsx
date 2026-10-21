@@ -15,7 +15,7 @@ export function PhotoMockup({ view, save }: { view: MockupView; save?: string })
   return (
     <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-black/5 dark:bg-white/5">
       {url ? (
-        <img src={url} alt={`${label} mockup`} className="h-full w-full object-cover" draggable={false} />
+        <img src={url} alt={`${label} mockup`} className="h-full w-full cursor-zoom-in object-cover" draggable={false} data-zoom="" />
       ) : (
         <div className="grid h-full place-items-center text-xs text-cocoa">{isError ? "Couldn't draw this one" : <span className="animate-pulse">Staging the {label.toLowerCase()}…</span>}</div>
       )}
