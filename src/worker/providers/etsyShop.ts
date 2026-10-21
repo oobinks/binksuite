@@ -125,9 +125,10 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
     }
     return { "x-api-key": apiKey, authorization: `Bearer ${tokens.access}` };
   };
-  const call = async <T>(method: string, path: string, body?: BodyInit, kind?: "form"): Promise<T> => {
+  const call = async <T>(method: string, path: string, body?: BodyInit, kind?: "form" | "json"): Promise<T> => {
     const headers: Record<string, string> = { ...(await auth()), accept: "application/json" };
     if (kind === "form") headers["content-type"] = "application/x-www-form-urlencoded";
+    if (kind === "json") headers["content-type"] = "application/json";
     const res = await fetcher(`${API}${path}`, { method, headers, body });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
@@ -196,6 +197,34 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
     async listing(listingId: number) {
       return call<{ listing_id: number; state: string; ending_timestamp?: number; views?: number; num_favorers?: number; url?: string }>("GET", `/listings/${listingId}`);
     },
+    /** A listing's words, price, state and photos, as they are on Etsy now. */
+    async listingFull(listingId: number) {
+      return call<EtsyListingFull>("GET", `/listings/${listingId}?includes=Images`);
+    },
+    /** Change a listing's words on Etsy (live listings change straight away). */
+    async updateListing(listingId: number, f: { title?: string; description?: string; tags?: string[] }) {
+      const form = new URLSearchParams();
+      if (f.title !== undefined) form.set("title", f.title);
+      if (f.description !== undefined) form.set("description", f.description);
+      if (f.tags !== undefined) form.set("tags", f.tags.map((t) => t.replace(/,/g, " ")).join(","));
+      await call("PATCH", `/shops/${shop.shopId}/listings/${listingId}`, form, "form");
+    },
+    /** Change the price: Etsy keeps it on the listing's inventory, so read it, change every offering, write it back. */
+    async setPrice(listingId: number, pricePence: number) {
+      const inv = await call<EtsyInventory>("GET", `/listings/${listingId}/inventory`);
+      const body = {
+        products: inv.products.map((p) => ({
+          sku: p.sku ?? "",
+          // Only the fields Etsy accepts back (a digital listing usually has none).
+          property_values: (p.property_values ?? []).map((v) => ({ property_id: v.property_id, value_ids: v.value_ids, scale_id: v.scale_id ?? null, property_name: v.property_name, values: v.values })),
+          offerings: p.offerings.map((o) => ({ price: Math.round(pricePence) / 100, quantity: o.quantity, is_enabled: o.is_enabled })),
+        })),
+        price_on_property: inv.price_on_property ?? [],
+        quantity_on_property: inv.quantity_on_property ?? [],
+        sku_on_property: inv.sku_on_property ?? [],
+      };
+      await call("PUT", `/listings/${listingId}/inventory`, JSON.stringify(body), "json");
+    },
     async receipts(minCreatedSec: number, limit = 50) {
       return call<{ count: number; results: EtsyReceipt[] }>("GET", `/shops/${shop.shopId}/receipts?was_paid=true&min_created=${minCreatedSec}&limit=${limit}&sort_on=created&sort_order=asc`);
     },
@@ -204,6 +233,31 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
       return call<{ count: number; results: EtsyReview[] }>("GET", `/shops/${shop.shopId}/reviews?limit=${limit}`);
     },
   };
+}
+
+export interface EtsyListingFull {
+  listing_id: number;
+  title: string;
+  description: string;
+  tags: string[];
+  state: string;
+  url?: string;
+  views?: number;
+  num_favorers?: number;
+  ending_timestamp?: number;
+  price?: { amount: number; divisor: number; currency_code: string };
+  images?: { url_570xN?: string; url_fullxfull?: string; rank?: number }[];
+}
+
+interface EtsyInventory {
+  products: {
+    sku?: string;
+    property_values?: { property_id: number; value_ids: number[]; scale_id?: number | null; property_name: string; values: string[] }[];
+    offerings: { price: unknown; quantity: number; is_enabled: boolean }[];
+  }[];
+  price_on_property?: number[];
+  quantity_on_property?: number[];
+  sku_on_property?: number[];
 }
 
 export type ShopClient = NonNullable<Awaited<ReturnType<typeof shopClient>>>;
