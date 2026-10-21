@@ -92,7 +92,7 @@ export const shopRoutes = newApp()
     ]);
     const reviews = info ? (await cachedReviews(db, info.shopId)).reviews.filter((r) => r.listingId === listingId) : [];
     // What Etsy has right now (it may have been edited on Etsy). Fall back to BinkSuite's copy.
-    let etsy: { title: string; description: string; tags: string[]; pricePence: number | null; state: string; url: string | null; images: string[] } | null = null;
+    let etsy: { title: string; description: string; tags: string[]; pricePence: number | null; state: string; url: string | null; images: string[]; imagesFull: string[] } | null = null;
     let etsyError: string | null = null;
     try {
       const shop = await shopOrThrow(c);
@@ -105,6 +105,8 @@ export const shopRoutes = newApp()
         state: l.state,
         url: l.url ?? null,
         images: (l.images ?? []).sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)).map((i) => i.url_570xN ?? i.url_fullxfull ?? "").filter(Boolean),
+        // Full size, for the click-to-enlarge preview.
+        imagesFull: (l.images ?? []).sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)).map((i) => i.url_fullxfull ?? i.url_570xN ?? "").filter(Boolean),
       };
     } catch (e) {
       etsyError = e instanceof Error ? e.message : "Couldn't reach Etsy.";
@@ -121,6 +123,7 @@ export const shopRoutes = newApp()
       url: etsy?.url ?? d.etsyLive?.url ?? null,
       editUrl: d.etsy.editUrl ?? `https://www.etsy.com/your/shops/me/listing-editor/edit/${listingId}`,
       images: etsy?.images.length ? etsy.images : [],
+      imagesFull: etsy?.imagesFull ?? [],
       localImages: d.keptImages ?? [],
       endsAt: d.etsyLive?.endsAt ?? null,
       launchedAt: d.launchedAt ?? null,

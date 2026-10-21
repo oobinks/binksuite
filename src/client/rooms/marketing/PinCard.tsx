@@ -45,7 +45,7 @@ export function PinCard({ product, open, onToggle }: { product: PromoProduct; op
       <div className="flex items-center gap-3 px-3 py-2">
         <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-expanded={open}>
           <span className="h-12 w-16 shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100 dark:border-white/10 dark:bg-white/5">
-            {thumb.data && <img src={thumb.data} alt="" className="h-full w-full object-cover" />}
+            {thumb.data && <img src={thumb.data} alt={product.title} className="h-full w-full cursor-zoom-in object-cover" data-zoom="" />}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{product.title}</span>

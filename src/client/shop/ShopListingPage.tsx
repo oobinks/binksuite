@@ -27,6 +27,7 @@ interface Detail {
   url: string | null;
   editUrl: string;
   images: string[];
+  imagesFull: string[];
   localImages: string[];
   endsAt: string | null;
   launchedAt: string | null;
@@ -197,7 +198,7 @@ function Overview({ d }: { d: Detail }) {
         {d.images.length ? (
           <div className="flex gap-3 overflow-x-auto pb-1">
             {d.images.map((src, i) => (
-              <img key={src} src={src} alt={`Listing photo ${i + 1}`} className="h-28 w-36 shrink-0 rounded-lg border border-zinc-200 object-cover dark:border-white/10" loading="lazy" />
+              <img key={src} src={src} alt={`Listing photo ${i + 1}`} className="h-28 w-36 shrink-0 cursor-zoom-in rounded-lg border border-zinc-200 object-cover dark:border-white/10" loading="lazy" data-zoom={d.imagesFull[i] ?? ""} />
             ))}
           </div>
         ) : d.localImages.length ? (
