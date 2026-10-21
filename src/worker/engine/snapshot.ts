@@ -54,6 +54,11 @@ export async function buildSnapshot(
     if (t.state === "working" && t.startedAt) t.progress = Math.min(0.99, (now.getTime() - new Date(t.startedAt).getTime()) / Math.max(1, t.durationMs));
   }
 
+  const liveCount = await db
+    .select({ n: sql<number>`count(*)`.mapWith(Number) })
+    .from(products)
+    .where(and(eq(products.stage, "live"), visible(products.demo, demoMode)))
+    .get();
   // Customer Care: low-star reviews you haven't responded to yet.
   const careWaiting = await unansweredReviews(db);
   const rooms: RoomSnapshot[] = ROOMS.map((r) => {
@@ -121,6 +126,7 @@ export async function buildSnapshot(
     handoffs: hand.reverse().map((h) => ({ ...h, from: h.from as RoomId, to: h.to as RoomId, productTitle: h.productTitle ?? "Parcel" })),
     notifications: notes.map((n) => ({ id: n.id, kind: n.kind, title: n.title, body: n.body, createdAt: n.createdAt })),
     approvalsWaiting: live.filter((t) => t.state === "needs_approval").length,
+    liveProducts: liveCount?.n ?? 0,
     briefingDue: lastBriefing !== now.toISOString().slice(0, 10),
     secrets: opts.secrets,
     aiReady: opts.aiReady,

@@ -51,6 +51,8 @@ export interface Snapshot {
   handoffs: HandoffSnapshot[];
   notifications: NotificationSnapshot[];
   approvalsWaiting: number;
+  /** Products live on Etsy right now. */
+  liveProducts: number;
   briefingDue: boolean;
   secrets: { sessionSecret: boolean; vaultMasterKey: boolean };
   /** Real AI (Cloudflare Workers AI) is switched on and available. */
