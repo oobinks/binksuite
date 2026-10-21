@@ -7,7 +7,7 @@ import { products } from "../db/schema";
 import type { Env } from "../env";
 import { formatOf } from "../../shared/format";
 import { nowIso } from "../lib/store";
-import { editUrl, shopClient, taxonomyFor } from "../providers/etsyShop";
+import { editUrl, etsyFileName, shopClient, taxonomyFor } from "../providers/etsyShop";
 import { EtsyError } from "../providers/etsy";
 import type { ProductRow } from "./agents/types";
 
@@ -81,12 +81,14 @@ export async function sendDraft(db: DB, env: Env, apiKey: string, product: Produ
   }
 
   const sent: string[] = [];
+  const taken = new Set<string>();
   for (const f of files.slice(0, MAX_FILES)) {
     const obj = await env.FILES.get(f.key);
     if (!obj) continue;
     if (obj.size > MAX_FILE_BYTES) throw new EtsyError(`“${f.name}” is over Etsy's 20 MB limit for a download file.`, 413);
-    await shop.uploadFile(listingId, new Blob([await obj.arrayBuffer()]), f.name, sent.length + 1);
-    sent.push(f.name);
+    const name = etsyFileName(f.name, taken);
+    await shop.uploadFile(listingId, new Blob([await obj.arrayBuffer()]), name, sent.length + 1);
+    sent.push(name);
   }
 
   const info: EtsyDraftInfo = { listingId, editUrl: editUrl(listingId), at: nowIso(), photos, files: sent, category: category.path };

@@ -187,6 +187,8 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
       await call("POST", `/shops/${shop.shopId}/listings/${listingId}/images`, form);
     },
     async uploadFile(listingId: number, file: Blob, name: string, rank: number) {
+      // Etsy refuses spaces and most punctuation in download file names.
+      if (!/^[A-Za-z0-9._-]{3,70}$/.test(name)) name = etsyFileName(name);
       const form = new FormData();
       form.append("file", file, name);
       form.append("name", name);
@@ -262,6 +264,34 @@ interface EtsyInventory {
   price_on_property?: number[];
   quantity_on_property?: number[];
   sku_on_property?: number[];
+}
+
+/**
+ * A download file's name as Etsy accepts it: 3–70 characters of letters, numbers, hyphens,
+ * underscores and full stops. "Trip Budget Planner - Printable A4.pdf" → "Trip-Budget-Planner-Printable-A4.pdf".
+ * Pass `taken` to keep names unique within a listing.
+ */
+export function etsyFileName(name: string, taken?: Set<string>): string {
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 ? name.slice(dot + 1).replace(/[^A-Za-z0-9]/g, "").toLowerCase().slice(0, 8) : "";
+  let base = (dot > 0 ? name.slice(0, dot) : name)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/['’]/g, "")
+    .replace(/[^A-Za-z0-9_]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "");
+  const room = 70 - (ext ? ext.length + 1 : 0);
+  if (base.length < 3) base = `file${base ? `-${base}` : ""}`;
+  base = base.slice(0, room).replace(/[-_.]+$/, "");
+  let out = ext ? `${base}.${ext}` : base;
+  for (let n = 2; taken?.has(out.toLowerCase()); n++) {
+    const tail = `-${n}`;
+    out = `${base.slice(0, room - tail.length).replace(/[-_.]+$/, "")}${tail}${ext ? `.${ext}` : ""}`;
+  }
+  taken?.add(out.toLowerCase());
+  return out;
 }
 
 export type ShopClient = NonNullable<Awaited<ReturnType<typeof shopClient>>>;

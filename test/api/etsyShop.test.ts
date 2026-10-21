@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { getDb } from "../../src/worker/db";
 import { getSettings, kvGet, kvSet } from "../../src/worker/lib/store";
-import { connectUrl, finishConnect, findTaxonomy, shopClient, shopInfo, TAXONOMY_PATHS } from "../../src/worker/providers/etsyShop";
+import { connectUrl, etsyFileName, finishConnect, findTaxonomy, shopClient, shopInfo, TAXONOMY_PATHS } from "../../src/worker/providers/etsyShop";
 import { sendDraft } from "../../src/worker/engine/etsyPublish";
 import { syncOrders, ordersList } from "../../src/worker/engine/orders";
 import { setUpOwner } from "./helpers";
@@ -29,6 +29,9 @@ function fakeEtsy(log: { method: string; url: string; body?: unknown }[], refuse
       if (refuseWhenMade.includes(when)) return Response.json({ error: `when_made must be one of: made_to_order, 2020_2025` }, { status: 400 });
       return Response.json({ listing_id: 555 });
     }
+    // Like Etsy: download file names must be 3-70 letters, numbers, hyphens, underscores or full stops.
+    if (url.includes("/listings/555/files") && !/^[A-Za-z0-9._-]{3,70}$/.test(String((body as Record<string, string>).name)))
+      return Response.json({ error: "File names must be between 3 and 70 characters and contain only letters, numbers, hyphens, underscores, or periods." }, { status: 400 });
     if (url.includes("/listings/555/images") || url.includes("/listings/555/files")) return Response.json({ ok: true });
     if (url.includes("/shops/99/receipts"))
       return Response.json({
@@ -96,12 +99,12 @@ describe("Etsy shop (publishing and orders)", () => {
       .run();
     const product = await env.DB.prepare("SELECT * FROM products WHERE id = 'pe'").first<any>();
     const draft = await sendDraft(db, env as any, KEY, { ...product, pricePence: product.price_pence, data: JSON.parse(product.data), demo: false }, { fetcher });
-    expect(draft).toMatchObject({ listingId: 555, photos: 2, files: ["Gift Tracker.xlsx", "Gift Tracker - Printable A4.pdf"], category: "Paper & Party Supplies › Paper › Calendars & Planners" });
+    expect(draft).toMatchObject({ listingId: 555, photos: 2, files: ["Gift-Tracker.xlsx", "Gift-Tracker-Printable-A4.pdf"], category: "Paper & Party Supplies › Paper › Calendars & Planners" });
     expect(draft.editUrl).toBe("https://www.etsy.com/your/shops/me/listing-editor/edit/555");
     const create = log.find((l) => l.url.endsWith("/shops/99/listings"))!;
     expect(create.body).toMatchObject({ title: data.listing.title, price: "4.49", type: "download", who_made: "i_did", when_made: `2020_${new Date().getUTCFullYear()}`, taxonomy_id: "3", quantity: "999", is_supply: "false", should_auto_renew: "false", tags: "gift tracker,christmas budget" });
     expect(log.filter((l) => l.url.includes("/images")).map((l) => (l.body as any).rank)).toEqual(["1", "2"]);
-    expect(log.filter((l) => l.url.includes("/files")).map((l) => (l.body as any).name)).toEqual(["Gift Tracker.xlsx", "Gift Tracker - Printable A4.pdf"]);
+    expect(log.filter((l) => l.url.includes("/files")).map((l) => (l.body as any).name)).toEqual(["Gift-Tracker.xlsx", "Gift-Tracker-Printable-A4.pdf"]);
     // Sending again returns the same draft unless you ask for a second one.
     const before = log.length;
     await sendDraft(db, env as any, KEY, { ...product, pricePence: product.price_pence, data: { ...JSON.parse(product.data), etsy: draft }, demo: false }, { fetcher });
@@ -145,5 +148,18 @@ describe("Etsy shop (publishing and orders)", () => {
     const tries = log.filter((l) => l.url.endsWith("/shops/99/listings")).map((l) => (l.body as Record<string, string>).when_made);
     expect(tries).toEqual([`2020_${year}`, `2020_${year - 1}`]);
     expect(tries).not.toContain("made_to_order");
+  });
+
+  it("names download files the way Etsy accepts", () => {
+    const ok = (n: string) => /^[A-Za-z0-9._-]{3,70}$/.test(n);
+    expect(etsyFileName("Trip Budget Planner - Printable A4.pdf")).toBe("Trip-Budget-Planner-Printable-A4.pdf");
+    expect(etsyFileName("Mum's Café Budget & Bills (UK).xlsx")).toBe("Mums-Cafe-Budget-and-Bills-UK.xlsx");
+    expect(etsyFileName("A.pdf")).toBe("file-A.pdf");
+    const long = etsyFileName(`${"Very Long Name ".repeat(10)}.pdf`);
+    expect(long.length).toBeLessThanOrEqual(70);
+    expect(long.endsWith(".pdf")).toBe(true);
+    const taken = new Set<string>();
+    expect([etsyFileName("Planner.pdf", taken), etsyFileName("Planner.pdf", taken)]).toEqual(["Planner.pdf", "Planner-2.pdf"]);
+    for (const n of ["Trip Budget Planner - Printable A4.pdf", "Mum's Café.xlsx", "x", "Ünïcödé 📊 sheet.xlsx", long]) expect(ok(etsyFileName(n)), n).toBe(true);
   });
 });
