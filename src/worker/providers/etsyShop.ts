@@ -197,6 +197,10 @@ export async function shopClient(db: DB, env: Env, apiKey: string, fetcher: type
     async listing(listingId: number) {
       return call<{ listing_id: number; state: string; ending_timestamp?: number; views?: number; num_favorers?: number; url?: string }>("GET", `/listings/${listingId}`);
     },
+    /** Shop-wide numbers Etsy keeps: admirers, reviews, active listings, all-time sales. */
+    async shopStats() {
+      return call<{ num_favorers?: number; review_average?: number | null; review_count?: number; listing_active_count?: number; transaction_sold_count?: number; create_date?: number }>("GET", `/shops/${shop.shopId}`);
+    },
     /** A listing's words, price, state and photos, as they are on Etsy now. */
     async listingFull(listingId: number) {
       return call<EtsyListingFull>("GET", `/listings/${listingId}?includes=Images`);
