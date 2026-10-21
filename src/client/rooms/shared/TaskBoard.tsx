@@ -15,7 +15,7 @@ const COLUMNS: { key: string; title: string; dot: string; states: TaskView["stat
   { key: "done", title: "Done", dot: "bg-emerald-500", states: ["done", "failed"] },
 ];
 
-export function TaskBoard({ tasks, onOpen, onRetry }: { tasks: TaskView[]; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void }) {
+export function TaskBoard({ tasks, onOpen, onRetry, onReopen }: { tasks: TaskView[]; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void; onReopen?: (t: TaskView) => void }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {COLUMNS.map((col) => {
@@ -32,7 +32,7 @@ export function TaskBoard({ tasks, onOpen, onRetry }: { tasks: TaskView[]; onOpe
               <AnimatePresence initial={false}>
                 {list.map((t) => (
                   <motion.li key={t.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                    <TaskCard task={t} onOpen={onOpen} onRetry={onRetry} />
+                    <TaskCard task={t} onOpen={onOpen} onRetry={onRetry} onReopen={onReopen} />
                   </motion.li>
                 ))}
               </AnimatePresence>
@@ -45,7 +45,7 @@ export function TaskBoard({ tasks, onOpen, onRetry }: { tasks: TaskView[]; onOpe
   );
 }
 
-function TaskCard({ task, onOpen, onRetry }: { task: TaskView; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void }) {
+function TaskCard({ task, onOpen, onRetry, onReopen }: { task: TaskView; onOpen: (t: TaskView) => void; onRetry: (t: TaskView) => void; onReopen?: (t: TaskView) => void }) {
   const agent = task.agent ? AGENT_BY_ID[task.agent] : null;
   const needs = task.state === "needs_approval";
   const content = (
@@ -79,6 +79,17 @@ function TaskCard({ task, onOpen, onRetry }: { task: TaskView; onOpen: (t: TaskV
         </p>
       )}
       {task.note && task.state !== "failed" && <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{plain(task.note)}</p>}
+      {task.state === "done" && task.productId && onReopen && (
+        <button
+          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirm(`Reopen “${plain(task.title)}”? It goes back to waiting for you, so you can review it again. Anything started after it is cancelled.`)) onReopen(task);
+          }}
+        >
+          <Icon name="refresh" size={12} /> Reopen
+        </button>
+      )}
     </>
   );
   return needs ? (
