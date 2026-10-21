@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Notifications } from "./Notifications";
 import { ClaudeUsageCard } from "./ClaudeUsage";
+import { FreshStart } from "./FreshStart";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useSnapshot, useSaveSettings, applyTheme } from "../lib/hooks";
@@ -51,6 +52,7 @@ export function SettingsPage() {
         <KeyVault />
         <Storage />
         <Account />
+        <FreshStart />
         <About />
       </div>
     </div>

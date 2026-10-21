@@ -10,6 +10,7 @@ import { nowIso, saveSettings, kvGet, invalidateStats } from "../lib/store";
 import { feeSettingsSchema, settingsSchema, VAULT_PROVIDERS, type Settings } from "../../shared/settings";
 import { claimQuest, getQuests, listAchievements, recordEvent, notify } from "../engine/game";
 import { clearDemoData, seedDemo } from "../../../seed/demo";
+import { startFresh } from "../engine/freshStart";
 import { aiUsageToday, NEURONS_PER_PRODUCT } from "../providers/ai";
 import type { AiStatus } from "../../shared/api";
 
@@ -100,6 +101,15 @@ export const settingsRoutes = newApp()
     await saveSettings(db, { ...c.get("settings"), demoMode: false });
     await invalidateStats(db);
     return c.json({ ok: true });
+  })
+
+  // ─── Start fresh: remove every product (download the export first) ───
+  .post("/fresh-start", async (c) => {
+    await body(c, z.object({ confirm: z.literal("DELETE") }));
+    const db = c.get("db");
+    const result = await startFresh(db, c.env.FILES);
+    await saveSettings(db, { ...c.get("settings"), demoMode: false });
+    return c.json({ ok: true, ...result });
   })
 
   // ─── Export & storage ───
