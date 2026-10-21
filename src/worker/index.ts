@@ -23,6 +23,8 @@ import { runCron } from "./cron";
 
 const app = newApp();
 
+const UPLOAD_TYPES = new Set(["application/zip", "image/jpeg", "application/pdf", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]);
+
 app.onError((err, c) => {
   if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 400);
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
@@ -36,7 +38,8 @@ app.use("/api/*", async (c, next) => {
     const origin = c.req.header("origin");
     if (origin && new URL(origin).host !== new URL(c.req.url).host) throw new HttpError(403, "Cross-site request blocked");
     const ct = c.req.header("content-type") ?? "";
-    const zipUpload = c.req.method === "PUT" && c.req.path.startsWith("/api/files/") && (ct === "application/zip" || ct === "image/jpeg");
+    // File uploads: packs (.zip), pictures (.jpg) and the files buyers download (.xlsx, .pdf).
+    const zipUpload = c.req.method === "PUT" && c.req.path.startsWith("/api/files/") && UPLOAD_TYPES.has(ct.split(";")[0].trim().toLowerCase());
     // A file upload (print pack or preview picture) still needs a same-origin Origin header.
     if (zipUpload && !origin) throw new HttpError(403, "Cross-site request blocked");
     if (!zipUpload && !ct.includes("application/json")) throw new HttpError(415, "Send JSON");
