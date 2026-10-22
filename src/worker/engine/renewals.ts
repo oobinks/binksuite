@@ -7,7 +7,7 @@ import type { DB } from "../db";
 import { approvals, ledger, products, tasks } from "../db/schema";
 import { newId } from "../lib/crypto";
 import { kvGet, kvSet, nowIso } from "../lib/store";
-import type { ShopClient } from "../providers/etsyShop";
+import type { EtsyListingFull, ShopClient } from "../providers/etsyShop";
 import type { EtsyDraftInfo } from "./etsyPublish";
 import { logActivity } from "./queue";
 import { queuePush } from "./push";
@@ -43,6 +43,14 @@ export interface RenewalReview {
   manageUrl: string;
 }
 
+/** What changed on Etsy since BinkSuite last looked (you edited the listing on Etsy, or its state moved). */
+export interface EtsyChange {
+  productId: string;
+  title: string;
+  fields: string[];
+  at: string;
+}
+
 export const daysLeft = (endsAt: string, now = new Date()) => Math.max(0, Math.ceil((new Date(endsAt).getTime() - now.getTime()) / DAY));
 
 /** Sales pay for themselves; interest might; nothing after months is a sign to stop. */
@@ -54,10 +62,10 @@ export function renewalVerdict(s: { sales: number; views: number; favourites: nu
 }
 
 /** Read each sent listing from Etsy, and raise a review for any within a week of expiring. */
-export async function renewalTick(db: DB, shop: ShopClient, opts: { now?: Date; force?: boolean; budget?: number } = {}): Promise<{ checked: number; reviews: number }> {
+export async function renewalTick(db: DB, shop: ShopClient, opts: { now?: Date; force?: boolean; budget?: number } = {}): Promise<{ checked: number; reviews: number; changed: EtsyChange[] }> {
   const now = opts.now ?? new Date();
   const last = (await kvGet<number>(db, "renewalsCheckedAt")) ?? 0;
-  if (!opts.force && now.getTime() - last < CHECK_EVERY_MS) return { checked: 0, reviews: 0 };
+  if (!opts.force && now.getTime() - last < CHECK_EVERY_MS) return { checked: 0, reviews: 0, changed: [] };
   await kvSet(db, "renewalsCheckedAt", now.getTime());
   const rows = await db
     .select()
@@ -66,11 +74,13 @@ export async function renewalTick(db: DB, shop: ShopClient, opts: { now?: Date; 
     .all();
   let checked = 0;
   let reviews = 0;
+  const changed: EtsyChange[] = [];
   for (const p of rows.slice(0, opts.budget ?? 30)) {
-    const d = p.data as { etsy: EtsyDraftInfo; etsyLive?: EtsyLive; launchedAt?: string };
-    let l;
+    const d = p.data as { etsy: EtsyDraftInfo; etsyLive?: EtsyLive; launchedAt?: string; listing?: { title: string; tags: string[]; description: string } };
+    let l: Awaited<ReturnType<ShopClient["listing"]>> & Partial<EtsyListingFull>;
     try {
-      l = await shop.listing(d.etsy.listingId);
+      // The full listing (words and price too), so edits made on Etsy show up here.
+      l = "listingFull" in shop && shop.listingFull ? await shop.listingFull(d.etsy.listingId) : await shop.listing(d.etsy.listingId);
     } catch {
       continue; // deleted on Etsy, or a hiccup: try again next time
     }
@@ -86,13 +96,35 @@ export async function renewalTick(db: DB, shop: ShopClient, opts: { now?: Date; 
     await recordListingStats(db, p.id, live, now);
     // Published on Etsy → live here; expired on Etsy → retired here.
     const stage = live.state === "active" ? "live" : live.state === "expired" || live.state === "inactive" ? "expired" : p.stage;
+    // Words and price as they are on Etsy now: Etsy is the source of truth for a sent listing.
+    const fields: string[] = [];
+    const words = { ...(d.listing ?? { title: p.title, tags: [], description: "" }) };
+    let pricePence = p.pricePence;
+    if (typeof l.title === "string" && l.title !== words.title) (fields.push("title"), (words.title = l.title));
+    if (typeof l.description === "string" && l.description !== words.description) (fields.push("description"), (words.description = l.description));
+    if (Array.isArray(l.tags) && [...l.tags].sort().join("|") !== [...(words.tags ?? [])].sort().join("|")) (fields.push("tags"), (words.tags = l.tags));
+    if (l.price) {
+      const pence = Math.round((l.price.amount / l.price.divisor) * 100);
+      if (pence !== p.pricePence) (fields.push("price"), (pricePence = pence));
+    }
+    if (d.etsyLive && d.etsyLive.state !== live.state) fields.push("status");
+    // The first full read just fills in what BinkSuite didn't have yet: not a "change".
+    const firstRead = !d.listing;
+    const sync = fields.length && !firstRead ? { etsySync: { at: nowIso(now), fields } } : {};
+    if (fields.length && !firstRead) changed.push({ productId: p.id, title: words.title.split("|")[0].trim() || p.title, fields, at: nowIso(now) });
     await db
       .update(products)
-      .set({ data: { ...p.data, etsyLive: live, ...(live.state === "active" && !d.launchedAt ? { launchedAt: nowIso(now) } : {}) }, stage, updatedAt: nowIso(now) })
+      .set({
+        data: { ...p.data, etsyLive: live, listing: words, ...sync, ...(live.state === "active" && !d.launchedAt ? { launchedAt: nowIso(now) } : {}) },
+        pricePence,
+        stage,
+        updatedAt: nowIso(now),
+      })
       .where(eq(products.id, p.id));
     if (live.state === "active" && live.endsAt && daysLeft(live.endsAt, now) <= REVIEW_DAYS && (await raiseReview(db, p, d.etsy, live, now))) reviews++;
   }
-  return { checked, reviews };
+  if (changed.length) await logActivity(db, null, "launch", "finish", `Updated from Etsy: ${changed.map((c) => `${c.title} (${c.fields.join(", ")})`).join("; ")}`.slice(0, 300), false);
+  return { checked, reviews, changed };
 }
 
 async function raiseReview(db: DB, p: typeof products.$inferSelect, etsy: EtsyDraftInfo, live: EtsyLive, now: Date): Promise<boolean> {

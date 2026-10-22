@@ -23,6 +23,7 @@ interface Data {
   listing?: { title: string; tags: string[]; description: string };
   keptImages?: string[];
   launchedAt?: string;
+  etsySync?: { at: string; fields: string[] };
 }
 
 async function shopOrThrow(c: Ctx) {
@@ -74,6 +75,8 @@ export const shopRoutes = newApp()
           headline: f?.headline ?? null,
           url: live?.url ?? d.etsy?.url ?? null,
           checkedAt: live?.checkedAt ?? null,
+          // What last changed on Etsy (shown for a week).
+          etsyChange: d.etsySync && Date.now() - new Date(d.etsySync.at).getTime() < 7 * 86_400_000 ? d.etsySync : null,
         };
       })
       .sort((a, b) => (a.state === "active" ? 0 : 1) - (b.state === "active" ? 0 : 1) || a.title.localeCompare(b.title));
