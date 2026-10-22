@@ -21,6 +21,8 @@
 //     "trends" (month-by-month totals, with a bar or line chart) and "goals"
 //     (progress towards a target) are laid out on the Dashboard by the app.
 
+import type { StyleId } from "./designStyles";
+
 export const COLUMN_TYPES = ["text", "money", "number", "date", "percent", "checkbox", "choice"] as const;
 export type ColumnType = (typeof COLUMN_TYPES)[number];
 export const VALUE_TYPES = ["money", "number", "percent"] as const;
@@ -107,6 +109,8 @@ export interface SheetSpec {
   currency: string;
   /** Header colour, #rrggbb. */
   accent: string;
+  /** The product's design style (fonts, layout); see designStyles.ts. Missing on older designs. */
+  style?: StyleId;
   howTo: string[];
   inputs: SheetInput[];
   summary: SummaryItem[];

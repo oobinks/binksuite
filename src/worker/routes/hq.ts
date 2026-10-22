@@ -20,6 +20,8 @@ import { AGENT_BY_ID, ROOM_BY_ID, type AgentId, type RoomId } from "../../shared
 import type { CompetitorPrice } from "../../shared/pricing";
 import type { ActivityView, TaskView } from "../../shared/api";
 import type { DB } from "../db";
+import { designStyleFor, setDesignStyle } from "../engine/designStyle";
+import { STYLE_IDS } from "../../shared/designStyles";
 
 const TASK_HISTORY_MS = 3 * 86_400_000;
 
@@ -190,6 +192,17 @@ export const hqRoutes = newApp()
       etsy: d.etsy ?? null,
       downloads: d.deliverables?.length ?? 0,
     });
+  })
+  // 🎨 The product's design style (picked the first time its files are built).
+  .get("/products/:id/style", async (c) => {
+    const style = await designStyleFor(c.get("db"), c.req.param("id"));
+    if (!style) throw new HttpError(404, "No such product");
+    return c.json({ style });
+  })
+  .put("/products/:id/style", async (c) => {
+    const b = await body(c, z.object({ style: z.enum(STYLE_IDS as [string, ...string[]]) }));
+    if (!(await setDesignStyle(c.get("db"), c.req.param("id"), b.style as (typeof STYLE_IDS)[number]))) throw new HttpError(404, "No such product");
+    return c.json({ ok: true, style: b.style });
   })
   .put("/products/:id/competitors", async (c) => {
     // Prices you've spotted on similar Etsy listings.

@@ -12,6 +12,7 @@ import { buyerFileName, uploadProductFile, type Deliverable } from "./files";
 import type { ProductFormat } from "../../shared/format";
 import { addCharts, fixInternalLinks, type ChartSpec } from "./xlsxCharts";
 import { buildListingPhotos } from "./listingPhotos";
+import { styleOf, type DesignStyle } from "../../shared/designStyles";
 import {
   normaliseSpec,
   columnFormula,
@@ -73,8 +74,6 @@ function numFmt(type: ColumnType | ValueType, currency: string, whole = false): 
 // shaded "worked out for you" cells, and one accent colour used with restraint.
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const BODY_FONT = "Calibri";
-const TITLE_FONT = "Georgia";
 const MUTED = "#7a6a60";
 const RULE = "#e8e3dc";
 const INPUT_FILL = "#fff6dd";
@@ -102,6 +101,11 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
   wb.created = new Date();
   wb.calcProperties.fullCalcOnLoad = true;
   const accent = spec.accent;
+  // The product's design style: its fonts, title treatment and table look.
+  const st = styleOf(spec.style);
+  const BODY_FONT = st.excel.body;
+  const TITLE_FONT = st.excel.title;
+  const titleText = (t: string) => (st.display.upper ? t.toUpperCase() : t);
   const deep = shade(accent, 0.3);
   const soft = tint(accent, 0.88);
   const band = tint(accent, 0.955);
@@ -109,7 +113,11 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
   const fill = (hex: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: argb(hex) } });
   const font = (o: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> => ({ name: BODY_FONT, size: 10.5, color: { argb: argb(INK) }, ...o });
   const line = (hex: string, style: ExcelJS.BorderStyle = "thin") => ({ style, color: { argb: argb(hex) } });
-  const rule = { bottom: line(RULE, "hair") };
+  // Boxed tables get a light grid; the others hairline rules under each row.
+  const rule: Partial<ExcelJS.Borders> =
+    st.table === "boxed" ? { top: line(tint(accent, 0.72)), left: line(tint(accent, 0.72)), bottom: line(tint(accent, 0.72)), right: line(tint(accent, 0.72)) } : { bottom: line(st.table === "lined" ? tint(accent, 0.7) : RULE, "hair") };
+  /** Alternate-row shading only where the style uses banded rows. */
+  const banded = st.table === "banded";
   const sheets = dataSheets(spec);
   const home = hasDashboard(spec) ? SUMMARY_TAB : HOW_TO_TAB;
   const charts: ChartSpec[] = [];
@@ -134,17 +142,21 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
     const end = Math.max(3, lastCol);
     ws.mergeCells(TITLE_ROW, 2, TITLE_ROW, end);
     const t = ws.getCell(TITLE_ROW, 2);
-    t.value = title;
-    t.font = { name: TITLE_FONT, size: 22, color: { argb: "FFFFFFFF" } };
-    t.fill = fill(accent);
-    t.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    t.value = titleText(title);
+    // A colour band, an accent title over a thick rule, or a dark block over an accent strip.
+    const under = st.header === "underline";
+    const block = st.header === "block";
+    t.font = { name: TITLE_FONT, size: 22, bold: TITLE_FONT !== "Impact" && TITLE_FONT !== "Georgia", color: { argb: under ? argb(accent) : "FFFFFFFF" } };
+    if (!under) t.fill = fill(block ? shade(accent, 0.4) : accent);
+    t.alignment = { vertical: "middle", horizontal: "left", indent: under ? 0 : 1 };
+    if (under) for (let c = 2; c <= end; c++) ws.getCell(TITLE_ROW, c).border = { bottom: line(accent, "thick") };
     ws.getRow(TITLE_ROW).height = 44;
     ws.mergeCells(SUBTITLE_ROW, 2, SUBTITLE_ROW, end);
     const s = ws.getCell(SUBTITLE_ROW, 2);
     s.value = subtitle ?? "";
-    s.font = font({ size: 10, italic: true, color: { argb: argb(deep) } });
-    s.fill = fill(soft);
-    s.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    s.font = font({ size: 10, italic: true, color: { argb: block ? "FFFFFFFF" : argb(under ? MUTED : deep) } });
+    if (!under) s.fill = fill(block ? accent : soft);
+    s.alignment = { vertical: "middle", horizontal: "left", indent: under ? 0 : 1 };
     ws.getRow(SUBTITLE_ROW).height = 22;
     ws.getRow(NAV_ROW).height = 22;
     const left = links.filter((l) => !l.right);
@@ -174,10 +186,20 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
 
   const headerCell = (c: ExcelJS.Cell, text: string, align: "left" | "center" | "right" = "center") => {
     c.value = text;
-    c.fill = fill(accent);
-    c.font = font({ size: 10, bold: true, color: { argb: "FFFFFFFF" } });
     c.alignment = { vertical: "middle", horizontal: align, wrapText: true, indent: align === "center" ? 0 : 1 };
-    c.border = { right: line(tint(accent, 0.25)) };
+    if (st.table === "lined") {
+      // Accent words over a thick accent rule.
+      c.font = font({ size: 10, bold: true, color: { argb: argb(accent) } });
+      c.border = { bottom: line(accent, "medium") };
+    } else if (st.table === "boxed") {
+      c.fill = fill(shade(accent, 0.35));
+      c.font = font({ size: 10, bold: true, color: { argb: "FFFFFFFF" } });
+      c.border = { right: line(tint(accent, 0.5)), left: line(tint(accent, 0.5)) };
+    } else {
+      c.fill = fill(accent);
+      c.font = font({ size: 10, bold: true, color: { argb: "FFFFFFFF" } });
+      c.border = { right: line(tint(accent, 0.25)) };
+    }
   };
 
   const isNumeric = (t: ColumnType | ValueType) => t === "money" || t === "number" || t === "percent";
@@ -385,7 +407,7 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
       for (const c of cols) {
         const x = ws.getCell(rr, c);
         x.border = rule;
-        if (k % 2) x.fill = fill(band);
+        if (k % 2 && banded) x.fill = fill(band);
       }
       ws.getRow(rr).height = 20;
     };
@@ -556,7 +578,7 @@ export async function buildWorkbook(spec: SheetSpec): Promise<ArrayBuffer> {
           c.font = font({ color: { argb: argb(deep) }, bold: true });
         } else {
           if (example && example[i] !== null && example[i] !== undefined && example[i] !== "") c.value = example[i];
-          if (k % 2 === 1) c.fill = fill(band);
+          if (k % 2 === 1 && banded) c.fill = fill(band);
           c.font = font();
         }
         const fmt = numFmt(col.type, spec.currency, wholeCols[i]);
@@ -654,23 +676,41 @@ interface PdfFonts {
   safe: (s: string) => string;
 }
 
-let fontFiles: Promise<ArrayBuffer[] | null> | null = null;
-/** The font files, fetched once per visit. */
-function loadFontFiles() {
-  fontFiles ??= Promise.all(["DMSerifDisplay-Regular.ttf", "Lato-Regular.ttf", "Lato-Bold.ttf"].map((f) => fetch(`/fonts/${f}`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(f)))))).catch(() => {
-    fontFiles = null; // try again next time
-    return null;
-  });
-  return fontFiles;
+const fontFiles = new Map<string, Promise<ArrayBuffer | null>>();
+/** A font file, fetched once per visit. */
+function loadFontFile(name: string) {
+  let p = fontFiles.get(name);
+  if (!p) {
+    p = fetch(`/fonts/${name}`)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(name))))
+      .catch(() => {
+        fontFiles.delete(name); // try again next time
+        return null;
+      });
+    fontFiles.set(name, p);
+  }
+  return p;
 }
 
-async function embedFonts(pdf: PDFDocument): Promise<PdfFonts> {
-  const files = await loadFontFiles();
-  if (files) {
+/** Keeps only characters every one of the fonts can draw (common look-alikes swapped in first). */
+function glyphSafe(fonts: PDFFont[]) {
+  const sets = fonts.map((f) => new Set(f.getCharacterSet()));
+  const ok = (ch: string) => sets.every((set) => set.has(ch.codePointAt(0)!));
+  const swaps: Record<string, string> = { "‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", "→": "->", "·": "-", "•": "-", "…": "..." };
+  return (s: string) =>
+    [...latoSafe(s)]
+      .map((ch) => (ok(ch) ? ch : [...(swaps[ch] ?? "")].every(ok) ? (swaps[ch] ?? "") : ""))
+      .join("");
+}
+
+async function embedFonts(pdf: PDFDocument, st: DesignStyle): Promise<PdfFonts> {
+  const names = [st.display.file, st.body?.regular ?? "Lato-Regular.ttf", st.body?.bold ?? "Lato-Bold.ttf"];
+  const files = await Promise.all(names.map(loadFontFile));
+  if (files.every(Boolean)) {
     try {
       pdf.registerFontkit(fontkit);
-      const [serif, sans, bold] = await Promise.all(files.map((f) => pdf.embedFont(f, { subset: true })));
-      return { serif, sans, bold, safe: latoSafe };
+      const [serif, sans, bold] = await Promise.all(files.map((f) => pdf.embedFont(f!, { subset: true })));
+      return { serif, sans, bold, safe: st.id === "classic" ? latoSafe : glyphSafe([serif, sans, bold]) };
     } catch {
       /* fall back below */
     }
@@ -683,7 +723,11 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
   // The Excel product's steps talk about tabs, which don't exist on paper.
   const howTo = format === "pdf" ? spec.howTo : [];
   const pdf = await PDFDocument.create();
-  const f = await embedFonts(pdf);
+  const st = styleOf(spec.style);
+  const f = await embedFonts(pdf, st);
+  /** Titles as the style writes them, and sized to match the classic serif. */
+  const tt = (t: string) => (st.display.upper ? t.toUpperCase() : t);
+  const dsz = (n: number) => n * (st.display.scale ?? 1);
   pdf.setTitle(f.safe(spec.title));
   pdf.setCreator("BinkSuite");
   const accent = hexRgb(spec.accent);
@@ -694,6 +738,7 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
   const muted = hexRgb(MUTED);
   const ruleC = hexRgb(RULE);
   const colRule = hexRgb(tint(spec.accent, 0.82));
+  const dark = hexRgb(shade(spec.accent, 0.4));
   const white = rgb(1, 1, 1);
   const M = 40;
   const pages: PDFPage[] = [];
@@ -735,16 +780,23 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
   /** The top of an inner page: small caps product name, a serif title, a rule. Returns the y to continue from. */
   const pageHead = (page: PDFPage, title: string, sub?: string) => {
     const { width, height } = page.getSize();
-    page.drawRectangle({ x: 0, y: height - 6, width, height: 6, color: accent });
-    spaced(page, spec.title, M, height - M - 4, 7.5, f.bold, accent, 1.8);
-    page.drawText(fit(title, f.serif, 26, width - M * 2 - 150), { x: M, y: height - M - 34, size: 26, font: f.serif, color: ink });
-    if (sub) page.drawText(fit(sub, f.sans, 10, width - M * 2 - 150), { x: M, y: height - M - 50, size: 10, font: f.sans, color: muted });
+    const block = st.header === "block";
+    if (block) {
+      // A dark block across the top with an accent edge.
+      page.drawRectangle({ x: 0, y: height - M - (sub ? 66 : 52), width, height: M + (sub ? 66 : 52), color: dark });
+      page.drawRectangle({ x: 0, y: height - M - (sub ? 66 : 52) - 4, width, height: 4, color: accent });
+    } else if (st.header === "band") page.drawRectangle({ x: 0, y: height - 6, width, height: 6, color: accent });
+    const on = block ? white : ink;
+    spaced(page, spec.title, M, height - M - 4, 7.5, f.bold, block ? soft : accent, 1.8);
+    page.drawText(fit(tt(title), f.serif, dsz(26), width - M * 2 - 150), { x: M, y: height - M - 34, size: dsz(26), font: f.serif, color: st.header === "underline" ? accent : on });
+    if (sub) page.drawText(fit(sub, f.sans, 10, width - M * 2 - 150), { x: M, y: height - M - 50, size: 10, font: f.sans, color: block ? soft : muted });
     // A little write-in on the right, the way paper planners do.
     const label = "DATE";
-    spaced(page, label, width - M - 120, height - M - 30, 7, f.bold, muted, 1.4);
-    page.drawLine({ start: { x: width - M - 92, y: height - M - 31 }, end: { x: width - M, y: height - M - 31 }, thickness: 0.6, color: muted });
+    spaced(page, label, width - M - 120, height - M - 30, 7, f.bold, block ? soft : muted, 1.4);
+    page.drawLine({ start: { x: width - M - 92, y: height - M - 31 }, end: { x: width - M, y: height - M - 31 }, thickness: 0.6, color: block ? soft : muted });
     const ruleY = height - M - (sub ? 62 : 46);
-    page.drawLine({ start: { x: M, y: ruleY }, end: { x: width - M, y: ruleY }, thickness: 1, color: accent });
+    if (block) return ruleY - 30;
+    page.drawLine({ start: { x: M, y: ruleY }, end: { x: width - M, y: ruleY }, thickness: st.header === "underline" ? 2.5 : 1, color: accent });
     return ruleY - 16;
   };
 
@@ -753,33 +805,75 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
     const page = pdf.addPage([size.w, size.h]);
     pages.push(page);
     const { width: W, height: H } = page.getSize();
-    // Soft decorative circles.
-    page.drawCircle({ x: W - 40, y: H - 60, size: 150, color: soft });
-    page.drawCircle({ x: W - 150, y: H - 10, size: 60, color: faint });
-    page.drawCircle({ x: 30, y: 90, size: 110, color: faint });
-    page.drawRectangle({ x: 22, y: 22, width: W - 44, height: H - 44, borderColor: accent, borderWidth: 0.8 });
     const kicker = format === "excel" ? "Printable companion" : "Printable planner";
-    spaced(page, kicker, W / 2, H * 0.6 + 40, 9, f.bold, accent, 2.6, "center");
-    // Title: big serif, up to two lines.
-    let tsz = 46;
-    let lines = wrapLines(spec.title, f.serif, tsz, W - 140);
-    while (lines.length > 2 && tsz > 30) lines = wrapLines(spec.title, f.serif, (tsz -= 4), W - 140);
-    lines.slice(0, 2).forEach((l, i) => {
-      const tw = f.serif.widthOfTextAtSize(l, tsz);
-      page.drawText(l, { x: (W - tw) / 2, y: H * 0.6 - i * tsz * 1.1, size: tsz, font: f.serif, color: ink });
-    });
-    const after = H * 0.6 - (Math.min(2, lines.length) - 1) * tsz * 1.1 - 34;
-    page.drawLine({ start: { x: W / 2 - 30, y: after + 12 }, end: { x: W / 2 + 30, y: after + 12 }, thickness: 1.5, color: accent });
-    if (spec.subtitle) {
-      wrapLines(spec.subtitle, f.sans, 12, W - 180).slice(0, 2).forEach((l, i) => {
-        const sw = f.sans.widthOfTextAtSize(l, 12);
-        page.drawText(l, { x: (W - sw) / 2, y: after - 12 - i * 17, size: 12, font: f.sans, color: muted });
+    /** Title in up to two lines, from y down; returns the y below it. */
+    const coverTitle = (x: number, y: number, maxW: number, align: "left" | "center", colour: ReturnType<typeof rgb>) => {
+      let tsz = dsz(46);
+      let lines = wrapLines(tt(spec.title), f.serif, tsz, maxW);
+      while (lines.length > 2 && tsz > dsz(30)) lines = wrapLines(tt(spec.title), f.serif, (tsz -= 4), maxW);
+      lines.slice(0, 2).forEach((l, i) => {
+        const tw = f.serif.widthOfTextAtSize(l, tsz);
+        page.drawText(l, { x: align === "center" ? x - tw / 2 : x, y: y - i * tsz * 1.1, size: tsz, font: f.serif, color: colour });
       });
+      return y - (Math.min(2, lines.length) - 1) * tsz * 1.1 - 34;
+    };
+    // The small kicker sits clear of the title whatever its size.
+    const kickGap = Math.max(40, 40 * (st.display.scale ?? 1));
+    const subtitle = (x: number, y: number, maxW: number, align: "left" | "center", colour: ReturnType<typeof rgb>) =>
+      wrapLines(spec.subtitle, f.sans, 12, maxW)
+        .slice(0, 2)
+        .forEach((l, i) => page.drawText(l, { x: align === "center" ? x - f.sans.widthOfTextAtSize(l, 12) / 2 : x, y: y - i * 17, size: 12, font: f.sans, color: colour }));
+    if (st.cover === "banner") {
+      // A colour block over the top half, the title in white.
+      page.drawRectangle({ x: 0, y: H * 0.5, width: W, height: H * 0.5, color: accent });
+      page.drawRectangle({ x: 0, y: H * 0.5 - 6, width: W, height: 6, color: dark });
+      spaced(page, kicker, W / 2, H * 0.75 + kickGap, 9, f.bold, soft, 2.6, "center");
+      const after = coverTitle(W / 2, H * 0.75, W - 120, "center", white);
+      page.drawLine({ start: { x: W / 2 - 30, y: after + 12 }, end: { x: W / 2 + 30, y: after + 12 }, thickness: 1.5, color: soft });
+      if (spec.subtitle) subtitle(W / 2, after - 12, W - 160, "center", soft);
+      page.drawCircle({ x: W / 2, y: H * 0.32, size: 70, color: faint });
+      page.drawCircle({ x: W / 2, y: H * 0.32, size: 46, borderColor: accent, borderWidth: 1.2 });
+    } else if (st.cover === "left") {
+      // A colour strip down the left, words aligned to it.
+      page.drawRectangle({ x: 0, y: 0, width: 54, height: H, color: accent });
+      page.drawRectangle({ x: 54, y: 0, width: 6, height: H, color: soft });
+      page.drawRectangle({ x: W - 150, y: H - 150, width: 150, height: 150, color: faint });
+      page.drawRectangle({ x: W - 110, y: H - 110, width: 70, height: 70, color: soft });
+      const lx = 100;
+      spaced(page, kicker, lx, H * 0.62 + kickGap, 9, f.bold, accent, 2.6);
+      const after = coverTitle(lx, H * 0.62, W - lx - 60, "left", ink);
+      page.drawRectangle({ x: lx, y: after + 8, width: 60, height: 4, color: accent });
+      if (spec.subtitle) subtitle(lx, after - 14, W - lx - 80, "left", muted);
+    } else if (st.cover === "bottom") {
+      // A soft colour field over the top, the title underneath.
+      page.drawRectangle({ x: 0, y: H * 0.48, width: W, height: H * 0.52, color: soft });
+      page.drawRectangle({ x: 0, y: H * 0.48, width: W, height: 3, color: accent });
+      page.drawCircle({ x: W / 2, y: H * 0.74, size: 90, color: faint });
+      page.drawCircle({ x: W / 2, y: H * 0.74, size: 62, borderColor: accent, borderWidth: 1.2 });
+      spaced(page, kicker, W / 2, H * 0.36 + kickGap, 9, f.bold, accent, 2.6, "center");
+      const after = coverTitle(W / 2, H * 0.36, W - 140, "center", ink);
+      if (spec.subtitle) subtitle(W / 2, after - 4, W - 180, "center", muted);
+    } else {
+      if (st.bg === "dots")
+        // A soft dotted field instead of circles and a frame.
+        for (let y = H - 40; y > H * 0.7; y -= 16)
+          for (let x = 40 + (Math.round(y / 16) % 2) * 8; x < W - 30; x += 16) page.drawCircle({ x, y, size: 1.3, color: soft });
+      else {
+        // Soft decorative circles.
+        page.drawCircle({ x: W - 40, y: H - 60, size: 150, color: soft });
+        page.drawCircle({ x: W - 150, y: H - 10, size: 60, color: faint });
+        page.drawCircle({ x: 30, y: 90, size: 110, color: faint });
+        page.drawRectangle({ x: 22, y: 22, width: W - 44, height: H - 44, borderColor: accent, borderWidth: 0.8 });
+      }
+      spaced(page, kicker, W / 2, H * 0.6 + kickGap, 9, f.bold, accent, 2.6, "center");
+      const after = coverTitle(W / 2, H * 0.6, W - 140, "center", ink);
+      page.drawLine({ start: { x: W / 2 - 30, y: after + 12 }, end: { x: W / 2 + 30, y: after + 12 }, thickness: 1.5, color: accent });
+      if (spec.subtitle) subtitle(W / 2, after - 12, W - 180, "center", muted);
     }
     // Name and year.
     const by = 130;
     for (const [i, label] of ["Name", "Year"].entries()) {
-      const x = W / 2 - 170 + i * 190;
+      const x = (st.cover === "left" ? 270 : W / 2) - 170 + i * 190;
       spaced(page, label, x, by, 8, f.bold, muted, 1.6);
       page.drawLine({ start: { x: x + 44, y: by - 1 }, end: { x: x + 150, y: by - 1 }, thickness: 0.7, color: muted });
     }
@@ -836,14 +930,18 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
     const widths = tab.columns.map((c) => ((w - M * 2) * c.width) / total);
     const headH = 24;
     const rowH = 22;
-    // Header bar.
-    roundRect(page, M, y - headH, w - M * 2, headH, 6, { color: accent });
+    // Header: a rounded colour bar, accent words over a rule, or a dark square bar.
+    const lined = st.table === "lined";
+    const boxed = st.table === "boxed";
+    if (lined) page.drawRectangle({ x: M, y: y - headH, width: w - M * 2, height: 2, color: accent });
+    else if (boxed) page.drawRectangle({ x: M, y: y - headH, width: w - M * 2, height: headH, color: dark });
+    else roundRect(page, M, y - headH, w - M * 2, headH, 6 * st.round, { color: accent });
     let x = M;
     tab.columns.forEach((c, i) => {
       const label = fit(c.header.toUpperCase(), f.bold, 7.5, widths[i] - 12);
       const lw = f.bold.widthOfTextAtSize(label, 7.5);
       const centre = c.type === "checkbox" || c.type === "date" || c.type === "choice";
-      page.drawText(label, { x: centre ? x + (widths[i] - lw) / 2 : x + 8, y: y - headH + 9, size: 7.5, font: f.bold, color: white });
+      page.drawText(label, { x: centre ? x + (widths[i] - lw) / 2 : x + 8, y: y - headH + 9, size: 7.5, font: f.bold, color: lined ? accent : white });
       x += widths[i];
     });
     y -= headH + 2;
@@ -851,8 +949,8 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
     const rows = Math.floor((y - M - 18 - (hasTotal ? rowH + 8 : 0)) / rowH);
     const tableTop = y;
     for (let k = 0; k < rows; k++) {
-      if (k % 2) page.drawRectangle({ x: M, y: y - rowH, width: w - M * 2, height: rowH, color: faint });
-      page.drawLine({ start: { x: M, y: y - rowH }, end: { x: w - M, y: y - rowH }, thickness: 0.5, color: ruleC });
+      if (k % 2 && st.table === "banded") page.drawRectangle({ x: M, y: y - rowH, width: w - M * 2, height: rowH, color: faint });
+      page.drawLine({ start: { x: M, y: y - rowH }, end: { x: w - M, y: y - rowH }, thickness: boxed ? 0.7 : 0.5, color: boxed ? colRule : ruleC });
       x = M;
       tab.columns.forEach((c, i) => {
         if (c.type === "checkbox") roundRect(page, x + widths[i] / 2 - 5, y - rowH / 2 - 5, 10, 10, 2.5, { borderColor: accent, borderWidth: 0.8 });
@@ -860,12 +958,13 @@ export async function buildPdf(spec: SheetSpec, size: (typeof PAGE_SIZES)[number
       });
       y -= rowH;
     }
-    // Faint column guides.
+    // Column guides: faint, none for ruled tables, or a full box.
     x = M;
-    widths.slice(0, -1).forEach((cw) => {
-      x += cw;
-      page.drawLine({ start: { x, y: tableTop }, end: { x, y }, thickness: 0.4, color: colRule });
-    });
+    if (!lined)
+      (boxed ? [0, ...widths] : widths.slice(0, -1)).forEach((cw) => {
+        x += cw;
+        page.drawLine({ start: { x, y: tableTop }, end: { x, y }, thickness: boxed ? 0.7 : 0.4, color: colRule });
+      });
     if (hasTotal) {
       roundRect(page, M, y - rowH - 6, w - M * 2, rowH, 6, { color: soft });
       spaced(page, "Total", M + 10, y - rowH - 6 + 8, 7.5, f.bold, deep, 1.6);
