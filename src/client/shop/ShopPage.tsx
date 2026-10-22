@@ -31,6 +31,7 @@ export interface ShopListing {
   headline: string | null;
   url: string | null;
   checkedAt: string | null;
+  etsyChange: { at: string; fields: string[] } | null;
 }
 
 export const STATE_LABEL: Record<string, { label: string; dot: string }> = {
@@ -51,8 +52,16 @@ export function ShopPage() {
   const toast = useUi((s) => s.toast);
   const { data, error } = useQuery({ queryKey: ["shop"], queryFn: () => api.get<{ connected: boolean; listings: ShopListing[] }>("/shop/listings") });
   const check = useMutation({
-    mutationFn: () => api.post<{ checked: number }>("/live/check"),
-    onSuccess: (r) => (toast({ icon: "", title: `Checked ${r.checked} listing${r.checked === 1 ? "" : "s"} on Etsy` }), qc.invalidateQueries({ queryKey: ["shop"] })),
+    mutationFn: () => api.post<{ checked: number; changed: { title: string; fields: string[] }[] }>("/live/check"),
+    onSuccess: (r) => {
+      const n = r.changed?.length ?? 0;
+      toast({
+        icon: "",
+        title: n ? `${n} listing${n === 1 ? "" : "s"} changed on Etsy` : `Checked ${r.checked} listing${r.checked === 1 ? "" : "s"}: nothing changed`,
+        body: n ? r.changed.map((c) => `${c.title}: ${c.fields.join(", ")}`).join(" · ") : "Titles, prices, tags and descriptions match Etsy.",
+      });
+      qc.invalidateQueries({ queryKey: ["shop"] });
+    },
   });
   const list = data?.listings ?? [];
   const live = list.filter((l) => l.state === "active").length;
@@ -137,6 +146,12 @@ export function ShopPage() {
                               </span>
                               <FormatBadge format={l.format} />
                               {l.verdict && <span className={VERDICT_TONE[l.verdict].text}>{l.headline}</span>}
+                          {l.etsyChange && (
+                            <span className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-300" title={`Changed on Etsy ${timeAgo(l.etsyChange.at)}`}>
+                              <Icon name="refresh" size={11} />
+                              Changed on Etsy: {l.etsyChange.fields.join(", ")}
+                            </span>
+                          )}
                               <span className="md:hidden">
                                 {l.pricePence ? formatGBP(l.pricePence) : ""} · {l.views30 ?? l.views} views · {l.salesTotal} sales
                               </span>
