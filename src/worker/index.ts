@@ -1,4 +1,5 @@
 // BinkSuite Worker: serves the React app (static assets) and the /api.
+import { EngineError } from "./engine/queue";
 import { HTTPException } from "hono/http-exception";
 import { newApp, HttpError, dbFor } from "./app";
 import type { Env } from "./env";
@@ -29,6 +30,7 @@ const UPLOAD_TYPES = new Set(["application/zip", "image/jpeg", "application/pdf"
 app.onError((err, c) => {
   if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 400);
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
+  if (err instanceof EngineError) return c.json({ error: err.message }, err.status as 400);
   console.error(err);
   return c.json({ error: "Something went wrong on our side. Try again in a moment." }, 500);
 });

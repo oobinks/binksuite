@@ -1,4 +1,6 @@
 // One listing: how it's doing, its sales and reviews, and editing its words and price on Etsy.
+import type { ProductFormat } from "../../shared/format";
+import { hasPhotoNote, PHOTO_NOTE } from "../../shared/compliance";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,8 +18,20 @@ import type { RoomId } from "../../shared/registry";
 import { STATE_LABEL } from "./ShopPage";
 import { VERDICT_TONE, type Verdict } from "./verdicts";
 
+/** Puts Etsy's photo note in the "Please note" list if there is one, otherwise at the end. */
+function withPhotoNote(description: string, format: keyof typeof PHOTO_NOTE): string {
+  const note = PHOTO_NOTE[format] ?? PHOTO_NOTE.pdf;
+  const at = description.indexOf("✦ PLEASE NOTE");
+  if (at >= 0) {
+    const eol = description.indexOf("\n", at);
+    return eol < 0 ? `${description}\n• ${note}` : `${description.slice(0, eol)}\n• ${note}${description.slice(eol)}`;
+  }
+  return `${description.trimEnd()}\n\n${note}`;
+}
+
 interface Detail {
   productId: string;
+  format: ProductFormat;
   listingId: number;
   title: string;
   description: string;
@@ -316,6 +330,15 @@ function EditListing({ d }: { d: Detail }) {
           <span className="label">Description</span>
           <textarea className="input min-h-72 font-[inherit] leading-relaxed" value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
+        {!hasPhotoNote(description) && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+            <Icon name="alert" size={15} className="shrink-0" />
+            <span className="min-w-0 flex-1">Etsy's AI rules (October 2026) ask you to say how your listing photos were made. This description doesn't yet.</span>
+            <button type="button" className="btn-soft shrink-0" onClick={() => setDescription(withPhotoNote(description, d.format))}>
+              Add photo note
+            </button>
+          </div>
+        )}
         {problems.length > 0 && (
           <ul className="space-y-1 text-sm text-rose-700 dark:text-rose-300">
             {problems.map((p) => (

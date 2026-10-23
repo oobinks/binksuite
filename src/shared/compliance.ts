@@ -22,6 +22,32 @@ export const DEFAULT_BLOCKLIST = [
   "peppa pig",
 ];
 
+// Etsy's AI rules (22 October 2026): AI-written "functional guides" (patterns, recipes,
+// instructions) aren't allowed. BinkSuite makes everything with AI, so it never makes them.
+// Planners, trackers and templates are fine: the buyer fills those in themselves.
+const FUNCTIONAL_GUIDE =
+  /\b(recipes?|recipe (book|cards?)|cookbooks?|(knitting|crochet|sewing|quilt(ing)?|cross[- ]stitch|embroidery|amigurumi|origami|macrame|needlepoint|beading|pdf) patterns?|patterns? (for|to) (knit|crochet|sew|make)|tutorials?|how[- ]to guides?|step[- ]by[- ]step guides?|instructions?|instruction (book|manual)|diy guides?|(workout|training|exercise|fitness) (plans?|programmes?|programs?))\b/i;
+
+/** The functional-guide words in a product idea or listing (empty if none). */
+export function functionalGuideIn(text: string): string | null {
+  return FUNCTIONAL_GUIDE.exec(text)?.[0] ?? null;
+}
+
+export const FUNCTIONAL_GUIDE_RULE =
+  "Never suggest or make functional guides (recipes, cookbooks, knitting/crochet/sewing patterns, tutorials, how-to guides, instructions or workout plans): Etsy doesn't allow AI-written ones. Planners, trackers, templates and art are fine.";
+
+/** Etsy asks sellers to say how listing photos were made; this line goes in every description. */
+export const PHOTO_NOTE: Record<"art" | "excel" | "pdf", string> = {
+  art: "The room photos are digital mockups: the rooms were created with AI to show how the print could look. The artwork shown is the artwork you'll receive.",
+  excel: "The photos are previews made from the actual files you'll receive, shown on mockup devices.",
+  pdf: "The photos are previews made from the actual pages you'll receive, shown as mockups.",
+};
+
+/** True when the description already says how the photos were made. */
+export function hasPhotoNote(description: string): boolean {
+  return /\b(mockups?|previews? (made )?from the actual)\b/i.test(description) && /\bphotos?\b/i.test(description);
+}
+
 export interface ListingDraft {
   title: string;
   tags: string[];
@@ -64,6 +90,7 @@ export function blockedTermsIn(text: string, blocklist: string[] = DEFAULT_BLOCK
 export function checkListing(d: ListingDraft, blocklist: string[] = DEFAULT_BLOCKLIST): ComplianceCheck[] {
   const tooLongTags = d.tags.filter((t) => t.length > ETSY_LIMITS.tagCharsMax);
   const blocked = blockedTermsIn([d.title, d.tags.join(" "), d.description].join("\n"), blocklist);
+  const guide = functionalGuideIn([d.title, d.tags.join(" ")].join("\n"));
   return [
     {
       id: "title-length",
@@ -106,6 +133,20 @@ export function checkListing(d: ListingDraft, blocklist: string[] = DEFAULT_BLOC
       pass: blocked.length === 0,
       detail: blocked.length ? `Found: ${blocked.join(", ")}` : "Clean",
       hard: true,
+    },
+    {
+      id: "functional-guide",
+      label: "Not a recipe, pattern or instructions",
+      pass: !guide,
+      detail: guide ? `Etsy doesn't allow AI-written functional guides. Found: “${guide}”` : "Clean",
+      hard: true,
+    },
+    {
+      id: "photo-note",
+      label: "Says how the listing photos were made",
+      pass: hasPhotoNote(d.description),
+      detail: hasPhotoNote(d.description) ? "Photo note found" : "Etsy asks you to say when photos are mockups or AI-edited. Refresh the copy to add it.",
+      hard: false,
     },
     {
       id: "images-confirmed",

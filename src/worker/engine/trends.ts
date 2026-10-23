@@ -9,6 +9,7 @@
 // Each morning the best-scoring niches the shop hasn't tried recently become
 // "Today's ideas": the AI invents an innovative product for each, and they go
 // straight to Scout for research (you still approve before any art is made).
+import { FUNCTIONAL_GUIDE_RULE, functionalGuideIn } from "../../shared/compliance";
 import { and, asc, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { DB } from "../db";
@@ -322,7 +323,7 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     key: `daily:${date}:${batch}`,
     label: `🎯 Today's ideas`,
     system:
-      "You are Scout, the creative lead of a UK Etsy shop selling AI-assisted digital downloads. Your job: beat competitors with fresh, specific, sellable ideas: a clear twist, not a copy. Be a tough judge: the owner makes only one product a day, so only the very best should score high. No brands, characters, celebrities or song lyrics.",
+      "You are Scout, the creative lead of a UK Etsy shop selling AI-assisted digital downloads. Your job: beat competitors with fresh, specific, sellable ideas: a clear twist, not a copy. Be a tough judge: the owner makes only one product a day, so only the very best should score high. No brands, characters, celebrities or song lyrics. " + FUNCTIONAL_GUIDE_RULE,
     prompt: `These niches are moving on Etsy right now:\n${lines.join("\n")}\nFor EACH niche, invent one innovative digital download that could outsell what's already there. Formats (the shop only makes these right now): ${formats.map((f) => formatHelp[f]).join(", ")}. The format in [brackets] is the usual one for that niche; pick another of these if it would sell better.\nThen score each idea 1-10 (decimals fine) for how good a bet it is today: real demand right now, competition we can beat, room for a healthy price, and how premium we can make it. Give: keyword (as given), idea (under 60 characters), angle (the twist that makes it different, one sentence), why (why it will sell, one sentence), format, score.`,
     schema: ideasSchema,
     jsonSchema: {
@@ -354,6 +355,7 @@ export async function makeDailyIdeas(db: DB, settings: Settings, ai: AiServices,
     const at = unused.findIndex((i) => i.keyword.trim().toLowerCase() === niche.keyword);
     if (at < 0) continue;
     const [idea] = unused.splice(at, 1);
+    if (functionalGuideIn(`${idea.idea} ${idea.angle}`)) continue; // Etsy doesn't allow AI-written guides
     const market = niche.source === "etsy" ? { totalListings: niche.totalListings, medianPricePence: niche.medianPricePence, favsPerDay: niche.favsPerDay } : null;
     scored.push({
       id: `${date}-${batch}-${rank}`,
