@@ -2,7 +2,7 @@
 // Each entry upgrades a pipeline step for real (non-demo) products.
 // Demo products keep using the canned handlers in index.ts.
 import { z } from "zod";
-import { blockedTermsIn, ETSY_LIMITS, hasAiDisclosure } from "../../../shared/compliance";
+import { blockedTermsIn, ETSY_LIMITS, FUNCTIONAL_GUIDE_RULE, functionalGuideIn, hasAiDisclosure, PHOTO_NOTE } from "../../../shared/compliance";
 import type { MarketReport, Verdict } from "./marketResearch";
 import type { PartialResult, ProductRow, RealContext, StepDef, StepResult, TaskRow } from "./types";
 import { FORMAT_INFO, formatOf, isSheetFormat, type ProductFormat } from "../../../shared/format";
@@ -101,8 +101,7 @@ const reportJsonSchema = {
   required: ["scores", "summary", "reasons", "risks", "angles", "keywords", "priceLowGBP", "priceHighGBP", "seasonality"],
 };
 
-export const SHOP_CONTEXT =
-  "You work for a small UK Etsy shop that sells AI-assisted digital downloads: wall art prints, printable planners and trackers (PDF), and ready-made spreadsheets (Excel, which also open in Google Sheets). Use British spelling. Be honest and practical; never invent statistics or name real competitor shops.";
+export const SHOP_CONTEXT = `You work for a small UK Etsy shop that sells AI-assisted digital downloads: wall art prints, printable planners and trackers (PDF), and ready-made spreadsheets (Excel, which also open in Google Sheets). Use British spelling. Be honest and practical; never invent statistics or name real competitor shops. ${FUNCTIONAL_GUIDE_RULE}`;
 
 /** What the product is, in words the AI understands. */
 export function formatLine(f: ProductFormat): string {
@@ -208,7 +207,10 @@ export async function brainstormIdeas(ai: RealContext["ai"], theme: string | und
     },
     maxTokens: 600,
   });
-  return r.ideas.slice(0, 5).map((i) => ({ idea: i.idea.slice(0, 120), why: i.why.slice(0, 200) }));
+  return r.ideas
+    .filter((i) => !functionalGuideIn(`${i.idea} ${i.why}`))
+    .slice(0, 5)
+    .map((i) => ({ idea: i.idea.slice(0, 120), why: i.why.slice(0, 200) }));
 }
 
 // ───────────── Analyst: product brief + art prompts ─────────────
@@ -664,14 +666,15 @@ const HOW_STEPS: Record<ProductFormat, string[]> = {
 };
 
 const PLEASE_NOTE: Record<ProductFormat, string[]> = {
-  art: ["This is a digital download. No physical item will be shipped.", "Frames and props in the photos aren't included.", "Colours can look slightly different on different screens and printers.", "For personal use only. Please don't share or resell the files."],
+  art: ["This is a digital download. No physical item will be shipped.", PHOTO_NOTE.art, "Frames and props in the photos aren't included.", "Colours can look slightly different on different screens and printers.", "For personal use only. Please don't share or resell the files."],
   excel: [
     "This is a digital download. No physical item will be shipped.",
     "You'll need Microsoft Excel, a free Google account (Google Sheets) or Apple Numbers to use the spreadsheet.",
+    PHOTO_NOTE.excel,
     "It's a tool to organise your own numbers, not financial advice.",
     "For personal use only. Please don't share or resell the files.",
   ],
-  pdf: ["This is a digital download. No physical item will be shipped.", "Colours can look slightly different on different screens and printers.", "For personal use only. Please don't share or resell the files."],
+  pdf: ["This is a digital download. No physical item will be shipped.", PHOTO_NOTE.pdf, "Colours can look slightly different on different screens and printers.", "For personal use only. Please don't share or resell the files."],
 };
 
 const SIGN_OFF = "Thank you for visiting BinkSuite! If you have any questions, send a message and I'll be happy to help.";

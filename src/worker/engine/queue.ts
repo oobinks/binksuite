@@ -2,6 +2,7 @@
 // src/shared/tasks.ts. `tick()` is called by the browser while the app is open
 // and by the cron trigger every 5 minutes. Each tick is cheap: a handful of
 // queries and no heavy CPU, so it fits the free plan's 10 ms budget.
+import { functionalGuideIn } from "../../shared/compliance";
 import type { EtsyClient } from "../providers/etsy";
 import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { DB } from "../db";
@@ -109,6 +110,12 @@ export async function suggestIdea(
 ): Promise<ProductRow> {
   const now = nowIso();
   const clean = idea.trim().replace(/\s+/g, " ");
+  const guide = functionalGuideIn(clean);
+  if (guide)
+    throw new EngineError(
+      `Etsy no longer allows AI-made recipes, patterns or instructions (“${guide}”). Try a planner, tracker, template or art idea instead.`,
+      400,
+    );
   const demo = !realAi && settings.demoMode;
   const product: ProductRow = {
     id: newId("p_"),

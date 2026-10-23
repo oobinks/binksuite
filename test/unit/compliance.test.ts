@@ -41,3 +41,20 @@ describe("compliance rules", () => {
     expect(compliancePasses(checkListing({ ...good, designedBy: "" }))).toBe(false);
   });
 });
+
+describe("Etsy AI rules (October 2026)", () => {
+  it("spots functional guides but leaves planners, trackers and art alone", async () => {
+    const { functionalGuideIn } = await import("../../src/shared/compliance");
+    for (const t of ["Sourdough recipe book", "Crochet pattern for a bunny", "Beginner knitting patterns", "Watercolour tutorial", "How-to guide for decluttering", "12 week workout plan"])
+      expect(functionalGuideIn(t), t).not.toBeNull();
+    for (const t of ["Meal planner printable", "Monthly budget spreadsheet", "Geometric pattern wall art", "Workout tracker", "Grocery list", "Habit tracker"])
+      expect(functionalGuideIn(t), t).toBeNull();
+  });
+
+  it("knows when a description says how the photos were made", async () => {
+    const { hasPhotoNote, PHOTO_NOTE } = await import("../../src/shared/compliance");
+    expect(hasPhotoNote(`Lovely print.\n\n${PHOTO_NOTE.art}`)).toBe(true);
+    expect(hasPhotoNote(PHOTO_NOTE.excel)).toBe(true);
+    expect(hasPhotoNote("Lovely print. Frames aren't included.")).toBe(false);
+  });
+});

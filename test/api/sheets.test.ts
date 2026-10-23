@@ -157,6 +157,10 @@ describe("spreadsheet products", () => {
     const formatFor = (id: string) => room.tasks.find((t: any) => t.productId === id).productFormat;
     expect([formatFor(excel.id), formatFor(art.id)]).toEqual(["excel", "art"]);
     expect((await owner.post("/api/research/suggestions", { idea: "Wedding budget", format: "pdf" })).status).toBe(200);
+    // Etsy's AI rules: no AI-made recipes, patterns or instructions.
+    const guide = await owner.post("/api/research/suggestions", { idea: "Sourdough recipe book", format: "pdf" });
+    expect(guide.status).toBe(400);
+    expect(guide.data.error).toMatch(/recipes, patterns or instructions/);
     expect((await owner.post("/api/research/suggestions", { idea: "Wedding budget", format: "word" })).status).toBe(400);
   });
 });
